@@ -56,15 +56,24 @@ ws://blog.example.com
 | 层级路径 | `/api/v1/articles/{path}/timeline` 表示文章的子资源 |
 | 统一响应 | 成功返回数据，失败返回`{error, message}` |
 | **路径参数** | 资源标识直接嵌入URL路径，不使用GET参数 |
+| **前缀分离** | 不同类型资源使用不同前缀 |
 
-### 1.5 URL设计对比
+### 1.5 URL前缀分类
+
+| 类型 | 前缀 | 用途 | 示例 |
+|------|------|------|------|
+| **API端点** | `/api/v1/` | 后端API | `/api/v1/articles`, `/api/v1/assets` |
+| **图片资源** | `/api/v1/assets/` | 文章引用的图片 | `/api/v1/assets/guides/images/photo.jpg` |
+| **静态资源** | `/api/v1/resources/` | 前端编译产物(JS/CSS) | `/api/v1/resources/_next/static/chunks/main.js` |
+| **页面路由** | `/` | 前端页面URL | `/article/guides/image-test.md` |
+
+### 1.6 URL设计对比
 
 | 场景 | ❌ 错误方式（GET参数） | ✅ RESTful方式（路径参数） |
 |------|----------------------|--------------------------|
-| 获取文章 | `/article?path=guides%2Fimage-test.md` | `/api/v1/articles/guides/image-test.md` |
-| 获取时间线 | `/api/articles?path=xxx&action=timeline` | `/api/v1/articles/guides/image-test.md/timeline` |
-| 获取资源 | `/api/assets?file=images/photo.jpg` | `/api/v1/assets/images/photo.jpg` |
-| 前端页面 | `/article?path=guides/image-test.md` | `/article/guides/image-test.md` |
+| 获取文章 | `/article?path=guides%2Fimage-test.md` | `/article/guides/image-test.md` |
+| 获取图片 | `/api/assets?file=images/photo.jpg` | `/api/v1/assets/guides/images/photo.jpg` |
+| 获取JS | `/_next/static/chunks/main.js` | `/api/v1/resources/_next/static/chunks/main.js` |
 
 ---
 
@@ -990,14 +999,41 @@ export default config;
 ### 18.3 需要修改的文件
 
 **后端文件：**
-- `internal/server/server.go` - 更新路由定义
-- `internal/handler/*.go` - 无需修改（handler逻辑不变）
+```
+internal/server/server.go
+- 更新路由定义：添加/api/v1/前缀
+- 添加/api/v1/resources/路由（静态资源）
+- 调整资源层级
+```
 
 **前端文件：**
-- `frontend/app/article/page.tsx` → `frontend/app/article/[...slug]/page.tsx`
-- `frontend/lib/api/articles.ts` - 更新API路径
-- `frontend/components/brutalist/ArticleTable.tsx` - 更新链接
-- `frontend/next.config.ts` - 添加API代理配置
+```
+frontend/app/article/page.tsx → frontend/app/article/[...slug]/page.tsx
+- 改用动态路由捕获路径参数
+
+frontend/lib/api/articles.ts
+- 更新API路径：/api/v1/articles
+
+frontend/lib/api/assets.ts
+- 更新API路径：/api/v1/assets
+
+frontend/components/brutalist/ArticleTable.tsx
+- 更新链接href：/article/${path}
+
+frontend/next.config.ts
+- 添加API代理配置
+
+frontend/components/article/MarkdownRenderer.tsx
+- 更新图片路径转换：/api/v1/assets/
+```
+
+### 18.4 资源路径映射
+
+| 原路径 | 新路径 | 处理方式 |
+|--------|--------|----------|
+| `/_next/static/...` | `/api/v1/resources/_next/static/...` | StaticHandler |
+| `/api/assets/...` | `/api/v1/assets/...` | AssetHandler |
+| `/article?path=...` | `/article/{path}` | 前端动态路由 |
 
 ---
 

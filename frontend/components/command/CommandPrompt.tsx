@@ -114,8 +114,8 @@ export function CommandPrompt() {
     }
   }, [input]);
 
-  // Get currentDir from TerminalConfig context
-  const { currentDir } = useTerminalConfig();
+  // Get owner and currentDir from TerminalConfig context
+  const { owner, currentDir } = useTerminalConfig();
 
   // Save history to localStorage
   const saveHistory = useCallback((newHistory: string[]) => {
@@ -502,7 +502,7 @@ export function CommandPrompt() {
       <form onSubmit={handleSubmit} className="flex items-center gap-3 px-6 h-16 font-mono text-sm">
         {/* Path Display */}
         <span className="text-tertiary font-bold">guest@blog:</span>
-        <span className="text-secondary font-bold ml-1">~{currentDir || "/"}</span>
+        <span className="text-secondary font-bold ml-1">~/{owner}{currentDir ? `/${currentDir}` : ""}</span>
         <span className="text-on-surface-variant mx-1">$</span>
         
         {/* Command Input */}

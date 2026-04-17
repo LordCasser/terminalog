@@ -57,7 +57,7 @@ export function Navbar() {
   // Get current pathname for selected state
   const pathname = usePathname();
   const isPostsSelected = pathname === "/" || pathname.startsWith("/?dir=");
-  const isAboutMeSelected = pathname === "/aboutme";
+  const isAboutMeSelected = pathname === "/aboutme" || pathname === "/aboutme/";
 
   return (
     <header className="fixed top-0 w-full z-50 bg-surface text-primary-container font-mono uppercase tracking-tighter text-sm flex justify-between items-center px-6 py-4">

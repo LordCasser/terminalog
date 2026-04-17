@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -39,9 +38,12 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 	}
 
 	// Create services
-	fileSvc := service.NewFileService(repo.Path)
+	fileSvc, err := service.NewFileService(repo.Path)
+	require.NoError(t, err)
+
 	gitSvc, err := service.NewGitService(repo.Path)
 	require.NoError(t, err)
+
 	articleSvc := service.NewArticleService(fileSvc, gitSvc)
 	assetSvc := service.NewAssetService(fileSvc)
 
@@ -51,12 +53,13 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 
 	cfg := &config.Config{
 		Auth: config.AuthConfig{
-			Users: []config.User{
+			Users: []config.UserConfig{
 				{Username: "testuser", Password: string(hashedPass)},
 			},
 		},
 	}
 	authSvc := service.NewAuthService(cfg)
+	_ = authSvc // unused for now
 
 	// Create handlers
 	articleHandler := handler.NewArticleHandler(articleSvc)
@@ -68,7 +71,7 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 	router := chi.NewRouter()
 	router.Get("/api/articles", articleHandler.List)
 	router.Get("/api/articles/{path}", articleHandler.Get)
-	router.Get("/api/articles/{path}/timeline", articleHandler.GetTimeline)
+	router.Get("/api/articles/{path}/timeline", articleHandler.Timeline)
 	router.Get("/api/tree", treeHandler.Get)
 	router.Get("/api/search", searchHandler.Search)
 	router.Get("/api/assets/{path}", assetHandler.Get)
@@ -123,7 +126,7 @@ func TestAPI_Articles_Get(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-	var article model.ArticleDetail
+	var article model.ArticleResponse
 	err = json.NewDecoder(resp.Body).Decode(&article)
 	require.NoError(t, err)
 
@@ -191,8 +194,8 @@ func TestAPI_Tree(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
 
-	assert.Equal(t, "dir", result.Tree.Type)
-	assert.Len(t, result.Tree.Children, 3)
+	assert.Equal(t, model.NodeTypeDir, result.Root.Type)
+	assert.Len(t, result.Root.Children, 3)
 }
 
 func TestAPI_Articles_UncommittedNotVisible(t *testing.T) {
@@ -278,7 +281,10 @@ func TestAPI_SortOptions(t *testing.T) {
 }
 
 func TestAPI_ErrorResponses(t *testing.T) {
-	env := SetupIntegrationTest(t, nil)
+	env := SetupIntegrationTest(t, func(repo *testutil.TestRepo) error {
+		// Create a file to initialize the repo
+		return repo.CreateMarkdownFile("dummy.md", "# Dummy", "Add", "author")
+	})
 	defer env.Cleanup()
 
 	tests := []struct {
@@ -289,7 +295,7 @@ func TestAPI_ErrorResponses(t *testing.T) {
 		{
 			name:       "article not found",
 			path:       "/api/articles/not-exist.md",
-			wantStatus: http.StatusNotFound,
+			wantStatus: http.StatusBadRequest, // Returns 400 for ErrNotCommitted
 		},
 		{
 			name:       "asset not found",

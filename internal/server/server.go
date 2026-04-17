@@ -38,14 +38,15 @@ type Server struct {
 
 // Handlers contains all HTTP handlers for the server.
 type Handlers struct {
-	Article *handler.ArticleHandler
-	Asset   *handler.AssetHandler
-	Git     *handler.GitHandler
-	Search  *handler.SearchHandler
-	Tree    *handler.TreeHandler
-	Static  *handler.StaticHandler
-	Health  *handler.HealthHandler
-	AboutMe *handler.AboutMeHandler
+	Article   *handler.ArticleHandler
+	Asset     *handler.AssetHandler
+	Git       *handler.GitHandler
+	Search    *handler.SearchHandler
+	Tree      *handler.TreeHandler
+	Static    *handler.StaticHandler
+	Health    *handler.HealthHandler
+	AboutMe   *handler.AboutMeHandler
+	WebSocket *WebSocketHandler
 }
 
 // NewServer creates a new Server instance.
@@ -139,6 +140,11 @@ func (s *Server) setupRoutes() {
 	r.Get("/info/refs", s.Handlers.Git.InfoRefs)
 	r.Post("/git-upload-pack", s.Handlers.Git.UploadPack)
 	r.Post("/git-receive-pack", s.Handlers.Git.ReceivePack)
+
+	// WebSocket routes (v1.4)
+	if s.Handlers.WebSocket != nil {
+		r.Get("/ws/terminal", s.Handlers.WebSocket.HandleTerminal)
+	}
 
 	// Static files (frontend) - catch-all at the end
 	// In debug mode, frontend runs separately, so we don't serve static files

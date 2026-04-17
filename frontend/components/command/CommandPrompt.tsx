@@ -96,10 +96,24 @@ export function CommandPrompt() {
     return [];
   });
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [cursorPosition, setCursorPosition] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cursorMeasureRef = useRef<HTMLSpanElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const router = useRouter();
   
+  // Calculate cursor position for no-match hint positioning
+  useEffect(() => {
+    if (cursorMeasureRef.current) {
+      const textWidth = cursorMeasureRef.current.offsetWidth;
+      // Position hint at the cursor position, but ensure it doesn't overflow right
+      const maxWidth = cursorMeasureRef.current.parentElement?.offsetWidth || 500;
+      const hintWidth = 120; // approximate hint span width
+      const pos = Math.min(textWidth, maxWidth - hintWidth);
+      setCursorPosition(Math.max(0, pos));
+    }
+  }, [input]);
+
   // Get currentDir from TerminalConfig context
   const { currentDir } = useTerminalConfig();
 
@@ -506,15 +520,20 @@ export function CommandPrompt() {
             aria-label="Command input"
           />
           
-          {/* Blinking Cursor (when focused and empty) */}
-          {isFocused && input === "" && (
-            <span className="absolute left-0 w-2.5 h-5 bg-tertiary cursor-blink" />
-          )}
+          {/* Hidden span to measure input text width for cursor positioning */}
+          <span
+            ref={cursorMeasureRef}
+            className="absolute invisible whitespace-pre font-mono text-sm left-0 top-0"
+            aria-hidden="true"
+          >
+            {input}
+          </span>
           
-          {/* No Match Hint (above input, shows for 1 second) */}
+          {/* No Match Hint (above input at cursor position, shows for 1 second) */}
           {showNoMatchHint && (
             <span 
-              className="absolute bottom-full mb-1 right-0 px-2 py-1 bg-surface-container-high text-error font-mono text-xs rounded animate-pulse"
+              className="absolute bottom-full mb-2 px-2 py-1 bg-surface-container-high text-error font-mono text-xs rounded"
+              style={{ left: `${cursorPosition}px` }}
             >
               {noMatchHintType === "search" ? "没有搜索结果" : "没有匹配内容"}
             </span>

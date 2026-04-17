@@ -140,6 +140,8 @@ export function CommandPrompt() {
   useEffect(() => {
     const handleFocusEvent = () => {
       inputRef.current?.focus();
+      // Auto-fill "search " command when triggered from search icon
+      setInput("search ");
     };
 
     window.addEventListener(FOCUS_COMMAND_INPUT, handleFocusEvent);

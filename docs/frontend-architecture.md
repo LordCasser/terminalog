@@ -1,9 +1,9 @@
 # Terminalog - 前端架构设计文档
 
-> 文档版本：v1.4
+> 文档版本：v1.5
 > 创建日期：2026-04-15
 > 最后更新：2026-04-17
-> 基于需求文档：requirements.md v1.4
+> 基于需求文档：requirements.md v1.5
 > 关联文档：backend-architecture.md, api-spec.md, architecture.md, api-spec.md
 
 ---
@@ -81,8 +81,8 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 **组成组件**：
 - `Layout.tsx`：全局布局容器（Dracula background + Glass 面板）
-- `Navbar.tsx`：顶部导航栏（左侧Logo/路径显示，右侧POSTS和ABOUTME导航链接+搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm，路径与底部终端输入栏同步，flex布局左-右对齐，**NavLink下划线使用after伪元素独立定位不影响字体基线对齐，选中态颜色primary-container，未选中态颜色outline**）
-- `ArticleTable.tsx`：文章列表表格（5 列：Created/Updated/Editors/Filename/Latest Commit）
+- `Navbar.tsx`：顶部导航栏（左侧Logo/路径显示，右侧POSTS和ABOUTME导航链接+搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm，路径与底部终端输入栏同步，flex布局左-右对齐，**NavLink下划线使用after伪元素独立定位（`after:absolute after:-bottom-1.5 after:h-0.5`）不影响字体基线对齐，选中态和未选中态统一`px-2 py-1` padding，选中态颜色primary-container，未选中态颜色outline**）
+- `ArticleTable.tsx`：文章列表表格（5 列：Created/Updated/Editors/Filename/Latest Commit，**Editors标签字体12px**）
 - `CommandPrompt.tsx`：底部单行命令输入区（`guest@blog: ~/path $ ` 前缀，JetBrains Mono，支持实际输入，Enter执行，键盘输入自动聚焦，Tab键补全）
 - `SortHeader.tsx`：表格可排序表头（点击排序）
 - `HelpModal.tsx`：命令帮助模态框（输入`help`或`?`命令触发，展示可用命令，3秒自动关闭或右上角x手动关闭或Enter键关闭，Glass效果，遵循Dracula Spectrum设计，宽度max-w-xl确保命令说明一行显示）
@@ -183,12 +183,12 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - Mermaid 流程图渲染
 - 图片路径转换
 
-**Markdown渲染样式约束（v1.3新增）**：
-- 正文文本使用Inter字体，text-lg大小，text-on-surface-variant颜色
+**Markdown渲染样式约束（v1.3新增，v1.5对齐原型HTML）**：
+- 正文文本使用Inter字体，text-lg大小，text-on-surface-variant颜色，leading-relaxed行间距
 - 标题使用Space Grotesk字体，text-3xl大小（h2），text-secondary-fixed-dim颜色
-- 代码块使用JetBrains Mono字体，text-sm大小，bg-surface-container-lowest背景
+- 代码块使用JetBrains Mono字体，text-sm大小，bg-surface-container-lowest背景，使用`<section>`包裹+右上角语言标签
 - 引用块（blockquote）使用JetBrains Mono字体，text-lg大小，border-l-4 border-primary，bg-surface-container-low背景
-- 列表使用JetBrains Mono字体，text-base大小，带tertiary颜色的箭头符号（➜）
+- 列表使用JetBrains Mono字体，text-base大小，space-y-4间距，带tertiary颜色的箭头符号（➜）
 - 遵循Dracula Spectrum配色系统
 
 **边界**：

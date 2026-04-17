@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/format/packfile"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/protocol/packp"
@@ -217,38 +218,19 @@ func (s *GitService) HandleUploadPack(ctx context.Context, body io.Reader) ([]by
 	// Build packfile containing requested objects
 	var packBuf bytes.Buffer
 
-	// Get all objects needed for the requested commits
-	objectHashes := make([]plumbing.Hash, 0)
+	// Collect all objects needed (commits, trees, blobs)
+	// Use a set to avoid duplicates
+	objectSet := make(map[plumbing.Hash]bool)
 
-	// For each wanted hash, collect its objects
+	// Recursively collect all commits and their objects
 	for _, want := range req.Wants {
-		// Try to get the object
-		obj, err := object.GetObject(s.repo.Storer, want)
-		if err != nil {
-			continue
-		}
+		s.collectCommitObjects(want, objectSet)
+	}
 
-		objectHashes = append(objectHashes, want)
-
-		// If it's a commit, get the tree and blobs
-		if obj.Type() == plumbing.CommitObject {
-			commit, err := object.GetCommit(s.repo.Storer, want)
-			if err != nil {
-				continue
-			}
-
-			// Add tree
-			objectHashes = append(objectHashes, commit.TreeHash)
-
-			// Walk tree to get all blobs
-			tree, err := commit.Tree()
-			if err == nil {
-				tree.Files().ForEach(func(f *object.File) error {
-					objectHashes = append(objectHashes, f.Hash)
-					return nil
-				})
-			}
-		}
+	// Convert set to slice
+	objectHashes := make([]plumbing.Hash, 0, len(objectSet))
+	for hash := range objectSet {
+		objectHashes = append(objectHashes, hash)
 	}
 
 	// Create packfile encoder
@@ -293,6 +275,60 @@ func (s *GitService) HandleUploadPack(ctx context.Context, body io.Reader) ([]by
 	pktFlush(&responseBuf)
 
 	return responseBuf.Bytes(), nil
+}
+
+// collectCommitObjects recursively collects all objects for a commit and its parents.
+func (s *GitService) collectCommitObjects(commitHash plumbing.Hash, objectSet map[plumbing.Hash]bool) {
+	// Skip if already collected
+	if objectSet[commitHash] {
+		return
+	}
+
+	// Get the commit object
+	commit, err := object.GetCommit(s.repo.Storer, commitHash)
+	if err != nil {
+		return
+	}
+
+	// Add commit hash
+	objectSet[commitHash] = true
+
+	// Add tree and collect all tree objects recursively
+	s.collectTreeObjects(commit.TreeHash, objectSet)
+
+	// Recursively collect parent commits
+	for _, parentHash := range commit.ParentHashes {
+		s.collectCommitObjects(parentHash, objectSet)
+	}
+}
+
+// collectTreeObjects recursively collects all objects in a tree (tree itself, subtrees, and blobs).
+func (s *GitService) collectTreeObjects(treeHash plumbing.Hash, objectSet map[plumbing.Hash]bool) {
+	// Skip if already collected
+	if objectSet[treeHash] {
+		return
+	}
+
+	// Add tree hash
+	objectSet[treeHash] = true
+
+	// Get the tree object
+	tree, err := object.GetTree(s.repo.Storer, treeHash)
+	if err != nil {
+		return
+	}
+
+	// Walk tree entries
+	for _, entry := range tree.Entries {
+		switch entry.Mode {
+		case filemode.Dir, filemode.Symlink:
+			// Directory or symlink - collect subtree
+			s.collectTreeObjects(entry.Hash, objectSet)
+		default:
+			// Regular file - add blob hash
+			objectSet[entry.Hash] = true
+		}
+	}
 }
 
 // GetReceivePackRefs returns the refs advertisement for git-receive-pack (Push).

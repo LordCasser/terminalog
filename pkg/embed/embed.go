@@ -9,7 +9,7 @@ import (
 // StaticFS embeds the static frontend files.
 // The static directory contains the Next.js build output.
 //
-//go:embed static/*
+//go:embed all:static
 var StaticFS embed.FS
 
 // GetStaticFS returns the embedded static filesystem.

@@ -16,7 +16,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { apiClient } from "@/lib/api/client";
 
-// Frontend config response from /api/config
+// Frontend config response from /api/v1/settings
 interface FrontendConfig {
   owner: string;
 }
@@ -50,7 +50,7 @@ export function TerminalConfigProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const config = await apiClient.get<FrontendConfig>("/api/config");
+        const config = await apiClient.get<FrontendConfig>("/api/v1/settings");
         setOwner(config.owner || DEFAULT_OWNER);
       } catch (error) {
         console.error("Failed to fetch config:", error);
@@ -63,12 +63,18 @@ export function TerminalConfigProvider({ children }: { children: ReactNode }) {
     fetchConfig();
   }, []);
 
-  // Get current directory from URL params on mount and URL changes
+  // Get current directory from URL path on mount and URL changes
+  // RESTful routing: /dir/{path} (path parameter, not query parameter)
   useEffect(() => {
     const updateCurrentDir = () => {
       if (typeof window !== "undefined") {
-        const params = new URLSearchParams(window.location.search);
-        setCurrentDir(params.get("dir") || "");
+        const pathname = window.location.pathname;
+        // Extract dir path from /dir/{path} or /dir/{path1}/{path2} routes
+        if (pathname.startsWith("/dir/")) {
+          setCurrentDir(decodeURIComponent(pathname.slice(5))); // Remove "/dir/" prefix
+        } else {
+          setCurrentDir(""); // Root directory
+        }
       }
     };
 

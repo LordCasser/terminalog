@@ -460,7 +460,7 @@ export function CommandPrompt() {
     
     if (trimmedCmd.startsWith("cd ")) {
       const path = cmd.trim().slice(3);
-      router.push(`/?dir=${encodeURIComponent(path)}`);
+      router.push(`/dir/${encodeURIComponent(path)}`);
       return;
     }
     

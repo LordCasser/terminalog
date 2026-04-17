@@ -3,6 +3,10 @@
  * 
  * Client-side rendering for article content.
  * Fetches article data from API and renders with Brutalist styling.
+ * 
+ * In static export mode, the article path is extracted from the browser URL
+ * rather than Next.js params, because the fallback page always has
+ * slug=["_fallback"] regardless of the actual URL path.
  */
 
 "use client";
@@ -12,8 +16,15 @@ import { getArticleContent, getArticleTimeline, getArticleVersion } from "@/lib/
 import { MarkdownRenderer } from "@/components/article/MarkdownRenderer";
 import type { Article, CommitInfo, VersionInfo } from "@/types";
 
-interface ArticleContentProps {
-  articlePath: string;
+/**
+ * Extract article path from browser URL.
+ * URL format: /article/{path} -> path = "tech/golang/go-guide.md"
+ */
+function extractArticlePathFromURL(): string {
+  const pathname = window.location.pathname;
+  // Remove /article/ prefix and trailing slash
+  const path = pathname.replace(/^\/article\/+/, "").replace(/\/+$/, "");
+  return path || "";
 }
 
 // Mock data for static export preview
@@ -64,7 +75,7 @@ To add visual "soul," we implement what we call **"Terminal Fog"**. This is the 
   return { mockArticle, mockContent, mockCommits, mockVersionInfo };
 }
 
-export function ArticleContent({ articlePath }: ArticleContentProps) {
+export function ArticleContent() {
   const [article, setArticle] = useState<Article | null>(null);
   const [content, setContent] = useState<string>("");
   const [commits, setCommits] = useState<CommitInfo[]>([]);
@@ -73,6 +84,9 @@ export function ArticleContent({ articlePath }: ArticleContentProps) {
   const [showHistory, setShowHistory] = useState(false);
   
   useEffect(() => {
+    // Extract article path from browser URL (only in client)
+    const articlePath = extractArticlePathFromURL();
+    
     const fetchData = async () => {
       try {
         // Fetch article content
@@ -100,27 +114,18 @@ export function ArticleContent({ articlePath }: ArticleContentProps) {
       }
     };
     
-    fetchData();
-  }, [articlePath]);
+fetchData();
+  }, []);
   
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="text-outline font-mono">Loading...</span>
-      </div>
-    );
-  }
+  // Extract base path for image transformation (client-side only)
+  const basePath = (article?.path || "").replace(/\/[^\/]+\.md$/, '');
   
   // Extract quote from content (first blockquote)
   const extractQuote = (markdown: string): string => {
     const match = markdown.match(/^> (.+)$/m);
     return match ? match[1] : "";
   };
-  
   const quote = extractQuote(content);
-  
-  // Extract base path for image transformation
-  const basePath = articlePath.replace(/\/[^\/]+\.md$/, '');
   
   // Format date
   const formatDate = (dateStr: string) => {

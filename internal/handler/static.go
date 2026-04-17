@@ -77,7 +77,39 @@ func (h *StaticHandler) tryServePath(w http.ResponseWriter, r *http.Request, pat
 		}
 	}
 
+	// Try Next.js static export fallback for dynamic routes
+	// Next.js generates _fallback directories for catch-all routes:
+	//   /article/tech/go-guide.md -> article/_fallback/index.html
+	//   /dir/tech/subdir -> dir/_fallback/index.html
+	fallbackPath := h.getFallbackPath(path)
+	if fallbackPath != "" {
+		if h.serveFile(w, r, fallbackPath) {
+			return true
+		}
+	}
+
 	return false
+}
+
+// getFallbackPath returns the Next.js _fallback path for a dynamic route.
+// For catch-all routes like /article/[...slug], Next.js static export generates
+// article/_fallback/index.html. We need to map any /article/* path to this fallback.
+func (h *StaticHandler) getFallbackPath(path string) string {
+	// Split path into segments
+	segments := strings.Split(path, "/")
+	if len(segments) < 2 {
+		return ""
+	}
+
+	// Check for known dynamic route prefixes
+	dynamicRoutes := []string{"article", "dir"}
+	for _, route := range dynamicRoutes {
+		if segments[0] == route {
+			return route + "/_fallback/index.html"
+		}
+	}
+
+	return ""
 }
 
 // serveFile serves a file from the embedded filesystem.

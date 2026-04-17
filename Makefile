@@ -42,6 +42,7 @@ web-embed: frontend
 	@mkdir -p $(STATIC_DIR)
 	@if [ -d "$(WEB_DIR)/out" ]; then \
 		cp -r $(WEB_DIR)/out/* $(STATIC_DIR)/; \
+		find $(STATIC_DIR) -type d -empty -exec touch {}/.gitkeep \; ; \
 		echo "Frontend copied to $(STATIC_DIR)"; \
 	else \
 		echo "Warning: Frontend build output not found at $(WEB_DIR)/out"; \

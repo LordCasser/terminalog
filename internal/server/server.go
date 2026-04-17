@@ -171,6 +171,16 @@ func (s *Server) setupRoutes() {
 		r.Get("/ws/terminal", s.Handlers.WebSocket.HandleTerminal)
 	}
 
+	// Git Smart HTTP routes at root level for standard Git clone URL
+	// Git clone URL: http://xxx/ (standard Git HTTP)
+	// GET /info/refs?service=git-upload-pack - refs advertisement
+	// GET /info/refs?service=git-receive-pack - refs advertisement (auth required)
+	// POST /git-upload-pack - packfile transfer for clone/fetch
+	// POST /git-receive-pack - packfile transfer for push (auth required)
+	r.Get("/info/refs", s.Handlers.Git.InfoRefs)
+	r.Post("/git-upload-pack", s.Handlers.Git.UploadPack)
+	r.Post("/git-receive-pack", s.Handlers.Git.ReceivePack)
+
 	// Static files (frontend) - catch-all at the end
 	// In debug mode, frontend runs separately, so we don't serve static files
 	if !s.debug && s.Handlers.Static != nil {

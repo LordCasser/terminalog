@@ -7,33 +7,46 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"os/exec"
 	"sort"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/filemode"
-	"github.com/go-git/go-git/v5/plumbing/format/packfile"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/protocol/packp"
 
 	"terminalog/internal/model"
 )
 
-// GitService provides Git operations using pure go-git/v5.
+// GitService provides Git operations.
+// Smart HTTP protocol (clone/push) uses system git subprocesses (--stateless-rpc).
+// Read-only operations (file history, etc.) use go-git/v5.
 type GitService struct {
 	// repoPath is the absolute path to the Git repository.
 	repoPath string
 
-	// repo is the opened Git repository.
+	// repo is the opened Git repository (for read-only operations).
 	repo *git.Repository
 }
 
 // NewGitService creates a new GitService instance.
+// It opens the repository and configures it for push operations:
+// - Sets receive.denyCurrentBranch=ignore to allow pushing to the checked-out branch
 func NewGitService(repoPath string) (*GitService, error) {
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
+	}
+
+	// Configure repository to allow pushing to the checked-out branch.
+	// By default, git rejects pushes to the current branch in non-bare repos.
+	// We handle working directory updates ourselves via checkout after push.
+	cmd := exec.Command("git", "config", "receive.denyCurrentBranch", "ignore")
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		log.Printf("NewGitService: failed to set receive.denyCurrentBranch: %v", err)
+		// Non-critical - push may fail later if this isn't set
 	}
 
 	return &GitService{
@@ -41,6 +54,58 @@ func NewGitService(repoPath string) (*GitService, error) {
 		repo:     repo,
 	}, nil
 }
+
+// ----- Smart HTTP Protocol (git subprocess) -----
+
+// ServiceType constants for Git Smart HTTP protocol.
+const (
+	ServiceTypeUploadPack  = "upload-pack"
+	ServiceTypeReceivePack = "receive-pack"
+)
+
+// GetInfoRefs runs `git {upload-pack|receive-pack} --stateless-rpc --advertise-refs .`
+// to produce the reference advertisement for the Smart HTTP protocol.
+func (s *GitService) GetInfoRefs(service string) ([]byte, error) {
+	if service != ServiceTypeUploadPack && service != ServiceTypeReceivePack {
+		return nil, fmt.Errorf("invalid service: %s", service)
+	}
+
+	cmd := exec.Command("git", service, "--stateless-rpc", "--advertise-refs", ".")
+	cmd.Dir = s.repoPath
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git %s --advertise-refs failed: %w", service, err)
+	}
+
+	return output, nil
+}
+
+// ServiceRPC pipes the HTTP request body to a git subprocess and streams
+// the response back. This handles both upload-pack (clone/fetch) and
+// receive-pack (push) using `git {service} --stateless-rpc .`.
+func (s *GitService) ServiceRPC(service string, reqBody io.Reader, respWriter io.Writer) error {
+	if service != ServiceTypeUploadPack && service != ServiceTypeReceivePack {
+		return fmt.Errorf("invalid service: %s", service)
+	}
+
+	cmd := exec.Command("git", service, "--stateless-rpc", ".")
+	cmd.Dir = s.repoPath
+	cmd.Stdin = reqBody
+	cmd.Stdout = respWriter
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		log.Printf("ServiceRPC: git %s --stateless-rpc failed: %v, stderr: %s", service, err, stderr.String())
+		return fmt.Errorf("git %s --stateless-rpc failed: %w", service, err)
+	}
+
+	return nil
+}
+
+// ----- Read-only operations (go-git) -----
 
 // GetFileHistory returns the complete Git history of a file.
 // Only commits where the file was actually modified are included.
@@ -158,282 +223,6 @@ func (s *GitService) IsFileCommitted(ctx context.Context, filePath string) (bool
 	return len(history.AllCommits) > 0, nil
 }
 
-// GetUploadPackRefs returns the refs advertisement for git-upload-pack (Clone).
-func (s *GitService) GetUploadPackRefs(ctx context.Context) ([]byte, error) {
-	var buf bytes.Buffer
-
-	// Write service announcement
-	pktLine(&buf, "# service=git-upload-pack\n")
-	pktFlush(&buf)
-
-	// Add capabilities string (only on first ref, with null byte separator)
-	capabilities := "multi_ack_detailed side-band-64k thin-pack ofs-delta shallow no-progress include-tag"
-
-	// Get HEAD reference
-	head, err := s.repo.Head()
-	if err == nil {
-		// HEAD with capabilities (first ref must have capabilities after null byte)
-		pktLine(&buf, fmt.Sprintf("%s HEAD\x00%s\n", head.Hash().String(), capabilities))
-	} else {
-		// No HEAD, write empty capabilities
-		pktLine(&buf, fmt.Sprintf("%s HEAD\x00%s\n", "0000000000000000000000000000000000000000", capabilities))
-	}
-
-	// Get all references
-	refs, err := s.repo.References()
-	if err != nil {
-		return nil, err
-	}
-
-	// Add branch references (without capabilities)
-	err = refs.ForEach(func(ref *plumbing.Reference) error {
-		if ref.Name().IsBranch() {
-			pktLine(&buf, fmt.Sprintf("%s %s\n", ref.Hash().String(), ref.Name().String()))
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	pktFlush(&buf)
-
-	return buf.Bytes(), nil
-}
-
-// HandleUploadPack handles the git-upload-pack request (Clone/Fetch).
-// This implementation uses go-git's packfile encoder to generate the packfile.
-func (s *GitService) HandleUploadPack(ctx context.Context, body io.Reader) ([]byte, error) {
-	// Decode the upload-pack request
-	req := packp.NewUploadPackRequest()
-	if err := req.Decode(body); err != nil {
-		return nil, fmt.Errorf("failed to decode upload-pack request: %w", err)
-	}
-
-	// Validate request has wants
-	if len(req.Wants) == 0 {
-		return nil, fmt.Errorf("no wants in upload-pack request")
-	}
-
-	// Build packfile containing requested objects
-	var packBuf bytes.Buffer
-
-	// Collect all objects needed (commits, trees, blobs)
-	// Use a set to avoid duplicates
-	objectSet := make(map[plumbing.Hash]bool)
-
-	// Recursively collect all commits and their objects
-	for _, want := range req.Wants {
-		s.collectCommitObjects(want, objectSet)
-	}
-
-	// Convert set to slice
-	objectHashes := make([]plumbing.Hash, 0, len(objectSet))
-	for hash := range objectSet {
-		objectHashes = append(objectHashes, hash)
-	}
-
-	// Create packfile encoder
-	encoder := packfile.NewEncoder(&packBuf, s.repo.Storer, false)
-
-	// Encode objects into packfile (version 2)
-	if len(objectHashes) > 0 {
-		_, err := encoder.Encode(objectHashes, 2)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encode packfile: %w", err)
-		}
-	}
-
-	// Build response
-	var responseBuf bytes.Buffer
-
-	// Write NAK (no common commits)
-	pktLine(&responseBuf, "NAK\n")
-
-	// Write packfile using sideband-64k
-	if packBuf.Len() > 0 {
-		// Chunk the packfile data
-		packData := packBuf.Bytes()
-		chunkSize := 65515 // max for sideband-64k minus 1 byte for channel
-
-		for i := 0; i < len(packData); i += chunkSize {
-			end := i + chunkSize
-			if end > len(packData) {
-				end = len(packData)
-			}
-
-			chunk := packData[i:end]
-			// Channel 1 = packfile data
-			pktLine(&responseBuf, fmt.Sprintf("\x01%s", string(chunk)))
-		}
-	}
-
-	// Write success message on channel 2 (progress)
-	pktLine(&responseBuf, "\x02Counting objects done.\n")
-
-	// Flush
-	pktFlush(&responseBuf)
-
-	return responseBuf.Bytes(), nil
-}
-
-// collectCommitObjects recursively collects all objects for a commit and its parents.
-func (s *GitService) collectCommitObjects(commitHash plumbing.Hash, objectSet map[plumbing.Hash]bool) {
-	// Skip if already collected
-	if objectSet[commitHash] {
-		return
-	}
-
-	// Get the commit object
-	commit, err := object.GetCommit(s.repo.Storer, commitHash)
-	if err != nil {
-		return
-	}
-
-	// Add commit hash
-	objectSet[commitHash] = true
-
-	// Add tree and collect all tree objects recursively
-	s.collectTreeObjects(commit.TreeHash, objectSet)
-
-	// Recursively collect parent commits
-	for _, parentHash := range commit.ParentHashes {
-		s.collectCommitObjects(parentHash, objectSet)
-	}
-}
-
-// collectTreeObjects recursively collects all objects in a tree (tree itself, subtrees, and blobs).
-func (s *GitService) collectTreeObjects(treeHash plumbing.Hash, objectSet map[plumbing.Hash]bool) {
-	// Skip if already collected
-	if objectSet[treeHash] {
-		return
-	}
-
-	// Add tree hash
-	objectSet[treeHash] = true
-
-	// Get the tree object
-	tree, err := object.GetTree(s.repo.Storer, treeHash)
-	if err != nil {
-		return
-	}
-
-	// Walk tree entries
-	for _, entry := range tree.Entries {
-		switch entry.Mode {
-		case filemode.Dir, filemode.Symlink:
-			// Directory or symlink - collect subtree
-			s.collectTreeObjects(entry.Hash, objectSet)
-		default:
-			// Regular file - add blob hash
-			objectSet[entry.Hash] = true
-		}
-	}
-}
-
-// GetReceivePackRefs returns the refs advertisement for git-receive-pack (Push).
-func (s *GitService) GetReceivePackRefs(ctx context.Context) ([]byte, error) {
-	var buf bytes.Buffer
-
-	// Write service announcement
-	pktLine(&buf, "# service=git-receive-pack\n")
-	pktFlush(&buf)
-
-	// Add capabilities string for receive-pack
-	capabilities := "report-status delete-refs atomic ofs-delta"
-
-	// Get HEAD reference
-	head, err := s.repo.Head()
-	if err == nil {
-		pktLine(&buf, fmt.Sprintf("%s HEAD\x00%s\n", head.Hash().String(), capabilities))
-	} else {
-		// No HEAD, write empty capabilities
-		pktLine(&buf, fmt.Sprintf("%s HEAD\x00%s\n", "0000000000000000000000000000000000000000", capabilities))
-	}
-
-	// Get all references
-	refs, err := s.repo.References()
-	if err != nil {
-		return nil, err
-	}
-
-	// Add branch references
-	err = refs.ForEach(func(ref *plumbing.Reference) error {
-		if ref.Name().IsBranch() {
-			pktLine(&buf, fmt.Sprintf("%s %s\n", ref.Hash().String(), ref.Name().String()))
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	pktFlush(&buf)
-
-	return buf.Bytes(), nil
-}
-
-// HandleReceivePack handles the git-receive-pack request (Push).
-// This implementation processes reference updates. Packfile handling is simplified.
-func (s *GitService) HandleReceivePack(ctx context.Context, body io.Reader) ([]byte, error) {
-	// Decode the reference update request
-	req := packp.NewReferenceUpdateRequest()
-	if err := req.Decode(body); err != nil {
-		return nil, fmt.Errorf("failed to decode receive-pack request: %w", err)
-	}
-
-	// For MVP, we handle reference updates only
-	// Packfile processing requires more complex implementation
-	// The packfile data is already sent and objects should be in the request
-
-	// Build response
-	var responseBuf bytes.Buffer
-
-	// Write unpack result
-	pktLine(&responseBuf, "unpack ok\n")
-
-	// Process each reference update command
-	for _, cmd := range req.Commands {
-		action := cmd.Action()
-
-		switch action {
-		case packp.Create:
-			// Create new reference
-			refName := plumbing.ReferenceName(cmd.Name)
-			ref := plumbing.NewHashReference(refName, cmd.New)
-			if err := s.repo.Storer.SetReference(ref); err != nil {
-				pktLine(&responseBuf, fmt.Sprintf("ng %s %s\n", cmd.Name, err.Error()))
-				continue
-			}
-			pktLine(&responseBuf, fmt.Sprintf("ok %s\n", cmd.Name))
-
-		case packp.Update:
-			// Update existing reference
-			refName := plumbing.ReferenceName(cmd.Name)
-			ref := plumbing.NewHashReference(refName, cmd.New)
-			if err := s.repo.Storer.SetReference(ref); err != nil {
-				pktLine(&responseBuf, fmt.Sprintf("ng %s %s\n", cmd.Name, err.Error()))
-				continue
-			}
-			pktLine(&responseBuf, fmt.Sprintf("ok %s\n", cmd.Name))
-
-		case packp.Delete:
-			// Delete reference
-			refName := plumbing.ReferenceName(cmd.Name)
-			if err := s.repo.Storer.RemoveReference(refName); err != nil {
-				pktLine(&responseBuf, fmt.Sprintf("ng %s %s\n", cmd.Name, err.Error()))
-				continue
-			}
-			pktLine(&responseBuf, fmt.Sprintf("ok %s\n", cmd.Name))
-		}
-	}
-
-	// Flush
-	pktFlush(&responseBuf)
-
-	return responseBuf.Bytes(), nil
-}
-
 // GetRepo returns the underlying git repository.
 func (s *GitService) GetRepo() *git.Repository {
 	return s.repo
@@ -444,7 +233,35 @@ func (s *GitService) GetRepoPath() string {
 	return s.repoPath
 }
 
-// Helper functions
+// ReloadRepo re-opens the git repository to refresh cached state.
+func (s *GitService) ReloadRepo() error {
+	repo, err := git.PlainOpen(s.repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to re-open git repository: %w", err)
+	}
+	s.repo = repo
+	return nil
+}
+
+// CheckoutWorkingTree runs `git checkout --force` in the repository to
+// synchronize the working directory with the current HEAD.
+// This is needed after push operations because `git receive-pack` only
+// updates refs and objects, not the working tree.
+func (s *GitService) CheckoutWorkingTree() error {
+	cmd := exec.Command("git", "checkout", "--force")
+	cmd.Dir = s.repoPath
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		log.Printf("CheckoutWorkingTree: git checkout failed: %v, stderr: %s", err, stderr.String())
+		return fmt.Errorf("git checkout failed: %w", err)
+	}
+
+	log.Printf("CheckoutWorkingTree: working directory updated to match HEAD")
+	return nil
+}
 
 // shortHash returns a short commit hash (7 characters).
 func shortHash(hash string) string {
@@ -452,21 +269,6 @@ func shortHash(hash string) string {
 		return hash[:7]
 	}
 	return hash
-}
-
-// pktLine writes a pkt-line formatted data.
-func pktLine(w io.Writer, data string) {
-	size := len(data) + 4
-	if size > 65524 {
-		// pkt-line max size, need to split
-		return
-	}
-	w.Write([]byte(fmt.Sprintf("%04x%s", size, data)))
-}
-
-// pktFlush writes a pkt-line flush packet.
-func pktFlush(w io.Writer) {
-	w.Write([]byte("0000"))
 }
 
 // mapKeys returns the keys of a map as a slice.

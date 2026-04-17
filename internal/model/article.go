@@ -8,8 +8,14 @@ type Article struct {
 	// Path is the file path relative to the repository root (e.g., "tech/go-best-practices.md").
 	Path string `json:"path"`
 
+	// Name is the file or directory name (extracted from path).
+	Name string `json:"name"`
+
 	// Title is the article title extracted from the filename (without .md extension).
 	Title string `json:"title"`
+
+	// Type indicates whether this is a file or directory.
+	Type NodeType `json:"type"`
 
 	// CreatedAt is the timestamp of the first commit that created this file.
 	CreatedAt time.Time `json:"createdAt"`
@@ -25,6 +31,9 @@ type Article struct {
 
 	// Contributors is a list of all author names who have committed changes to this file.
 	Contributors []string `json:"contributors"`
+
+	// LatestCommit is the latest commit message.
+	LatestCommit string `json:"latestCommit"`
 }
 
 // ArticleDetail represents an article with its content.

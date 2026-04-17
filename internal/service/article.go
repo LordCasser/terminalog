@@ -183,12 +183,15 @@ func (s *ArticleService) processFile(ctx context.Context, file string) (model.Ar
 	// Build Article
 	article := model.Article{
 		Path:         file,
+		Name:         filepath.Base(file),
 		Title:        utils.ExtractTitle(file),
+		Type:         model.NodeTypeFile,
 		CreatedAt:    history.FirstCommit.Timestamp,
 		CreatedBy:    history.FirstCommit.Author,
 		EditedAt:     history.LastCommit.Timestamp,
 		EditedBy:     history.LastCommit.Author,
 		Contributors: history.Contributors,
+		LatestCommit: history.LastCommit.Message,
 	}
 
 	// Cache article
@@ -238,12 +241,15 @@ func (s *ArticleService) GetArticle(ctx context.Context, path string) (*model.Ar
 
 		article = model.Article{
 			Path:         path,
+			Name:         filepath.Base(path),
 			Title:        utils.ExtractTitle(path),
+			Type:         model.NodeTypeFile,
 			CreatedAt:    history.FirstCommit.Timestamp,
 			CreatedBy:    history.FirstCommit.Author,
 			EditedAt:     history.LastCommit.Timestamp,
 			EditedBy:     history.LastCommit.Author,
 			Contributors: history.Contributors,
+			LatestCommit: history.LastCommit.Message,
 		}
 
 		// Cache

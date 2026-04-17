@@ -52,5 +52,8 @@ pkg/embed/static/
 # Content directory (user specific)
 content/
 
+# Articles directory (user specific, for testing)
+articles/
+
 # GoReleaser dist
 dist/

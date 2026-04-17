@@ -1,9 +1,9 @@
 # Terminalog - API 接口文档
 
-> 文档版本：v1.2
+> 文档版本：v1.4
 > 创建日期：2026-04-15
-> 最后更新：2026-04-16
-> 基于需求文档：requirements.md v1.2
+> 最后更新：2026-04-17
+> 基于需求文档：requirements.md v1.4
 > 关联文档：frontend-architecture.md, backend-architecture.md, architecture.md
 
 ---
@@ -14,7 +14,7 @@
 
 | 项目 | 说明 |
 |------|------|
-| **协议** | HTTP/1.1 |
+| **协议** | HTTP/1.1 + WebSocket |
 | **数据格式** | JSON |
 | **字符编码** | UTF-8 |
 | **认证方式** | Basic Auth（仅 Git Push） |
@@ -24,12 +24,15 @@
 
 ```
 http://{host}:{port}
+ws://{host}:{port}  (WebSocket)
 ```
 
 示例：
 ```
 http://localhost:8080
+ws://localhost:8080
 http://blog.example.com
+ws://blog.example.com
 ```
 
 ### 1.3 API 分类
@@ -37,6 +40,7 @@ http://blog.example.com
 | 类别 | 基础路径 | 说明 |
 |------|---------|------|
 | REST API | `/api` | 文章、搜索、目录树、资源 |
+| **WebSocket API (v1.4新增)** | `/ws` | 路径补全实时通信 |
 | Git API | `/`（根路径） | Git Smart HTTP 协议 |
 | 静态资源 | `/`（根路径） | 前端页面（embed） |
 
@@ -968,7 +972,146 @@ function transformImagePath(src: string, basePath: string): string {
 
 ---
 
-## 七、Git 使用指南
+## 七、WebSocket API（v1.4新增）
+
+### 7.1 WebSocket端点
+
+**端点**：`ws://localhost:18085/ws/terminal`
+
+**描述**：终端命令实时通信端点，支持路径补全和搜索功能
+
+**连接建立**：
+```javascript
+// 前端建立WebSocket连接
+const ws = new WebSocket('ws://localhost:18085/ws/terminal');
+
+ws.onopen = () => {
+  console.log('WebSocket connected');
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  // 处理响应消息
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = () => {
+  console.log('WebSocket disconnected');
+};
+```
+
+### 7.2 路径补全
+
+**消息类型**：`completion_request` / `completion_response`
+
+**请求格式**：
+```json
+{
+  "type": "completion_request",
+  "dir": "/",           // 当前目录路径（如 "/" 或 "/tech"）
+  "prefix": "RE"        // 路径前缀（如 "RE" 或 "tec"）
+}
+```
+
+**响应格式**：
+```json
+{
+  "type": "completion_response",
+  "items": [
+    "README.md",        // 文件不带斜杠
+    "tech/"             // 文件夹带斜杠
+  ]
+}
+```
+
+**补全规则**：
+- 文件补全不带斜杠（如 `README.md`）
+- 文件夹补全带斜杠（如 `tech/`）
+- 仅返回已提交的Markdown文件（过滤未提交文件）
+- **过滤以 `_` 开头的特殊文件**（如 `_ABOUTME.md`）
+
+**前端使用示例**：
+```javascript
+// 发送路径补全请求
+ws.send(JSON.stringify({
+  type: 'completion_request',
+  dir: '/',
+  prefix: 'RE'
+}));
+
+// 接收补全结果
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'completion_response') {
+    // 自动补全输入框
+    if (data.items.length === 1) {
+      input.value = 'open ' + data.items[0];
+    }
+  }
+};
+```
+
+### 7.3 搜索文章
+
+**消息类型**：`search_request` / `search_response`
+
+**请求格式**：
+```json
+{
+  "type": "search_request",
+  "keyword": "terminal"   // 搜索关键词
+}
+```
+
+**响应格式**：
+```json
+{
+  "type": "search_response",
+  "results": [
+    {
+      "path": "README.md",         // 文章路径
+      "title": "Terminalog"        // 文章标题（去除.md扩展名）
+    },
+    {
+      "path": "tech/terminal-setup.md",
+      "title": "Terminal Setup Guide"
+    }
+  ]
+}
+```
+
+**搜索规则**：
+- 搜索文章标题（去除.md扩展名后的文件名）
+- **过滤以 `_` 开头的特殊文件**（如 `_ABOUTME.md`）
+- 返回最匹配的文章路径列表（最多10条结果）
+- 支持模糊匹配（keyword包含在标题中即可匹配）
+
+**前端使用示例**：
+```javascript
+// 发送搜索请求
+ws.send(JSON.stringify({
+  type: 'search_request',
+  keyword: 'terminal'
+}));
+
+// 接收搜索结果
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'search_response') {
+    // 直接跳转到第一个匹配结果
+    if (data.results.length > 0) {
+      window.location.href = `/article?path=${data.results[0].path}`;
+    }
+  }
+};
+```
+
+---
+
+## 八、Git 使用指南
 
 ### 7.1 Clone 仓库
 

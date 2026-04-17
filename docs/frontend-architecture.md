@@ -97,22 +97,50 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 **职责**：
 - 解析用户输入的命令
 - 提取命令名、参数、flags
-- 执行对应命令逻辑
-- 管理命令历史（**保留完整历史，无 clear 清屏**）
+- **执行对应命令逻辑（纯前端处理，不依赖后端HTTP API）**
+- **管理命令历史（存储在localStorage，保留完整历史）**
 
 **底部输入栏功能（v1.3新增）**：
 - 输入栏显示格式：`guest@blog: ~/path $ ` + 闪烁光标 + 实际输入框
 - 支持实际输入功能：用户可在输入框中键入命令
-- Enter执行：按下Enter键执行命令，清空输入框，保留命令历史
+- Enter执行：按下Enter键执行命令，清空输入框，保存命令到历史记录
 - 全局键盘监听：页面任意位置键盘输入自动聚焦到输入栏
 - 搜索icon交互：点击导航栏搜索icon自动填充 `search ` 并聚焦输入栏
 - **Tab键自动补全**：输入命令前缀后按Tab键自动补全完整命令（如`se`→`search `），禁用浏览器默认Tab键焦点切换行为
-- **路径补全**：Tab键支持补全文章/文件夹路径（如`open RE`→`open README.md`，`cd tec`→`cd tech/`），需要从后端API获取当前目录文章列表和子目录列表
+- **路径补全（WebSocket）**：Tab键路径补全通过WebSocket实时从后端获取路径信息（避免频繁HTTP请求开销）
 - **Placeholder透明度**：降低placeholder透明度（opacity-50），避免干扰视觉焦点
 
-**边界**：
-- 不负责 UI 渲染
-- 不负责直接 API 调用（通过 API Client）
+**架构约束（v1.4新增 - 架构重大变更）**：
+
+> **变更原因**：底部终端输入框是纯前端UI组件，命令执行不应依赖后端HTTP API，仅路径补全和搜索需要后端支持（WebSocket实时通信）。
+
+1. **前端命令处理**：
+   - 大部分命令纯前端处理（纯前端路由跳转）
+   - `open <filename>` → 前端路由跳转到文章页面 `/article?path=filename`
+   - `cd <path>` → 前端路由跳转到目录页面 `/?dir=path`
+   - `help` / `?` → 触发前端模态框组件显示
+   - 不需要HTTP API `/api/command` 端点
+
+2. **WebSocket搜索命令**：
+   - `search <keyword>` → WebSocket实时搜索（避免HTTP请求延迟）
+   - 后端检索匹配文章标题，返回最匹配的文章路径列表
+   - **过滤约束**：不搜索以 `_` 开头的隐藏文件（如 `_ABOUTME.md`）
+   - 前端接收结果后直接跳转到第一个匹配结果（或显示列表）
+   - WebSocket消息格式：`{"type":"search_request","keyword":"terminal"}`
+   - 响应格式：`{"type":"search_response","results":[{"path":"README.md","title":"Terminalog"}]}`
+
+3. **历史记录前端存储**：
+   - 命令历史记录存储在localStorage（key: `terminalog_command_history`）
+   - 支持上下键导航历史记录（ArrowUp/ArrowDown）
+   - 历史记录最多保存100条
+   - 历史记录仅在前端保存，不发送到后端
+
+4. **WebSocket路径补全**：
+   - Tab键路径补全通过WebSocket实时从后端获取路径信息
+   - WebSocket端点：`ws://localhost:18085/ws/terminal`
+   - 路径补全消息：`{"type":"completion_request","dir":"/","prefix":"RE"}`
+   - 响应格式：`{"type":"completion_response","items":["README.md","tech/"]}`
+   - WebSocket连接管理：在CommandPrompt组件初始化时建立连接，组件卸载时关闭连接
 
 **支持命令**（v1.3）：
 

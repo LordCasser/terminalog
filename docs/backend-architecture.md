@@ -12,8 +12,9 @@
 
 ### 1.1 后端定位
 
-Terminalog 后端是一个 **Go HTTP 服务**，提供以下核心功能：
+Terminalog 后端是一个 **Go HTTP + WebSocket 服务**，提供以下核心功能：
 - RESTful API（文章列表、内容、搜索、目录树、About Me、版本号）
+- **WebSocket API（路径补全实时通信，v1.4新增）**
 - 静态资源服务（前端页面，通过 embed）
 - Git Smart HTTP 服务（Git Clone/Push）
 - 图片资源服务（从 Git 仓库读取）
@@ -32,6 +33,11 @@ Terminalog 后端是一个 **Go HTTP 服务**，提供以下核心功能：
 │  │  │  Handler     │  │  Handler     │  │  Handler             │ │ │
 │  │  │  (embed)     │  │              │  │                      │ │ │
 │  │  └──────────────┘  └──────────────┘  └──────────────────────┘ │ │
+│  │  ┌──────────────────────────────────────────────────────────┐ │ │
+│  │  │  WebSocket Handler (v1.4新增)                             │ │ │
+│  │  │  - 路径补全实时通信                                        │ │ │
+│  │  │  - 端点: /ws/completion                                    │ │ │
+│  │  └──────────────────────────────────────────────────────────┘ │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────────────────────────┐ │
 │  │                         Service Layer                           │ │
@@ -43,6 +49,11 @@ Terminalog 后端是一个 **Go HTTP 服务**，提供以下核心功能：
 │  │  │  Asset       │  │  Auth        │  │  Config              │ │ │
 │  │  │  Service     │  │  Service     │  │  Manager             │ │ │
 │  │  └──────────────┘  └──────────────┘  └──────────────────────┘ │ │
+│  │  ┌──────────────────────────────────────────────────────────┐ │ │
+│  │  │  WebSocket Service (v1.4新增)                             │ │ │
+│  │  │  - 连接管理                                                │ │ │
+│  │  │  - 路径补全请求处理                                        │ │ │
+│  │  └──────────────────────────────────────────────────────────┘ │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────────────────────────┐ │
 │  │                         Data Layer                              │ │
@@ -66,9 +77,11 @@ Terminalog 后端是一个 **Go HTTP 服务**，提供以下核心功能：
 | 模块 | 负责人 | 职责边界 | 依赖关系 |
 |------|--------|---------|---------|
 | **HTTP Server** | 后端 | HTTP 路由分发，静态资源服务 | Go net/http 或 chi |
+| **WebSocket Server (v1.4新增)** | 后端 | WebSocket连接管理，路径补全实时通信 | Go gorilla/websocket |
 | **Article Service** | 后端 | 文章列表、内容读取、元数据获取（**过滤 `_` 开头文件**） | Git Service, File Service |
 | **About Me Service** | 后端 | 读取并返回 `_ABOUTME.md` 内容（v1.2 新增） | File Service, Git Service |
 | **Version Service** | 后端 | 基于行数变化计算语义版本号（v1.2 新增） | Git Service |
+| **WebSocket Service (v1.4新增)** | 后端 | 路径补全请求处理，实时响应补全结果 | File Service |
 | **Git Service** | 后端 | Git 历史查询，Smart HTTP 协议实现 | go-git/v5 |
 | **File Service** | 后端 | 文件系统操作，目录扫描，特殊文件过滤 | Go os/fs 包 |
 | **Auth Service** | 后端 | 用户认证校验，密码验证 | Config Manager |
@@ -156,6 +169,70 @@ func (s *Server) Stop(ctx context.Context) error
 
 func (s *Server) setupRoutes()
 ```
+
+### 3.1.1 WebSocket Server (v1.4新增)
+
+**职责**：
+- 监听 WebSocket 连接请求（端点：`/ws/completion`）
+- 管理 WebSocket 连接生命周期（连接建立、消息处理、连接关闭）
+- 处理路径补全请求，实时响应补全结果
+- WebSocket消息解析和序列化（JSON格式）
+
+**边界**：
+- 不处理HTTP请求（由HTTP Server负责）
+- 不负责文件系统操作（由File Service负责）
+- 不持久化WebSocket连接状态
+
+**接口契约**：
+```go
+// internal/server/websocket.go
+
+type WebSocketHandler struct {
+    service    *CompletionService
+    logger     *slog.Logger
+    upgrader   websocket.Upgrader
+    connections map[string]*websocket.Conn
+}
+
+func NewWebSocketHandler(service *CompletionService) *WebSocketHandler
+
+func (h *WebSocketHandler) HandleTerminal(ws *websocket.Conn)
+
+// WebSocket消息格式
+type CompletionRequest struct {
+    Type   string `json:"type"`   // "completion_request"
+    Dir    string `json:"dir"`    // 当前目录路径
+    Prefix string `json:"prefix"` // 路径前缀
+}
+
+type CompletionResponse struct {
+    Type  string   `json:"type"`  // "completion_response"
+    Items []string `json:"items"` // 补全结果列表
+}
+
+type SearchRequest struct {
+    Type    string `json:"type"`    // "search_request"
+    Keyword string `json:"keyword"` // 搜索关键词
+}
+
+type SearchResponse struct {
+    Type    string        `json:"type"`    // "search_response"
+    Results []SearchResult `json:"results"` // 搜索结果列表
+}
+
+type SearchResult struct {
+    Path  string `json:"path"`  // 文章路径
+    Title string `json:"title"` // 文章标题
+}
+```
+
+**技术选型**：
+- WebSocket库：`gorilla/websocket`（成熟稳定的Go WebSocket库）
+- 消息格式：JSON（易于前端解析）
+- 连接管理：map存储活跃连接（支持多客户端）
+
+**WebSocket端点**：
+- `/ws/terminal`：终端命令实时通信端点（路径补全 + 搜索）
 
 ### 3.2 Article Service
 
@@ -280,6 +357,77 @@ type FileHistory struct {
     Contributors []string     // 所有作者
 }
 ```
+
+### 3.3.1 WebSocket Service (v1.4新增)
+
+**职责**：
+- 处理路径补全请求，实时响应补全结果
+- 处理搜索请求，返回匹配的文章路径列表
+- 根据目录路径和前缀匹配文章列表和子目录列表
+- **过滤约束**：不返回以 `_` 开头的隐藏文件（如 `_ABOUTME.md`）
+- 返回补全结果（文件不带斜杠，文件夹带斜杠）
+- 支持实时补全和搜索（WebSocket低延迟通信）
+
+**边界**：
+- 不负责WebSocket连接管理（由WebSocket Handler负责）
+- 不负责文件系统操作（调用File Service）
+- 不持久化补全历史和搜索历史
+
+**接口契约**：
+```go
+// internal/service/completion.go
+
+type CompletionService interface {
+    // 处理路径补全请求
+    HandleCompletion(ctx context.Context, req CompletionRequest) (*CompletionResponse, error)
+    
+    // 处理搜索请求
+    HandleSearch(ctx context.Context, req SearchRequest) (*SearchResponse, error)
+    
+    // 获取目录下的匹配项（文件和文件夹）
+    GetMatchingItems(ctx context.Context, dir, prefix string) ([]CompletionItem, error)
+}
+
+type CompletionRequest struct {
+    Dir    string // 当前目录路径（如 "/" 或 "/tech"）
+    Prefix string // 路径前缀（如 "RE" 或 "tec"）
+}
+
+type CompletionResponse struct {
+    Items []CompletionItem // 补全结果列表
+}
+
+type SearchRequest struct {
+    Keyword string // 搜索关键词（如 "terminal"）
+}
+
+type SearchResponse struct {
+    Results []SearchResult // 搜索结果列表
+}
+
+type SearchResult struct {
+    Path  string // 文章路径（如 "README.md"）
+    Title string // 文章标题（去除.md扩展名）
+}
+
+type CompletionItem struct {
+    Name string // 名称（如 "README.md" 或 "tech/"）
+    Type string // 类型（"file" 或 "dir"）
+}
+```
+
+**补全规则**：
+- 文件补全不带斜杠（如 `README.md`）
+- 文件夹补全带斜杠（如 `tech/`）
+- 仅返回已提交的Markdown文件（过滤未提交文件）
+- **过滤以 `_` 开头的特殊文件**（如 `_ABOUTME.md`）
+- 支持当前目录补全（dir参数指定当前目录）
+
+**搜索规则**：
+- 搜索文章标题（去除.md扩展名后的文件名）
+- **过滤以 `_` 开头的特殊文件**（如 `_ABOUTME.md`）
+- 返回最匹配的文章路径列表（最多10条结果）
+- 支持模糊匹配（keyword包含在标题中即可匹配）
 
 ### 3.4 File Service
 

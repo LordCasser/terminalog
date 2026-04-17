@@ -14,3 +14,12 @@ export type {
   SearchResultItem,
   SearchResultsEventDetail 
 } from "./SearchResultsModal";
+export { 
+  PathCompletionModal, 
+  SHOW_PATH_COMPLETION_MODAL,
+  PATH_SELECTED,
+} from "./PathCompletionModal";
+export type {
+  PathCompletionItem,
+  PathCompletionEventDetail 
+} from "./PathCompletionModal";

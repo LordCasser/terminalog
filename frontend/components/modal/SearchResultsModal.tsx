@@ -8,13 +8,13 @@
  * - Enter key to confirm selection and navigate to article
  * - 10-second auto-close timer
  * - Manual close via right-top 'x' button
- * - Dracula Spectrum styling with Glass effect (reused from HelpModal)
+ * - Uses React onKeyDown with autoFocus to avoid closure issues
  */
 
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { SEARCH_MODAL_VISIBLE } from "@/components/command/CommandPrompt";
+import { SEARCH_MODAL_VISIBLE, FOCUS_COMMAND_INPUT } from "@/components/command/CommandPrompt";
 
 // Custom event for showing search results modal
 export const SHOW_SEARCH_RESULTS_MODAL = "showSearchResultsModal";
@@ -49,12 +49,12 @@ export function SearchResultsModal() {
     setIsVisible(false);
     setResults([]);
     setSelectedIndex(0);
-    // Notify CommandPrompt that modal is hidden
+    // Notify CommandPrompt that modal is hidden, and refocus input
     window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: false }));
+    window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
   }, [timer]);
 
   // Handle result selection (Enter key or click)
-  // Dispatch event to let CommandPrompt handle navigation
   const handleSelect = useCallback((result: SearchResultItem) => {
     window.dispatchEvent(new CustomEvent(SEARCH_RESULT_SELECTED, { detail: result.path }));
     handleClose();
@@ -78,8 +78,8 @@ export function SearchResultsModal() {
           setResults([]);
           setSelectedIndex(0);
           setTimer(null);
-          // Notify CommandPrompt that modal is hidden
           window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: false }));
+          window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
         }, 10000);
         
         setTimer(autoCloseTimer);
@@ -90,50 +90,47 @@ export function SearchResultsModal() {
     return () => window.removeEventListener(SHOW_SEARCH_RESULTS_MODAL, handleShowModal as EventListener);
   }, []);
 
-  // Keyboard navigation handler
+  // Keyboard navigation - window listener in capture phase
+  // Uses DOM attribute (data-search-modal) as synchronous visibility flag
+  // to avoid React state async update race condition
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      console.log("[SearchResultsModal] handleKeyDown triggered:", e.key, "isVisible:", isVisible);
-      if (!isVisible) return;
+      // Check synchronously via DOM attribute instead of React state
+      const modalEl = document.querySelector('[data-search-modal]');
+      if (!modalEl) return;
       
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        e.stopPropagation(); // Stop event propagation to prevent conflict with CommandPrompt
-        console.log("[SearchResultsModal] ArrowDown pressed, selectedIndex will change");
-        setSelectedIndex(prev => 
-          prev < results.length - 1 ? prev + 1 : prev
-        );
+        e.stopImmediatePropagation(); // Prevent CommandPrompt from handling
+        setSelectedIndex(prev => prev < results.length - 1 ? prev + 1 : prev);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        e.stopPropagation();
-        console.log("[SearchResultsModal] ArrowUp pressed, selectedIndex will change");
-        setSelectedIndex(prev => 
-          prev > 0 ? prev - 1 : prev
-        );
+        e.stopImmediatePropagation();
+        setSelectedIndex(prev => prev > 0 ? prev - 1 : prev);
       } else if (e.key === "Enter") {
         e.preventDefault();
-        e.stopPropagation();
-        console.log("[SearchResultsModal] Enter pressed, selecting result");
+        e.stopImmediatePropagation();
         if (results[selectedIndex]) {
           handleSelect(results[selectedIndex]);
         }
       } else if (e.key === "Escape") {
         e.preventDefault();
-        e.stopPropagation();
-        console.log("[SearchResultsModal] Escape pressed, closing modal");
+        e.stopImmediatePropagation();
         handleClose();
       }
     };
 
-    // Use capture phase to ensure this handler runs before CommandPrompt's window handler
-    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keydown", handleKeyDown, true); // capture phase
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [isVisible, results, selectedIndex, handleSelect, handleClose]);
+  }, [results, selectedIndex, handleSelect, handleClose]);
 
   if (!isVisible || results.length === 0) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center outline-none"
+      data-search-modal
+    >
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-background/60 backdrop-blur-sm"

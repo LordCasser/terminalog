@@ -1,9 +1,9 @@
 # Terminalog - 前端架构设计文档
 
-> 文档版本：v1.3
+> 文档版本：v1.4
 > 创建日期：2026-04-15
 > 最后更新：2026-04-17
-> 基于需求文档：requirements.md v1.3
+> 基于需求文档：requirements.md v1.4
 > 关联文档：backend-architecture.md, api-spec.md, architecture.md, api-spec.md
 
 ---
@@ -86,6 +86,8 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - `CommandPrompt.tsx`：底部单行命令输入区（`guest@blog: ~/path $ ` 前缀，JetBrains Mono，支持实际输入，Enter执行，键盘输入自动聚焦，Tab键补全）
 - `SortHeader.tsx`：表格可排序表头（点击排序）
 - `HelpModal.tsx`：命令帮助模态框（输入`help`或`?`命令触发，展示可用命令，3秒自动关闭或右上角x手动关闭或Enter键关闭，Glass效果，遵循Dracula Spectrum设计，宽度max-w-xl确保命令说明一行显示）
+- `SearchResultsModal.tsx`：搜索结果模态框（多结果显示，ArrowUp/Down导航，Enter选择，10秒自动关闭，Glass效果，data-search-modal属性用于同步状态判断）
+- `PathCompletionModal.tsx`：路径补全模态框（v1.6新增，多路径匹配显示，文件类型图标，ArrowUp/Down导航，Enter/Tab/ESC交互，10秒自动关闭）
 
 **UI视觉统一性约束（v1.3新增）**：
 - 所有页面（主页、文章查看页）的顶部导航栏使用统一字体样式：JetBrains Mono、uppercase、tracking-tight、text-sm
@@ -110,6 +112,8 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - **搜索icon交互**：点击顶部导航栏搜索icon自动填充 `search ` 并聚焦输入栏，用户直接输入关键词并回车执行搜索
 - **Tab键自动补全**：输入命令前缀后按Tab键自动补全完整命令（如`se`→`search `），禁用浏览器默认Tab键焦点切换行为
 - **路径补全（WebSocket）**：Tab键路径补全通过WebSocket实时从后端获取路径信息（避免频繁HTTP请求开销）
+- **路径补全模态框（v1.6新增）**：多匹配路径时弹出模态框显示所有匹配项，单匹配直接填充
+- **无匹配提示（v1.6新增）**：搜索/补全无结果时在光标上方显示1秒提示SPAN，不遮挡输入
 - **Placeholder透明度**：降低placeholder透明度（opacity-30），避免干扰视觉焦点
 - **路径同步**：终端输入栏`~/`当前路径与顶部导航栏路径保持一致，通过`currentDir`状态共享
 - **Owner配置**：Blog属主名称从`/api/config` API获取，显示在路径中（如`~/lordcasser`）

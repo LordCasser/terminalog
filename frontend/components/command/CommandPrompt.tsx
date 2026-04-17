@@ -2,22 +2,29 @@
  * CommandPrompt Component
  * 
  * Terminal-style command input bar at bottom of page.
- * Features (v1.5):
- * - WebSocket connection for path completion and search (ws://localhost:18085/ws/terminal)
+ * Features (v1.6):
+ * - WebSocket connection for path completion and search
  * - localStorage command history (terminalog_command_history, max 100)
  * - ArrowUp/ArrowDown for history navigation
- * - Tab key auto-completion via WebSocket
+ * - Tab key: command auto-completion, path completion modal for multiple matches
  * - Search command via WebSocket
- * - Pure frontend routing (no HTTP API for commands)
+ * - Pure frontend routing
  * - Path sync with Navbar via TerminalConfig context
- * - Owner config from /api/config
  */
 
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { SHOW_HELP_MODAL, SHOW_SEARCH_RESULTS_MODAL, SEARCH_RESULT_SELECTED, SearchResultsEventDetail } from "@/components/modal";
+import { 
+  SHOW_HELP_MODAL, 
+  SHOW_SEARCH_RESULTS_MODAL, 
+  SEARCH_RESULT_SELECTED,
+  SHOW_PATH_COMPLETION_MODAL,
+  PATH_SELECTED,
+  SearchResultsEventDetail,
+  PathCompletionEventDetail,
+} from "@/components/modal";
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 
 // Custom event for search icon click
@@ -62,10 +69,15 @@ interface ErrorResponse {
 
 type WebSocketMessage = CompletionResponse | SearchResponse | ErrorResponse;
 
+// No match hint state (shows for 1 second)
+export const NO_MATCH_HINT = "noMatchHint";
+
 export function CommandPrompt() {
   const [input, setInput] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [showNoMatchHint, setShowNoMatchHint] = useState(false);
+  const [noMatchHintType, setNoMatchHintType] = useState<"completion" | "search">("completion");
   // Initialize history from localStorage (lazy initialization)
   const [history, setHistory] = useState<string[]>(() => {
     try {
@@ -114,18 +126,17 @@ export function CommandPrompt() {
         wsRef.current = ws;
 
         ws.onopen = () => {
-          console.log("WebSocket connected");
-        };
+        // WebSocket connected
+      };
 
-        ws.onerror = (error) => {
-          console.error("WebSocket error:", error);
-        };
+      ws.onerror = (error) => {
+        // WebSocket error
+      };
 
-        ws.onclose = () => {
-          console.log("WebSocket disconnected");
-          // Attempt reconnect after 3 seconds
-          setTimeout(connectWebSocket, 3000);
-        };
+      ws.onclose = () => {
+        // WebSocket disconnected, attempt reconnect after 3 seconds
+        setTimeout(connectWebSocket, 3000);
+      };
       } catch (e) {
         console.error("Failed to create WebSocket:", e);
       }
@@ -174,6 +185,19 @@ export function CommandPrompt() {
     window.addEventListener(SEARCH_RESULT_SELECTED, handleResultSelected as EventListener);
     return () => window.removeEventListener(SEARCH_RESULT_SELECTED, handleResultSelected as EventListener);
   }, [router]);
+
+  // Listen for path selection from PathCompletionModal
+  useEffect(() => {
+    const handlePathSelected = (e: CustomEvent<{ path: string; command: string }>) => {
+      const { path, command } = e.detail;
+      setInput(`${command} ${path}`);
+      // Refocus input after selection
+      inputRef.current?.focus();
+    };
+
+    window.addEventListener(PATH_SELECTED, handlePathSelected as EventListener);
+    return () => window.removeEventListener(PATH_SELECTED, handlePathSelected as EventListener);
+  }, []);
 
   // Global keyboard listener - focus input on any key press
   useEffect(() => {
@@ -252,6 +276,11 @@ export function CommandPrompt() {
       
       if (matchingCommands.length === 1) {
         setInput(matchingCommands[0] + " ");
+      } else if (matchingCommands.length === 0) {
+        // No matching command - show hint
+        setNoMatchHintType("completion");
+        setShowNoMatchHint(true);
+        setTimeout(() => setShowNoMatchHint(false), 1000);
       }
       return;
     }
@@ -268,7 +297,7 @@ export function CommandPrompt() {
           prefix: partialPath,
         });
 
-        if (response.type === "completion_response" && response.items.length > 0) {
+        if (response.type === "completion_response") {
           // Filter items based on command type
           let matchingItems = response.items;
           
@@ -281,13 +310,35 @@ export function CommandPrompt() {
           }
           
           if (matchingItems.length === 1) {
+            // Single match: auto-fill
             setInput(`${cmd} ${matchingItems[0]}`);
           } else if (matchingItems.length > 1) {
-            console.log("Matching items:", matchingItems.join(", "));
+            // Multiple matches: show modal
+            const event = new CustomEvent<PathCompletionEventDetail>(
+              SHOW_PATH_COMPLETION_MODAL,
+              {
+                detail: {
+                  paths: matchingItems.map(path => ({
+                    path,
+                    isDirectory: path.endsWith("/"),
+                  })),
+                  command: cmd,
+                },
+              }
+            );
+            window.dispatchEvent(event);
+          } else {
+            // No matches: show hint
+            setNoMatchHintType("completion");
+            setShowNoMatchHint(true);
+            setTimeout(() => setShowNoMatchHint(false), 1000);
           }
         }
       } catch (error) {
-        console.error("WebSocket completion error:", error);
+        // WebSocket error: show hint
+        setNoMatchHintType("completion");
+        setShowNoMatchHint(true);
+        setTimeout(() => setShowNoMatchHint(false), 1000);
       }
     }
   }, [input, currentDir, sendWebSocketMessage]);
@@ -319,6 +370,13 @@ export function CommandPrompt() {
 
   // Handle keyboard events
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // When search results modal is open (DOM check, not React state),
+    // don't process ArrowUp/ArrowDown/Enter to avoid conflicts
+    const searchModalOpen = document.querySelector('[data-search-modal]');
+    if (searchModalOpen && (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "Enter")) {
+      return;
+    }
+    
     if (e.key === "Tab") {
       handleTabCompletion(e);
     } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
@@ -342,26 +400,33 @@ export function CommandPrompt() {
           keyword: query,
         });
 
-        if (response.type === "search_response" && response.results.length > 0) {
-          // Single result: directly navigate
-          if (response.results.length === 1) {
-            router.push(`/article?path=${encodeURIComponent(response.results[0].path)}`);
-          } 
-          // Multiple results: show modal (no callback - use event instead)
-          else {
-            const event = new CustomEvent<SearchResultsEventDetail>(
-              SHOW_SEARCH_RESULTS_MODAL,
-              {
-                detail: {
-                  results: response.results.map(r => ({
-                    path: r.path,
-                    title: r.title,
-                    lastModified: undefined, // TODO: get from backend
-                  })),
-                },
-              }
-            );
-            window.dispatchEvent(event);
+        if (response.type === "search_response") {
+          if (response.results.length > 0) {
+            // Single result: directly navigate
+            if (response.results.length === 1) {
+              router.push(`/article?path=${encodeURIComponent(response.results[0].path)}`);
+            } 
+            // Multiple results: show modal
+            else {
+              const event = new CustomEvent<SearchResultsEventDetail>(
+                SHOW_SEARCH_RESULTS_MODAL,
+                {
+                  detail: {
+                    results: response.results.map(r => ({
+                      path: r.path,
+                      title: r.title,
+                      lastModified: undefined,
+                    })),
+                  },
+                }
+              );
+              window.dispatchEvent(event);
+            }
+          } else {
+            // No search results: show hint
+            setNoMatchHintType("search");
+            setShowNoMatchHint(true);
+            setTimeout(() => setShowNoMatchHint(false), 1000);
           }
         }
       } catch (error) {
@@ -444,6 +509,15 @@ export function CommandPrompt() {
           {/* Blinking Cursor (when focused and empty) */}
           {isFocused && input === "" && (
             <span className="absolute left-0 w-2.5 h-5 bg-tertiary cursor-blink" />
+          )}
+          
+          {/* No Match Hint (above input, shows for 1 second) */}
+          {showNoMatchHint && (
+            <span 
+              className="absolute bottom-full mb-1 right-0 px-2 py-1 bg-surface-container-high text-error font-mono text-xs rounded animate-pulse"
+            >
+              {noMatchHintType === "search" ? "没有搜索结果" : "没有匹配内容"}
+            </span>
           )}
         </div>
       </form>

@@ -44,6 +44,12 @@ func (s *AssetService) GetAsset(ctx context.Context, path string) (*Asset, error
 	// Normalize path
 	path = utils.NormalizePath(path)
 
+	// Validate path for security (reject .., .git, etc.)
+	baseDir := s.fileSvc.GetBaseDir()
+	if _, err := utils.ValidatePath(baseDir, path); err != nil {
+		return nil, err
+	}
+
 	// Try to find the asset in .assets directories
 	// Strategy: try multiple locations where .assets might exist
 	actualPath, err := s.resolveAssetPath(path)

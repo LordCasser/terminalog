@@ -23,31 +23,31 @@ func TestAssetService_GetAsset(t *testing.T) {
 		{
 			name: "png image",
 			setup: func(repo *testutil.TestRepo) error {
-				// Create a minimal PNG (1x1 pixel)
+				// Create a minimal PNG (1x1 pixel) in .assets directory
 				pngData := []byte{
 					0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
 				}
-				return repo.CreateImageFileAndCommit("images/test.png", pngData, "Add image", "author")
+				return repo.CreateImageFileAndCommit(".assets/images/test.png", pngData, "Add image", "author")
 			},
-			path:     "images/test.png",
+			path:     "images/test.png", // Request without .assets prefix
 			wantMime: "image/png",
 		},
 		{
 			name: "jpeg image",
 			setup: func(repo *testutil.TestRepo) error {
 				jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0}
-				return repo.CreateImageFileAndCommit("images/test.jpg", jpegData, "Add image", "author")
+				return repo.CreateImageFileAndCommit(".assets/images/test.jpg", jpegData, "Add image", "author")
 			},
-			path:     "images/test.jpg",
+			path:     "images/test.jpg", // Request without .assets prefix
 			wantMime: "image/jpeg",
 		},
 		{
 			name: "svg image",
 			setup: func(repo *testutil.TestRepo) error {
 				svgData := []byte("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"></svg>")
-				return repo.CreateImageFileAndCommit("images/test.svg", svgData, "Add image", "author")
+				return repo.CreateImageFileAndCommit(".assets/images/test.svg", svgData, "Add image", "author")
 			},
-			path:     "images/test.svg",
+			path:     "images/test.svg", // Request without .assets prefix
 			wantMime: "image/svg+xml",
 		},
 		{

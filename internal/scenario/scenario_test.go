@@ -87,18 +87,18 @@ func SetupScenario(t *testing.T, setup func(repo *testutil.TestRepo) error) *Sce
 	treeHandler := handler.NewTreeHandler(articleSvc)
 	gitHandler := handler.NewGitHandler(gitSvc, authSvc)
 
-	// Create router with all endpoints
+	// Create router with all endpoints (RESTful v1)
 	router := chi.NewRouter()
-	router.Get("/api/articles", articleHandler.List)
-	router.Get("/api/articles/*", articleHandler.HandleArticleRequest)
-	router.Get("/api/tree", treeHandler.Get)
-	router.Get("/api/search", searchHandler.Search)
-	router.Get("/api/assets/*", assetHandler.Get)
-
-	// Git Smart HTTP endpoints
-	router.Get("/info/refs", gitHandler.InfoRefs)
-	router.Post("/git-upload-pack", gitHandler.UploadPack)
-	router.Post("/git-receive-pack", gitHandler.ReceivePack)
+	router.Route("/api/v1", func(r chi.Router) {
+		r.Get("/articles", articleHandler.List)
+		r.Get("/articles/*", articleHandler.HandleArticleRequest)
+		r.Get("/tree", treeHandler.Get)
+		r.Get("/articles/search", searchHandler.Search)
+		r.Get("/assets/*", assetHandler.Get)
+		r.Get("/git/info/refs", gitHandler.InfoRefs)
+		r.Post("/git/git-upload-pack", gitHandler.UploadPack)
+		r.Post("/git/git-receive-pack", gitHandler.ReceivePack)
+	})
 
 	server := httptest.NewServer(router)
 
@@ -145,7 +145,7 @@ func TestScenario01_ArticleList(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get article list with default sort (edited desc)
-	resp, err := http.Get(env.Server.URL + "/api/articles")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -188,7 +188,7 @@ func TestScenario02_ArticleContent(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get article content
-	resp, err := http.Get(env.Server.URL + "/api/articles/test-article.md")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles/test-article.md")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -223,7 +223,7 @@ func TestScenario03_ArticleTimeline(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get article timeline
-	resp, err := http.Get(env.Server.URL + "/api/articles/multi-author.md/timeline")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles/multi-author.md/timeline")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -262,7 +262,7 @@ func TestScenario04_DirectoryTree(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get directory tree
-	resp, err := http.Get(env.Server.URL + "/api/tree")
+	resp, err := http.Get(env.Server.URL + "/api/v1/tree")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -324,7 +324,7 @@ func TestScenario05_TitleSearch(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Search for "golang"
-	resp, err := http.Get(env.Server.URL + "/api/search?q=golang")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles/search?q=golang")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -346,7 +346,7 @@ func TestScenario05_TitleSearch(t *testing.T) {
 	}
 
 	// Test: Search for non-existent keyword
-	resp2, err := http.Get(env.Server.URL + "/api/search?q=nonexistent")
+	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/search?q=nonexistent")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
@@ -359,7 +359,7 @@ func TestScenario05_TitleSearch(t *testing.T) {
 	assert.Len(t, result2.Results, 0)
 
 	// Test: Search without query parameter
-	resp3, err := http.Get(env.Server.URL + "/api/search")
+	resp3, err := http.Get(env.Server.URL + "/api/v1/articles/search")
 	require.NoError(t, err)
 	defer resp3.Body.Close()
 
@@ -389,7 +389,7 @@ func TestScenario06_UncommittedFilesNotVisible(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get article list - should only show committed files
-	resp, err := http.Get(env.Server.URL + "/api/articles")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -403,7 +403,7 @@ func TestScenario06_UncommittedFilesNotVisible(t *testing.T) {
 	assert.Equal(t, "committed.md", result.Articles[0].Path)
 
 	// Test: Direct access to uncommitted file
-	resp2, err := http.Get(env.Server.URL + "/api/articles/uncommitted.md")
+	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/uncommitted.md")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
@@ -411,7 +411,7 @@ func TestScenario06_UncommittedFilesNotVisible(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
 
 	// Test: Direct access to draft file
-	resp3, err := http.Get(env.Server.URL + "/api/articles/draft.md")
+	resp3, err := http.Get(env.Server.URL + "/api/v1/articles/draft.md")
 	require.NoError(t, err)
 	defer resp3.Body.Close()
 
@@ -419,7 +419,7 @@ func TestScenario06_UncommittedFilesNotVisible(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp3.StatusCode)
 
 	// Test: Uncommitted file not in tree
-	resp4, err := http.Get(env.Server.URL + "/api/tree")
+	resp4, err := http.Get(env.Server.URL + "/api/v1/tree")
 	require.NoError(t, err)
 	defer resp4.Body.Close()
 
@@ -438,7 +438,7 @@ func TestScenario06_UncommittedFilesNotVisible(t *testing.T) {
 	assert.Equal(t, 1, fileCount)
 
 	// Test: Search should not find uncommitted files
-	resp5, err := http.Get(env.Server.URL + "/api/search?q=Uncommitted")
+	resp5, err := http.Get(env.Server.URL + "/api/v1/articles/search?q=Uncommitted")
 	require.NoError(t, err)
 	defer resp5.Body.Close()
 
@@ -508,7 +508,7 @@ func TestScenario07_SortOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := http.Get(env.Server.URL + "/api/articles" + tt.params)
+			resp, err := http.Get(env.Server.URL + "/api/v1/articles" + tt.params)
 			require.NoError(t, err)
 			defer resp.Body.Close()
 
@@ -538,7 +538,7 @@ func TestScenario08_MultipleContributors(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get article content
-	resp, err := http.Get(env.Server.URL + "/api/articles/collaborative.md")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles/collaborative.md")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -559,7 +559,7 @@ func TestScenario08_MultipleContributors(t *testing.T) {
 	assert.Contains(t, article.Contributors, "editor2")
 
 	// Test: Get timeline to verify commit order
-	resp2, err := http.Get(env.Server.URL + "/api/articles/collaborative.md/timeline")
+	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/collaborative.md/timeline")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
@@ -594,7 +594,7 @@ func TestScenario09_GitClone(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get upload-pack refs (Clone info)
-	resp, err := http.Get(env.Server.URL + "/info/refs?service=git-upload-pack")
+	resp, err := http.Get(env.Server.URL + "/api/v1/git/info/refs?service=git-upload-pack")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -631,7 +631,7 @@ func TestScenario10_GitPushAuthentication(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get receive-pack refs without auth
-	resp, err := http.Get(env.Server.URL + "/info/refs?service=git-receive-pack")
+	resp, err := http.Get(env.Server.URL + "/api/v1/git/info/refs?service=git-receive-pack")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -642,7 +642,7 @@ func TestScenario10_GitPushAuthentication(t *testing.T) {
 	assert.Contains(t, resp.Header.Get("WWW-Authenticate"), "Basic")
 
 	// Test: Get receive-pack refs with valid auth
-	req, err := http.NewRequest("GET", env.Server.URL+"/info/refs?service=git-receive-pack", nil)
+	req, err := http.NewRequest("GET", env.Server.URL+"/api/v1/git/info/refs?service=git-receive-pack", nil)
 	require.NoError(t, err)
 
 	// Add Basic Auth header
@@ -660,7 +660,7 @@ func TestScenario10_GitPushAuthentication(t *testing.T) {
 	assert.Contains(t, resp2.Header.Get("Content-Type"), "git-receive-pack-advertisement")
 
 	// Test: Get receive-pack refs with invalid auth
-	req2, err := http.NewRequest("GET", env.Server.URL+"/info/refs?service=git-receive-pack", nil)
+	req2, err := http.NewRequest("GET", env.Server.URL+"/api/v1/git/info/refs?service=git-receive-pack", nil)
 	require.NoError(t, err)
 
 	auth2 := base64.StdEncoding.EncodeToString([]byte("admin:wrongpassword"))
@@ -674,7 +674,7 @@ func TestScenario10_GitPushAuthentication(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, resp3.StatusCode)
 
 	// Test: Unknown user cannot push
-	req3, err := http.NewRequest("GET", env.Server.URL+"/info/refs?service=git-receive-pack", nil)
+	req3, err := http.NewRequest("GET", env.Server.URL+"/api/v1/git/info/refs?service=git-receive-pack", nil)
 	require.NoError(t, err)
 
 	auth3 := base64.StdEncoding.EncodeToString([]byte("unknown:anything"))
@@ -699,9 +699,9 @@ func TestScenario11_SecurityTests(t *testing.T) {
 		if err := repo.CreateMarkdownFile("normal.md", "# Normal Article", "Add", "author"); err != nil {
 			return err
 		}
-		// Create image in images directory
+		// Create image in .assets directory (per docs/requirements.md)
 		pngData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A} // PNG header
-		return repo.CreateImageFileAndCommit("images/photo.png", pngData, "Add image", "author")
+		return repo.CreateImageFileAndCommit(".assets/images/photo.png", pngData, "Add image", "author")
 	})
 	defer env.Cleanup()
 
@@ -713,37 +713,37 @@ func TestScenario11_SecurityTests(t *testing.T) {
 	}{
 		{
 			name:        "Path traversal with ../",
-			path:        "/api/articles/../normal.md",
+			path:        "/api/v1/articles/../normal.md",
 			wantStatus:  http.StatusBadRequest, // Blocked by ValidatePath for invalid characters
 			description: "Path traversal is blocked by path validation",
 		},
 		{
 			name:        "Path traversal to parent directory",
-			path:        "/api/articles/../../normal.md",
+			path:        "/api/v1/articles/../../normal.md",
 			wantStatus:  http.StatusBadRequest, // Blocked by ValidatePath
 			description: "Multiple parent directory traversal is blocked",
 		},
 		{
 			name:        "Access .git directory",
-			path:        "/api/articles/.git/config",
+			path:        "/api/v1/articles/.git/config",
 			wantStatus:  http.StatusBadRequest, // Explicit .git access blocked by ValidatePath
 			description: ".git directory access should be blocked",
 		},
 		{
 			name:        "Access .git via asset endpoint",
-			path:        "/api/assets/.git/config",
+			path:        "/api/v1/assets/.git/config",
 			wantStatus:  http.StatusBadRequest, // .git access blocked by ValidatePath
 			description: ".git directory via asset endpoint should be blocked",
 		},
 		{
 			name:        "Asset path traversal",
-			path:        "/api/assets/../images/photo.png",
+			path:        "/api/v1/assets/../images/photo.png",
 			wantStatus:  http.StatusBadRequest, // Blocked by ValidatePath
 			description: "Asset path traversal is blocked by path validation",
 		},
 		{
 			name:        "Absolute path attempt",
-			path:        "/api/articles/etc/passwd",
+			path:        "/api/v1/articles/etc/passwd",
 			wantStatus:  http.StatusBadRequest, // Invalid path (not in repo)
 			description: "Absolute path access should return error",
 		},
@@ -759,8 +759,8 @@ func TestScenario11_SecurityTests(t *testing.T) {
 		})
 	}
 
-	// Additional test: Verify legitimate nested path works
-	resp, err := http.Get(env.Server.URL + "/api/assets/images/photo.png")
+	// Additional test: Verify legitimate nested path works (with .assets)
+	resp, err := http.Get(env.Server.URL + "/api/v1/assets/images/photo.png")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -768,7 +768,7 @@ func TestScenario11_SecurityTests(t *testing.T) {
 	assert.Contains(t, resp.Header.Get("Content-Type"), "image/png")
 
 	// Additional test: Verify legitimate .git look-alike is blocked
-	resp2, err := http.Get(env.Server.URL + "/api/assets/images/.git-backup/config")
+	resp2, err := http.Get(env.Server.URL + "/api/v1/assets/images/.git-backup/config")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
@@ -783,21 +783,21 @@ func TestScenario11_SecurityTests(t *testing.T) {
 
 func TestScenario12_ImageAssets(t *testing.T) {
 	env := SetupScenario(t, func(repo *testutil.TestRepo) error {
-		// Create PNG image
+		// Create PNG image in .assets directory (per docs/requirements.md)
 		pngData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D}
-		if err := repo.CreateImageFileAndCommit("images/test.png", pngData, "Add PNG", "author"); err != nil {
+		if err := repo.CreateImageFileAndCommit(".assets/images/test.png", pngData, "Add PNG", "author"); err != nil {
 			return err
 		}
 
 		// Create JPEG image (minimal valid JPEG header)
 		jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46}
-		if err := repo.CreateImageFileAndCommit("images/test.jpg", jpegData, "Add JPEG", "author"); err != nil {
+		if err := repo.CreateImageFileAndCommit(".assets/images/test.jpg", jpegData, "Add JPEG", "author"); err != nil {
 			return err
 		}
 
 		// Create SVG
 		svgData := []byte("<svg xmlns=\"http://www.w3.org/2000/svg\"><circle/></svg>")
-		return repo.CreateImageFileAndCommit("images/test.svg", svgData, "Add SVG", "author")
+		return repo.CreateImageFileAndCommit(".assets/images/test.svg", svgData, "Add SVG", "author")
 	})
 	defer env.Cleanup()
 
@@ -809,31 +809,31 @@ func TestScenario12_ImageAssets(t *testing.T) {
 	}{
 		{
 			name:            "PNG image",
-			path:            "/api/assets/images/test.png",
+			path:            "/api/v1/assets/images/test.png",
 			wantStatus:      http.StatusOK,
 			wantContentType: "image/png",
 		},
 		{
 			name:            "JPEG image",
-			path:            "/api/assets/images/test.jpg",
+			path:            "/api/v1/assets/images/test.jpg",
 			wantStatus:      http.StatusOK,
 			wantContentType: "image/jpeg",
 		},
 		{
 			name:            "SVG image",
-			path:            "/api/assets/images/test.svg",
+			path:            "/api/v1/assets/images/test.svg",
 			wantStatus:      http.StatusOK,
 			wantContentType: "image/svg+xml",
 		},
 		{
 			name:            "Non-existent image",
-			path:            "/api/assets/images/not-exist.png",
+			path:            "/api/v1/assets/images/not-exist.png",
 			wantStatus:      http.StatusNotFound,
 			wantContentType: "",
 		},
 		{
 			name:            "Directory as image",
-			path:            "/api/assets/images",
+			path:            "/api/v1/assets/images",
 			wantStatus:      http.StatusNotFound,
 			wantContentType: "",
 		},
@@ -885,7 +885,7 @@ func TestScenario13_NestedDirectoryArticles(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get root articles list
-	resp, err := http.Get(env.Server.URL + "/api/articles")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -907,14 +907,14 @@ func TestScenario13_NestedDirectoryArticles(t *testing.T) {
 	assert.Contains(t, paths, "life/travel/japan.md")
 
 	// Test: Get specific nested article
-	resp2, err := http.Get(env.Server.URL + "/api/articles/tech/golang/intro.md")
+	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/tech/golang/intro.md")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp2.StatusCode)
 
 	// Test: Get directory-specific articles
-	resp3, err := http.Get(env.Server.URL + "/api/articles?dir=tech/golang")
+	resp3, err := http.Get(env.Server.URL + "/api/v1/articles?dir=tech/golang")
 	require.NoError(t, err)
 	defer resp3.Body.Close()
 
@@ -977,7 +977,7 @@ func TestScenario14_DeleteAndRecreate(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Get article content
-	resp, err := http.Get(env.Server.URL + "/api/articles/test.md")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles/test.md")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -996,7 +996,7 @@ func TestScenario14_DeleteAndRecreate(t *testing.T) {
 	assert.Contains(t, article.Contributors, "author2")
 
 	// Test: Get timeline - should have all commits (create + delete + recreate)
-	resp2, err := http.Get(env.Server.URL + "/api/articles/test.md/timeline")
+	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/test.md/timeline")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
@@ -1037,31 +1037,31 @@ func TestScenario15_ErrorHandling(t *testing.T) {
 	}{
 		{
 			name:       "Article not found",
-			endpoint:   "/api/articles/not-exist.md",
+			endpoint:   "/api/v1/articles/not-exist.md",
 			wantStatus: http.StatusBadRequest,
 			wantError:  "",
 		},
 		{
 			name:       "Asset not found",
-			endpoint:   "/api/assets/not-exist.png",
+			endpoint:   "/api/v1/assets/not-exist.png",
 			wantStatus: http.StatusNotFound,
 			wantError:  "",
 		},
 		{
 			name:       "Search without query",
-			endpoint:   "/api/search",
+			endpoint:   "/api/v1/articles/search",
 			wantStatus: http.StatusBadRequest,
 			wantError:  "",
 		},
 		{
 			name:       "Invalid sort parameter",
-			endpoint:   "/api/articles?sort=invalid",
+			endpoint:   "/api/v1/articles?sort=invalid",
 			wantStatus: http.StatusOK, // Invalid sort params are ignored, returns default
 			wantError:  "",
 		},
 		{
 			name:       "Git push without auth",
-			endpoint:   "/info/refs?service=git-receive-pack",
+			endpoint:   "/api/v1/git/info/refs?service=git-receive-pack",
 			wantStatus: http.StatusUnauthorized,
 			wantError:  "Authentication required",
 		},

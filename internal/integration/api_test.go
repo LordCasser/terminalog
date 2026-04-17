@@ -68,13 +68,15 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 	searchHandler := handler.NewSearchHandler(articleSvc)
 	treeHandler := handler.NewTreeHandler(articleSvc)
 
-	// Create router
+	// Create router (RESTful v1)
 	router := chi.NewRouter()
-	router.Get("/api/articles", articleHandler.List)
-	router.Get("/api/articles/*", articleHandler.HandleArticleRequest)
-	router.Get("/api/tree", treeHandler.Get)
-	router.Get("/api/search", searchHandler.Search)
-	router.Get("/api/assets/*", assetHandler.Get)
+	router.Route("/api/v1", func(r chi.Router) {
+		r.Get("/articles", articleHandler.List)
+		r.Get("/articles/*", articleHandler.HandleArticleRequest)
+		r.Get("/tree", treeHandler.Get)
+		r.Get("/articles/search", searchHandler.Search)
+		r.Get("/assets/*", assetHandler.Get)
+	})
 
 	server := httptest.NewServer(router)
 
@@ -100,7 +102,7 @@ func TestAPI_Articles_List(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test default sort (edited desc)
-	resp, err := http.Get(env.Server.URL + "/api/articles")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -120,7 +122,7 @@ func TestAPI_Articles_Get(t *testing.T) {
 	})
 	defer env.Cleanup()
 
-	resp, err := http.Get(env.Server.URL + "/api/articles/test.md")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles/test.md")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -141,7 +143,7 @@ func TestAPI_Articles_Timeline(t *testing.T) {
 	})
 	defer env.Cleanup()
 
-	resp, err := http.Get(env.Server.URL + "/api/articles/article.md/timeline")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles/article.md/timeline")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -164,7 +166,7 @@ func TestAPI_Search(t *testing.T) {
 	})
 	defer env.Cleanup()
 
-	resp, err := http.Get(env.Server.URL + "/api/search?q=golang")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles/search?q=golang")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -184,7 +186,7 @@ func TestAPI_Tree(t *testing.T) {
 	})
 	defer env.Cleanup()
 
-	resp, err := http.Get(env.Server.URL + "/api/tree")
+	resp, err := http.Get(env.Server.URL + "/api/v1/tree")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -208,7 +210,7 @@ func TestAPI_Articles_UncommittedNotVisible(t *testing.T) {
 	defer env.Cleanup()
 
 	// List should only show committed
-	resp, err := http.Get(env.Server.URL + "/api/articles")
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -220,7 +222,7 @@ func TestAPI_Articles_UncommittedNotVisible(t *testing.T) {
 	assert.Equal(t, "committed.md", result.Articles[0].Path)
 
 	// Direct access to uncommitted should fail
-	resp2, err := http.Get(env.Server.URL + "/api/articles/uncommitted.md")
+	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/uncommitted.md")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
@@ -267,7 +269,7 @@ func TestAPI_SortOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, err := http.Get(env.Server.URL + "/api/articles" + tt.params)
+			resp, err := http.Get(env.Server.URL + "/api/v1/articles" + tt.params)
 			require.NoError(t, err)
 			defer resp.Body.Close()
 
@@ -294,17 +296,17 @@ func TestAPI_ErrorResponses(t *testing.T) {
 	}{
 		{
 			name:       "article not found",
-			path:       "/api/articles/not-exist.md",
+			path:       "/api/v1/articles/not-exist.md",
 			wantStatus: http.StatusBadRequest, // Returns 400 for ErrNotCommitted
 		},
 		{
 			name:       "asset not found",
-			path:       "/api/assets/not-exist.png",
+			path:       "/api/v1/assets/not-exist.png",
 			wantStatus: http.StatusNotFound,
 		},
 		{
 			name:       "search without query",
-			path:       "/api/search",
+			path:       "/api/v1/articles/search",
 			wantStatus: http.StatusBadRequest,
 		},
 	}

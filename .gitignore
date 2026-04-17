@@ -60,3 +60,9 @@ dist/
 
 # Opencode
 .opencode/
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Root binary (build output)
+/terminalog

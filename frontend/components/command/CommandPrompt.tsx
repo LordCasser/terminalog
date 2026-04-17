@@ -515,7 +515,7 @@ export function CommandPrompt() {
             onKeyDown={handleKeyDown}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            className="w-full bg-transparent text-on-surface outline-none border-none placeholder-on-surface-variant placeholder-opacity-30"
+            className="w-full bg-transparent text-on-surface outline-none border-none placeholder:text-on-surface-variant/15"
             placeholder="type a command..."
             aria-label="Command input"
           />

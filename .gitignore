@@ -57,3 +57,6 @@ articles/
 
 # GoReleaser dist
 dist/
+
+# Opencode
+.opencode/

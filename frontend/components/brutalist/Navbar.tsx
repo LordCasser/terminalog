@@ -2,35 +2,41 @@
  * Navbar Component - TopAppBar
  * 
  * Fixed navigation bar with:
- * - Logo/Path display (JetBrains Mono)
+ * - Logo/Path display (JetBrains Mono uppercase)
  * - Navigation links (POSTS, ABOUTME)
- * - Search button
+ * - Search button (triggers focus on CommandPrompt)
  */
 
 "use client";
 
 import Link from "next/link";
+import { FOCUS_COMMAND_INPUT } from "@/components/command";
 
 interface NavbarProps {
   currentPath?: string;
 }
 
 export function Navbar({ currentPath = "~/lordcasser" }: NavbarProps) {
+  // Handle search icon click - focus command input
+  const handleSearchClick = () => {
+    window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
+  };
+
   return (
     <header className="fixed top-0 w-full z-50 bg-surface text-primary-container font-mono uppercase tracking-tighter text-sm flex justify-between items-center px-6 py-4">
       <div className="flex items-center gap-6">
-        {/* Path Display */}
-        <Link href="/" className="text-lg font-bold text-primary normal-case hover:text-secondary transition-colors">
+        {/* Path Display - Keep uppercase */}
+        <Link href="/" className="text-lg font-bold text-primary hover:text-secondary transition-colors">
           {currentPath}
         </Link>
         
-        {/* Navigation Links */}
+        {/* Navigation Links - All uppercase */}
         <nav className="hidden md:flex gap-6">
           <Link 
             href="/" 
             className="text-primary-container font-bold border-b-2 border-primary-container pb-1 transition-colors duration-150"
           >
-            posts
+            POSTS
           </Link>
           <Link 
             href="/aboutme" 
@@ -41,9 +47,13 @@ export function Navbar({ currentPath = "~/lordcasser" }: NavbarProps) {
         </nav>
       </div>
       
-      {/* Search Button */}
+      {/* Search Button - Click to focus command input */}
       <div className="flex items-center gap-4">
-        <button className="hover:bg-surface-container-highest hover:text-primary p-1 transition-colors duration-150">
+        <button 
+          onClick={handleSearchClick}
+          className="hover:bg-surface-container-highest hover:text-primary p-1 transition-colors duration-150"
+          aria-label="Search"
+        >
           <span className="material-symbols-outlined">search</span>
         </button>
       </div>

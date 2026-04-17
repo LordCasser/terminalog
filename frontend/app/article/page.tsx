@@ -11,6 +11,7 @@ import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getArticleContent, getArticleTimeline, getArticleVersion } from "@/lib/api/articles";
+import { Navbar } from "@/components/brutalist";
 import type { Article, CommitInfo, VersionInfo, VersionHistoryEntry } from "@/types";
 
 function ArticleContent() {
@@ -128,26 +129,7 @@ To add visual "soul," we implement what we call **"Terminal Fog"**. This is the 
   return (
     <div className="min-h-screen">
       {/* Navbar */}
-      <header className="fixed top-0 w-full z-50 bg-surface flex justify-between items-center px-6 py-4">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="text-lg font-bold text-secondary font-mono tracking-tight">
-            ~/lordcasser/{decodedPath}
-          </Link>
-          <nav className="hidden md:flex items-center gap-8 font-mono tracking-tight">
-            <Link href="/" className="text-outline hover:bg-surface-container-highest transition-colors px-2 py-1">
-              POSTS
-            </Link>
-            <Link href="/aboutme" className="text-outline hover:bg-surface-container-highest transition-colors px-2 py-1">
-              ABOUTME
-            </Link>
-          </nav>
-        </div>
-        <div className="flex items-center gap-4">
-          <button className="text-primary-container hover:bg-surface-container-highest transition-colors p-2">
-            <span className="material-symbols-outlined">search</span>
-          </button>
-        </div>
-      </header>
+      <Navbar currentPath={`~/lordcasser/${decodedPath}`} />
       
       {/* Main Content */}
       <main className="pt-24 pb-32 px-6 max-w-4xl mx-auto">
@@ -167,7 +149,7 @@ To add visual "soul," we implement what we call **"Terminal Fog"**. This is the 
           </div>
           
           {/* Title */}
-          <h1 className="font-headline font-bold text-6xl md:text-8xl leading-none text-on-surface tracking-tighter mb-8">
+          <h1 className="font-headline font-bold text-4xl leading-none text-on-surface tracking-tighter mb-8">
             {article?.title?.toUpperCase() || "UNTITLED"}
           </h1>
           

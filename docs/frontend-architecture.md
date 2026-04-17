@@ -81,7 +81,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 **组成组件**：
 - `Layout.tsx`：全局布局容器（Dracula background + Glass 面板）
-- `Navbar.tsx`：顶部导航栏（Logo + 动态路径显示 ~/owner + 搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm，路径与底部终端输入栏同步）
+- `Navbar.tsx`：顶部导航栏（左侧Logo/路径显示，右侧POSTS和ABOUTME导航链接+搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm，路径与底部终端输入栏同步，flex布局左-右对齐）
 - `ArticleTable.tsx`：文章列表表格（5 列：Created/Updated/Editors/Filename/Latest Commit）
 - `CommandPrompt.tsx`：底部单行命令输入区（`guest@blog: ~/path $ ` 前缀，JetBrains Mono，支持实际输入，Enter执行，键盘输入自动聚焦，Tab键补全）
 - `SortHeader.tsx`：表格可排序表头（点击排序）
@@ -89,6 +89,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 **UI视觉统一性约束（v1.3新增）**：
 - 所有页面（主页、文章查看页）的顶部导航栏使用统一字体样式：JetBrains Mono、uppercase、tracking-tight、text-sm
+- 导航栏布局：左侧显示路径 `~/{owner}/{currentDir}`，右侧显示 POSTS 和 ABOUTME 导航链接 + 搜索icon（右对齐）
 - 导航栏搜索icon点击交互：自动在底部输入栏键入 `search ` 并聚焦，用户输入关键词后回车执行搜索
 - 页面全局键盘输入监听：任意位置键盘输入自动聚焦到底部命令输入栏
 - **路径同步（v1.3新增）**：导航栏路径与底部终端输入栏路径保持一致，通过全局状态共享`currentDir`和`owner`

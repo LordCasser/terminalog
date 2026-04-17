@@ -103,12 +103,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check system git availability
-	if gitSvc.CheckGitAvailable() {
-		logger.Info("System git available - full Git Smart HTTP support enabled")
-	} else {
-		logger.Warn("System git not available - Git clone/push may have limited functionality")
-	}
+	logger.Info("Git service initialized", "repoPath", cfg.Blog.ContentDir)
 
 	articleSvc := service.NewArticleService(fileSvc, gitSvc)
 	authSvc := service.NewAuthService(cfg)

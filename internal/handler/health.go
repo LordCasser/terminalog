@@ -115,7 +115,8 @@ func (h *HealthHandler) Livez(w http.ResponseWriter, r *http.Request) {
 func (h *HealthHandler) Status(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	gitAvailable := h.gitSvc != nil && h.gitSvc.CheckGitAvailable()
+	// Check if Git service is available (repo opened successfully)
+	gitAvailable := h.gitSvc != nil && h.gitSvc.GetRepo() != nil
 
 	cacheStats := service.CacheStats{}
 	if h.cacheStats != nil {

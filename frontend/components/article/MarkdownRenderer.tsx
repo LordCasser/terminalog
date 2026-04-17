@@ -20,7 +20,6 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import 'highlight.js/styles/dracula.css';
 import 'katex/dist/katex.min.css';
 
 interface MarkdownRendererProps {

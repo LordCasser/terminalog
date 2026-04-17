@@ -1,10 +1,10 @@
 # Terminalog - 原始需求文档
 
-> 文档版本：v1.5
+> 文档版本：v1.6
 > 创建日期：2026-04-15
-> 最后更新：2026-04-17
+> 最后更新：2026-04-18
 > 项目名称：Terminalog（Terminal + Blog）
-> 状态：✅ 需求 v1.5 对齐完成（v1.6.1 功能实现）
+> 状态：✅ 需求 v1.6 对齐完成（API统一前缀）
 
 ---
 
@@ -557,25 +557,34 @@ password = "custom-password-123"
 
 ### 7.1 RESTful API
 
+所有API端点统一使用 `/api/v1/` 前缀（详见 `docs/api-spec.md`）：
+
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/articles` | GET | 获取文章列表，支持 `?sort=created\|edited&order=asc\|desc`（**排除** `_` 开头的文件） |
-| `/api/articles/{path}` | GET | 获取文章内容 |
-| `/api/articles/{path}/timeline` | GET | 获取文章 Git 时间线 |
-| `/api/articles/{path}/version` | GET | 获取文章版本号及历史版本列表 |
-| `/api/tree` | GET | 获取目录树结构（**排除** `_` 开头的文件） |
-| `/api/search` | GET | 搜索文章标题（query: `?q=keyword`，**排除** `_` 开头的文件） |
-| `/api/assets/{path}` | GET | 获取图片等静态资源（从 Git 仓库读取） |
-| `/api/aboutme` | GET | 获取 About Me 页面内容（读取 `_ABOUTME.md`） |
+| `/api/v1/articles` | GET | 获取文章列表，支持 `?sort=created|edited&order=asc|desc`（**排除** `_` 开头的文件） |
+| `/api/v1/articles/search` | GET | 搜索文章标题（query: `?q=keyword`，**排除** `_` 开头的文件） |
+| `/api/v1/articles/{path}` | GET | 获取文章内容 |
+| `/api/v1/articles/{path}/timeline` | GET | 获取文章 Git 时间线 |
+| `/api/v1/articles/{path}/version` | GET | 获取文章版本号及历史版本列表 |
+| `/api/v1/tree` | GET | 获取目录树结构（**排除** `_` 开头的文件） |
+| `/api/v1/assets/{path}` | GET | 获取图片等静态资源（从 Git 仓库读取） |
+| `/api/v1/special/aboutme` | GET | 获取 About Me 页面内容（读取 `_ABOUTME.md`） |
+| `/api/v1/settings` | GET | 获取前端配置 |
+| `/api/v1/healthz` | GET | 服务健康状态 |
+| `/api/v1/readyz` | GET | 服务就绪状态 |
+| `/api/v1/livez` | GET | 服务存活状态 |
+| `/api/v1/status` | GET | 详细状态信息 |
 
 ### 7.2 Git Smart HTTP Endpoints
 
+**Git Clone URL**: `http://{host}:{port}/api/v1/git/`
+
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/{repo}/info/refs?service=git-receive-pack` | GET | Git receive-pack 引用 |
-| `/{repo}/git-receive-pack` | POST | Git push 接收 |
-| `/{repo}/info/refs?service=git-upload-pack` | GET | Git upload-pack 引用 |
-| `/{repo}/git-upload-pack` | POST | Git fetch/clone |
+| `/api/v1/git/info/refs?service=git-upload-pack` | GET | Git clone/fetch refs |
+| `/api/v1/git/git-upload-pack` | POST | Git clone/fetch packfile |
+| `/api/v1/git/info/refs?service=git-receive-pack` | GET | Git push refs（需认证） |
+| `/api/v1/git/git-receive-pack` | POST | Git push 数据（需认证） |
 
 ---
 
@@ -621,6 +630,7 @@ password = "custom-password-123"
 | v1.3 | 2026-04-17 | **UI统一性 v1.3**：导航栏路径同步（currentDir状态共享）、blog.owner配置、搜索icon自动填充命令、placeholder透明度降低、HelpModal宽度调整+回车关闭 |
 | v1.4 | 2026-04-17 | **架构重构 v1.4**：WebSocket终端端点（路径补全+搜索）、前端命令处理（纯前端路由跳转）、历史记录localStorage存储 |
 | v1.5 | 2026-04-17 | **UI改进 v1.5**：导航栏选中状态（下划线不影响字体对齐，使用after伪元素）、MDX样式对齐原型HTML、EDITORS字体增大(10px→12px) |
+| v1.6 | 2026-04-18 | **API统一前缀 v1.6**：Git Smart HTTP移至`/api/v1/git/`，健康检查移至`/api/v1/healthz`等，所有API统一`/api/v1/`前缀 |
 
 ---
 

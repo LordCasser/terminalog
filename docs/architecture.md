@@ -1,9 +1,9 @@
 # Terminalog - 系统架构总览
 
-> 文档版本：v1.2
+> 文档版本：v2.1
 > 创建日期：2026-04-15
-> 最后更新：2026-04-16
-> 基于需求文档：requirements.md v1.2
+> 最后更新：2026-04-18
+> 基于需求文档：requirements.md v1.6
 
 ---
 
@@ -166,23 +166,30 @@ Terminalog 采用**前后端分离 + 单文件部署**的架构模式：
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/articles` | GET | 获取文章列表（**排除 `_` 开头文件**，支持 `?sort=created|edited&order=asc|desc`） |
-| `/api/articles/{path}` | GET | 获取文章内容 |
-| `/api/articles/{path}/timeline` | GET | 获取文章 Git 时间线 |
-| `/api/articles/{path}/version` | GET | 获取文章版本号及历史（v1.2 新增） |
-| `/api/tree` | GET | 获取目录树结构（**排除 `_` 开头文件**） |
-| `/api/search` | GET | 搜索文章标题（**排除 `_` 开头文件**） |
-| `/api/assets/{path}` | GET | 获取图片等静态资源 |
-| `/api/aboutme` | GET | 获取 About Me 内容（v1.2 新增） |
+| `/api/v1/articles` | GET | 获取文章列表（**排除 `_` 开头文件**，支持 `?sort=created|edited&order=asc|desc`） |
+| `/api/v1/articles/{path}` | GET | 获取文章内容 |
+| `/api/v1/articles/{path}/timeline` | GET | 获取文章 Git 时间线 |
+| `/api/v1/articles/{path}/version` | GET | 获取文章版本号及历史（v1.2 新增） |
+| `/api/v1/articles/search` | GET | 搜索文章标题（**排除 `_` 开头文件**） |
+| `/api/v1/tree` | GET | 获取目录树结构（**排除 `_` 开头文件**） |
+| `/api/v1/assets/{path}` | GET | 获取图片等静态资源 |
+| `/api/v1/special/aboutme` | GET | 获取 About Me 内容（v1.2 新增） |
+| `/api/v1/settings` | GET | 获取前端配置 |
+| `/api/v1/healthz` | GET | 服务健康状态 |
+| `/api/v1/readyz` | GET | 服务就绪状态 |
+| `/api/v1/livez` | GET | 服务存活状态 |
+| `/api/v1/status` | GET | 详细状态信息 |
 
 ### 4.2 Git Smart HTTP API
 
+**Git Clone URL**: `http://{host}:{port}/api/v1/git/`
+
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/info/refs?service=git-upload-pack` | GET | Git Clone refs |
-| `/git-upload-pack` | POST | Git Clone packfile |
-| `/info/refs?service=git-receive-pack` | GET | Git Push refs（需认证） |
-| `/git-receive-pack` | POST | Git Push 数据（需认证） |
+| `/api/v1/git/info/refs?service=git-upload-pack` | GET | Git Clone refs |
+| `/api/v1/git/git-upload-pack` | POST | Git Clone packfile |
+| `/api/v1/git/info/refs?service=git-receive-pack` | GET | Git Push refs（需认证） |
+| `/api/v1/git/git-receive-pack` | POST | Git Push 数据（需认证） |
 
 ---
 

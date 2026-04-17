@@ -1,9 +1,9 @@
 # Terminalog - API 接口文档
 
-> 文档版本：v2.0
+> 文档版本：v2.1
 > 创建日期：2026-04-15
-> 最后更新：2026-04-17
-> 基于需求文档：requirements.md v1.3
+> 最后更新：2026-04-18
+> 基于需求文档：requirements.md v1.5
 > 关联文档：frontend-architecture.md, backend-architecture.md, architecture.md
 
 ---
@@ -533,16 +533,16 @@ curl "http://localhost:8080/api/v1/settings"
 
 ## 八、Health Check API
 
-**资源路径**：`/healthz`, `/readyz`, `/livez`, `/status`
+**资源路径**：`/api/v1/healthz`, `/api/v1/readyz`, `/api/v1/livez`, `/api/v1/status`
 
 ### 8.1 健康检查端点
 
 | 端点 | 说明 |
 |------|------|
-| `GET /healthz` | 服务健康状态 |
-| `GET /readyz` | 服务就绪状态 |
-| `GET /livez` | 服务存活状态 |
-| `GET /status` | 详细状态信息 |
+| `GET /api/v1/healthz` | 服务健康状态 |
+| `GET /api/v1/readyz` | 服务就绪状态 |
+| `GET /api/v1/livez` | 服务存活状态 |
+| `GET /api/v1/status` | 详细状态信息 |
 
 ---
 
@@ -593,27 +593,32 @@ curl "http://localhost:8080/api/v1/settings"
 
 ## 十、Git Smart HTTP API
 
+**资源路径**：`/api/v1/git`
+
+> **Git Clone URL**: `http://{host}:{port}/api/v1/git/`
+> 例如：`http://localhost:8080/api/v1/git/`
+
 ### 10.1 协议概述
 
 | 操作 | 端点 | 认证 |
 |------|------|------|
-| Clone/Fetch | `GET /info/refs?service=git-upload-pack` | 无 |
-| Clone/Fetch | `POST /git-upload-pack` | 无 |
-| Push | `GET /info/refs?service=git-receive-pack` | Basic Auth |
-| Push | `POST /git-receive-pack` | Basic Auth |
+| Clone/Fetch | `GET /api/v1/git/info/refs?service=git-upload-pack` | 无 |
+| Clone/Fetch | `POST /api/v1/git/git-upload-pack` | 无 |
+| Push | `GET /api/v1/git/info/refs?service=git-receive-pack` | Basic Auth |
+| Push | `POST /api/v1/git/git-receive-pack` | Basic Auth |
 
 ### 10.2 Git Clone
 
 ```bash
 # Clone仓库
-git clone http://localhost:8080/ blog-content
+git clone http://localhost:8080/api/v1/git/ blog-content
 ```
 
 ### 10.3 Git Push
 
 ```bash
 # Push更新
-git push http://localhost:8080/ main
+git push http://localhost:8080/api/v1/git/ main
 
 Username: admin
 Password: [配置文件中的密码]
@@ -851,7 +856,13 @@ export function transformImagePath(src: string, basePath?: string): string {
 | `/api/v1/tree` | GET | 获取目录树 |
 | `/api/v1/special/aboutme` | GET | 获取About Me |
 | `/api/v1/settings` | GET | 获取配置 |
-| `/healthz` | GET | 健康检查 |
+| `/api/v1/healthz` | GET | 健康检查 |
+| `/api/v1/readyz` | GET | 就绪检查 |
+| `/api/v1/livez` | GET | 存活检查 |
+| `/api/v1/status` | GET | 状态详情 |
+| `/api/v1/git/info/refs` | GET | Git refs advertisement |
+| `/api/v1/git/git-upload-pack` | POST | Git clone/fetch |
+| `/api/v1/git/git-receive-pack` | POST | Git push |
 | `/ws/terminal` | WebSocket | 终端通信 |
 
 ---
@@ -970,6 +981,7 @@ export default config;
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
+| v2.1 | 2026-04-18 | **统一API前缀**：Git Smart HTTP移至`/api/v1/git/`，健康检查移至`/api/v1/healthz`等 |
 | v2.0 | 2026-04-17 | **RESTful重构**：API添加`/api/v1/`前缀，前端路由改用路径参数 |
 | v1.5 | 2026-04-17 | 添加`.assets`隐藏目录支持 |
 | v1.0 | 2026-04-15 | 初始API定义 |
@@ -988,8 +1000,23 @@ export default config;
 | `/api/aboutme` | `/api/v1/special/aboutme` | 合并到Special资源 |
 | `/api/config` | `/api/v1/settings` | 重命名为Settings |
 | `/api/assets/*` | `/api/v1/assets/{path}` | 添加版本前缀 |
+| `/healthz` | `/api/v1/healthz` | 移入API v1命名空间 |
+| `/readyz` | `/api/v1/readyz` | 移入API v1命名空间 |
+| `/livez` | `/api/v1/livez` | 移入API v1命名空间 |
+| `/status` | `/api/v1/status` | 移入API v1命名空间 |
+| `/info/refs` | `/api/v1/git/info/refs` | Git移入API v1命名空间 |
+| `/git-upload-pack` | `/api/v1/git/git-upload-pack` | Git移入API v1命名空间 |
+| `/git-receive-pack` | `/api/v1/git/git-receive-pack` | Git移入API v1命名空间 |
+| `.git` (根路径) | `/api/v1/git/` | Git Clone URL统一前缀 |
 
-### 18.2 前端路由变更
+### 18.2 Git URL变更
+
+| 变更项 | 原值 | 新值 |
+|--------|------|------|
+| Git Clone URL | `http://localhost:8080/` | `http://localhost:8080/api/v1/git/` |
+| Git Push URL | `http://localhost:8080/` | `http://localhost:8080/api/v1/git/` |
+
+### 18.3 前端路由变更
 
 | 原路由 | 新路由 | 变化 |
 |--------|--------|------|

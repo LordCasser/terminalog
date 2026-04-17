@@ -172,8 +172,8 @@ func main() {
 	// Start server
 	logger.Info("Server started", "addr", cfg.GetAddr())
 	logger.Info("Access the blog at http://" + cfg.GetAddr())
-	logger.Info("Git clone URL: http://" + cfg.GetAddr() + "/.git")
-	logger.Info("Health check: http://" + cfg.GetAddr() + "/healthz")
+	logger.Info("Git clone URL: http://" + cfg.GetAddr() + "/api/v1/git/")
+	logger.Info("Health check: http://" + cfg.GetAddr() + "/api/v1/healthz")
 
 	if err := srv.Start(); err != nil {
 		if err.Error() != "http: Server closed" {

@@ -108,17 +108,18 @@ func (s *Server) setupRoutes() {
 		r.Use(s.corsMiddleware)
 	}
 
-	// Health check routes (no auth required)
-	if s.Handlers.Health != nil {
-		r.Get("/healthz", s.Handlers.Health.Healthz)
-		r.Get("/readyz", s.Handlers.Health.Readyz)
-		r.Get("/livez", s.Handlers.Health.Livez)
-		r.Get("/status", s.Handlers.Health.Status)
-	}
-
 	// API routes (RESTful v1)
 	// See docs/api-spec.md for complete API specification
 	r.Route("/api/v1", func(r chi.Router) {
+		// Health check routes (no auth required)
+		// GET /api/v1/healthz, /api/v1/readyz, /api/v1/livez, /api/v1/status
+		if s.Handlers.Health != nil {
+			r.Get("/healthz", s.Handlers.Health.Healthz)
+			r.Get("/readyz", s.Handlers.Health.Readyz)
+			r.Get("/livez", s.Handlers.Health.Livez)
+			r.Get("/status", s.Handlers.Health.Status)
+		}
+
 		// Articles API
 		// GET /api/v1/articles - list articles
 		// GET /api/v1/articles/search - search articles (merged from /api/search)
@@ -153,14 +154,19 @@ func (s *Server) setupRoutes() {
 		if !s.debug && s.Handlers.Static != nil {
 			r.Get("/resources/*", s.Handlers.Static.ServeResources)
 		}
+
+		// Git Smart HTTP routes
+		// Git clone URL: http://xxx/api/v1/git/
+		// GET /api/v1/git/info/refs?service=git-upload-pack - refs advertisement
+		// GET /api/v1/git/info/refs?service=git-receive-pack - refs advertisement (auth required)
+		// POST /api/v1/git/git-upload-pack - packfile transfer for clone/fetch
+		// POST /api/v1/git/git-receive-pack - packfile transfer for push (auth required)
+		r.Get("/git/info/refs", s.Handlers.Git.InfoRefs)
+		r.Post("/git/git-upload-pack", s.Handlers.Git.UploadPack)
+		r.Post("/git/git-receive-pack", s.Handlers.Git.ReceivePack)
 	})
 
-	// Git Smart HTTP routes
-	r.Get("/info/refs", s.Handlers.Git.InfoRefs)
-	r.Post("/git-upload-pack", s.Handlers.Git.UploadPack)
-	r.Post("/git-receive-pack", s.Handlers.Git.ReceivePack)
-
-	// WebSocket routes (v1.4)
+	// WebSocket routes (v1.4) - keep at root level for simplicity
 	if s.Handlers.WebSocket != nil {
 		r.Get("/ws/terminal", s.Handlers.WebSocket.HandleTerminal)
 	}

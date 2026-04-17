@@ -1,9 +1,9 @@
 # Terminalog - 后端架构设计文档
 
-> 文档版本：v1.2
+> 文档版本：v2.1
 > 创建日期：2026-04-15
-> 最后更新：2026-04-16
-> 基于需求文档：requirements.md v1.2
+> 最后更新：2026-04-18
+> 基于需求文档：requirements.md v1.5
 > 关联文档：frontend-architecture.md, api-spec.md, architecture.md
 
 ---

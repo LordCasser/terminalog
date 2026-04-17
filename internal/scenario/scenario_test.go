@@ -61,6 +61,7 @@ func SetupScenario(t *testing.T, setup func(repo *testutil.TestRepo) error) *Sce
 
 	articleSvc := service.NewArticleService(fileSvc, gitSvc)
 	assetSvc := service.NewAssetService(fileSvc)
+	versionSvc := service.NewVersionService(articleSvc, gitSvc, fileSvc) // v1.2
 
 	// Create test auth config with multiple users
 	hashedPass1, _ := bcrypt.GenerateFromPassword([]byte("password1"), bcrypt.DefaultCost)
@@ -80,7 +81,7 @@ func SetupScenario(t *testing.T, setup func(repo *testutil.TestRepo) error) *Sce
 	authSvc := service.NewAuthService(cfg)
 
 	// Create handlers
-	articleHandler := handler.NewArticleHandler(articleSvc)
+	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc)
 	assetHandler := handler.NewAssetHandler(assetSvc)
 	searchHandler := handler.NewSearchHandler(articleSvc)
 	treeHandler := handler.NewTreeHandler(articleSvc)

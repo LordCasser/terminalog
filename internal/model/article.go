@@ -157,3 +157,59 @@ func ParseSortOrder(s string) SortOrder {
 		return OrderDesc
 	}
 }
+
+// ChangeType represents the type of change for version calculation.
+type ChangeType string
+
+const (
+	// ChangeTypePatch indicates a small change (<10 lines).
+	ChangeTypePatch ChangeType = "patch"
+
+	// ChangeTypeMinor indicates a moderate change (10-50% of total lines).
+	ChangeTypeMinor ChangeType = "minor"
+
+	// ChangeTypeMajor indicates a large change (>50% of total lines).
+	ChangeTypeMajor ChangeType = "major"
+)
+
+// VersionInfo represents version information for an article.
+type VersionInfo struct {
+	// CurrentVersion is the current semantic version (e.g., "v2.0.48").
+	CurrentVersion string `json:"currentVersion"`
+
+	// History contains historical version information.
+	History []VersionHistoryEntry `json:"history"`
+}
+
+// VersionHistoryEntry represents a single version history entry.
+type VersionHistoryEntry struct {
+	// Version is the semantic version.
+	Version string `json:"version"`
+
+	// Hash is the short commit hash (7 characters).
+	Hash string `json:"hash"`
+
+	// Author is the commit author name.
+	Author string `json:"author"`
+
+	// Timestamp is the commit timestamp.
+	Timestamp time.Time `json:"timestamp"`
+
+	// LinesChanged is the number of lines changed in this commit.
+	LinesChanged int `json:"linesChanged"`
+
+	// ChangeType indicates whether this was a patch, minor, or major change.
+	ChangeType ChangeType `json:"changeType"`
+}
+
+// AboutMeResponse represents the response for the About Me API.
+type AboutMeResponse struct {
+	// Path is the file path (_ABOUTME.md).
+	Path string `json:"path"`
+
+	// Title is the title extracted from the filename.
+	Title string `json:"title"`
+
+	// Content is the raw Markdown content.
+	Content string `json:"content"`
+}

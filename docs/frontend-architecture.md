@@ -1,9 +1,10 @@
 # Terminalog - 前端架构设计文档
 
-> 文档版本：v1.0
+> 文档版本：v1.2
 > 创建日期：2026-04-15
-> 基于需求文档：requirements.md v1.1
-> 关联文档：backend-architecture.md, api-spec.md
+> 最后更新：2026-04-16
+> 基于需求文档：requirements.md v1.2
+> 关联文档：backend-architecture.md, api-spec.md, architecture.md, api-spec.md
 
 ---
 
@@ -54,34 +55,36 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 | 模块 | 负责人 | 职责边界 | 依赖关系 |
 |------|--------|---------|---------|
-| **Terminal UI** | 前端 | 终端风格 UI 组件，Dracula 配色实现 | shadcn/ui, Tailwind CSS |
-| **Command Parser** | 前端 | 命令行输入解析与执行 | Terminal UI |
-| **Markdown Renderer** | 前端 | Markdown 内容渲染（代码高亮、公式、Mermaid） | Markdown 解析库 |
-| **Article Viewer** | 前端 | 文章详情页展示（时间线、元数据） | Markdown Renderer |
+| **Brutalist UI** | 前端 | Brutalist 风格 UI 容器，Dracula Spectrum 配色实现，0px 圆角，Glass 效果，三字体系统 | shadcn/ui, Tailwind CSS |
+| **Command Parser** | 前端 | 命令行输入解析与执行（**无 clear 命令**） | Brutalist UI |
+| **Sort Manager** | 前端 | 排序状态管理（表头点击排序 + 命令行排序共用） | Brutalist UI, API Client |
+| **Markdown Renderer** | 前端 | Markdown 内容渲染（代码高亮、公式、Mermaid，Inter 字体） | Markdown 解析库 |
+| **Article Viewer** | 前端 | 文章详情页展示（版本号、折叠式历史、EOF、标签） | Markdown Renderer |
+| **About Me** | 前端 | About Me 页面展示（从 `_ABOUTME.md` 渲染） | Markdown Renderer, API Client |
 | **API Client** | 前端 | 与后端 API 通信 | Fetch API |
 | **Path Transformer** | 前端 | 图片路径转换（相对路径 → API 路径） | Article Viewer |
 
 ### 2.2 模块职责详解
 
-#### 2.2.1 Terminal UI 模块
+#### 2.2.1 Brutalist UI 模块
 
 **职责**：
-- 实现终端风格的整体 UI 容器
-- 应用 Dracula 配色方案
-- 提供终端窗口装饰（标题栏、窗口按钮）
-- 实现光标闪烁效果
+- 实现 Brutalist 风格的整体 UI 容器
+- 应用 Dracula Spectrum 配色（多层 surface 体系 + Glass 效果）
+- **无终端窗口装饰**（无标题栏、无窗口按钮）
+- 使用三字体系统（Space Grotesk/JetBrains Mono/Inter）
+- 实现 0px 圆角设计
 
 **边界**：
 - 不负责业务逻辑处理
 - 不负责 API 调用
 
 **组成组件**：
-- `TerminalWindow.tsx`：终端窗口容器
-- `TerminalHeader.tsx`：终端标题栏（显示当前路径）
-- `TerminalContent.tsx`：终端内容区域（输出显示）
-- `CommandInput.tsx`：命令输入框（底部）
-- `Cursor.tsx`：闪烁光标组件
-- `ArticleList.tsx`：终端风格的文章列表
+- `Layout.tsx`：全局布局容器（Dracula background + Glass 面板）
+- `Navbar.tsx`：顶部导航栏（Logo + 路径显示 + 搜索框）
+- `ArticleTable.tsx`：文章列表表格（5 列：Created/Updated/Editors/Filename/Latest Commit）
+- `CommandPrompt.tsx`：底部单行命令输入区（`>` 前缀，JetBrains Mono）
+- `SortHeader.tsx`：表格可排序表头（点击排序）
 
 #### 2.2.2 Command Parser 模块
 
@@ -89,25 +92,37 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - 解析用户输入的命令
 - 提取命令名、参数、flags
 - 执行对应命令逻辑
-- 管理命令历史
+- 管理命令历史（**保留完整历史，无 clear 清屏**）
 
 **边界**：
 - 不负责 UI 渲染
 - 不负责直接 API 调用（通过 API Client）
 
-**支持命令**：
+**支持命令**（v1.2）：
 
 | 命令 | 功能 | 参数/Flags |
 |------|------|-----------|
 | `cd <path>` | 切换目录 | `path`: 目标路径 |
-| `ls` | 列出内容 | `--sort=created\|edited`, `--asc\|--desc` |
+| `cd ..` | 返回上级目录 | 无 |
+| `cd .` | 刷新当前目录 | 无 |
 | `view <file>` | 查看文章 | `file`: 文件名 |
 | `search <keyword>` | 搜索 | `keyword`: 搜索词 |
 | `help` | 显示帮助 | 无 |
-| `clear` | 清屏 | 无 |
-| `exit` | 退出查看 | 无 |
 
-#### 2.2.3 Markdown Renderer 模块
+> **v1.2 变更**：移除 `clear`、`ls`、`exit` 命令。排序仅通过表头点击实现。
+
+#### 2.2.3 Sort Manager 模块（v1.2 新增）
+
+**职责**：
+- 管理排序状态（当前排序字段、排序方向）
+- 提供统一的排序状态供表头点击使用（**不再支持命令行排序**）
+- 同步 URL state（可选，支持分享排序链接）
+
+**边界**：
+- 不负责数据获取（通过 API Client）
+- 不负责 UI 渲染（通过 Brutalist UI 组件渲染）
+
+#### 2.2.4 Markdown Renderer 模块
 
 **职责**：
 - 渲染 Markdown 内容
@@ -120,11 +135,29 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - 不负责获取 Markdown 内容（由 Article Viewer 负责）
 - 不负责 Git 历史展示
 
-#### 2.2.4 Article Viewer 模块
+#### 2.2.5 Article Viewer 模块
 
 **职责**：
-- 文章详情页面展示
-- 显示文章元数据（创建/编辑信息）
+- 文章详情页面展示（新布局：标签行 + 大标题 + 渐变下划线 + 引用块 + 正文 + EOF + 版本号 + 折叠式历史）
+- 版本号自动生成逻辑（基于行数变化：`<10行`→补丁版本，`10~50%`→子版本，`>50%`→主版本）
+- 折叠式历史展示（初始显示 "v2.0.48 History ▼"，展开后显示 commit 列表带行数变化提示）
+- 集成 Markdown Renderer
+
+**边界**：
+- 不负责命令解析
+- 不负责文章列表展示
+
+#### 2.2.6 About Me 模块（v1.2 新增）
+
+**职责**：
+- 从 `_ABOUTME.md` 读取内容并渲染
+- 通过顶部导航栏 "ABOUTME" 链接或 API `/api/aboutme` 访问
+- 使用 Markdown Renderer 渲染内容
+
+**边界**：
+- `_ABOUTME.md` **不参与文章列表展示**（以 `_` 开头的文件被排除）
+
+#### 2.2.7 API Client 模块
 - 显示编辑时间线（可展开）
 - 集成 Markdown Renderer
 
@@ -132,7 +165,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - 不负责命令解析
 - 不负责文章列表展示
 
-#### 2.2.5 API Client 模块
+#### 2.2.8 Path Transformer 模块
 
 **职责**：
 - 封装所有后端 API 调用
@@ -171,7 +204,15 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 | Mermaid | **mermaid-react** | 最新 | 流程图渲染 |
 | 语言 | **TypeScript** | 5+ | 类型安全 |
 
-### 3.2 辅助工具
+### 3.2 字体系统（v1.2）
+
+| 用途 | 字体 | CDN 加载 |
+|------|------|---------|
+| 标题/大数字 | **Space Grotesk** | Google Fonts |
+| 正文/内容渲染 | **Inter** | Google Fonts |
+| UI/等宽元素 | **JetBrains Mono** | Google Fonts |
+
+### 3.3 辅助工具
 
 | 工具 | 用途 |
 |------|------|
@@ -186,12 +227,14 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 ```
 frontend/
 ├── app/                           # Next.js App Router
-│   ├── layout.tsx                 # 根布局（终端容器）
-│   ├── page.tsx                   # 主页（文章列表）
-│   ├── globals.css                # 全局样式
-│   └── article/
-│       └── [path]/
-│           └── page.tsx           # 文章详情页（动态路由）
+│   ├── layout.tsx                 # 根布局（Brutalist 容器，Dracula background）
+│   ├── page.tsx                   # 主页（文章列表，5 列表格）
+│   ├── globals.css                # 全局样式（Dracula Spectrum + Glass + 字体定义）
+│   ├── article/
+│   │   └── [path]/
+│   │       └── page.tsx           # 文章详情页（动态路由，新布局）
+│   └── aboutme/
+│       └── page.tsx               # About Me 页面（v1.2 新增）
 │
 ├── components/                    # React 组件
 │   ├── ui/                        # shadcn/ui 组件（自动生成）
@@ -200,31 +243,35 @@ frontend/
 │   │   ├── input.tsx
 │   │   └── ...
 │   │
-│   ├── terminal/                  # 终端风格组件
-│   │   ├── TerminalWindow.tsx     # 终端窗口容器
-│   │   ├── TerminalHeader.tsx     # 终端标题栏
-│   │   ├── TerminalContent.tsx    # 终端内容区域
-│   │   ├── CommandInput.tsx       # 命令输入框
-│   │   ├── Cursor.tsx             # 闪烁光标
-│   │   └── ArticleList.tsx        # 终端风格文章列表
+│   ├── brutalist/                 # Brutalist 风格组件（v1.2）
+│   │   ├── Layout.tsx             # 全局容器（Dracula background + Glass panels）
+│   │   ├── Navbar.tsx             # 顶部导航栏（Logo + 路径 + 搜索 + ABOUTME）
+│   │   ├── ArticleTable.tsx       # 文章列表表格（5列）
+│   │   ├── SortHeader.tsx         # 可排序表头（点击排序）
+│   │   ├── CommandPrompt.tsx      # 底部单行命令输入区（> 前缀）
+│   │   ├── GlassPanel.tsx         # Glass 效果面板组件
+│   │   └── Tag.tsx                # 文件类型标签（文件类型图标）
 │   │
 │   ├── article/                   # 文章相关组件
-│   │   ├── ArticleView.tsx        # 文章查看器（全屏）
-│   │   ├── ArticleMeta.tsx        # 文章元数据展示
-│   │   ├── Timeline.tsx           # 编辑时间线（可展开）
-│   │   ├── MarkdownRenderer.tsx   # Markdown 渲染器
+│   │   ├── ArticleView.tsx        # 文章查看器（新布局）
+│   │   ├── ArticleMeta.tsx        # 文章元数据展示（标签行 + 标题 + 引用块）
+│   │   ├── HistoryCollapse.tsx    # 折叠式历史（EOF 下方，v1.2）
+│   │   ├── VersionNumber.tsx      # 版本号组件（自动计算，v1.2）
+│   │   ├── MarkdownRenderer.tsx   # Markdown 渲染器（Inter 字体）
 │   │   └── PathTransformer.tsx    # 图片路径转换
 │   │
 │   ├── command/                   # 命令处理
 │   │   ├── CommandParser.ts       # 命令解析（纯逻辑）
 │   │   └── commands/              # 各命令实现
-│   │       ├── cd.ts
-│   │       ├── ls.ts
+│   │       ├── cd.ts              # 切换目录（支持 cd .., cd ., cd 空）
 │   │       ├── view.ts
 │   │       ├── search.ts
-│   │       ├── help.ts
-│   │       ├── clear.ts
-│   │       └── exit.ts
+│   │       └── help.ts
+│   │       # clear.ts、ls.ts、exit.ts 已移除（v1.2）
+│   │
+│   ├── sort/                      # 排序管理器（v1.2 新增）
+│   │   ├── SortManager.ts         # 统一排序逻辑（表头/命令行共用）
+│   │   └── SortState.ts           # 排序状态定义
 │   │
 │   └── common/                    # 通用组件
 │       ├── SearchBar.tsx          # 搜索组件
@@ -235,36 +282,42 @@ frontend/
 │   │   ├── client.ts              # 基础 HTTP 客户端
 │   │   ├── articles.ts            # 文章 API
 │   │   ├── assets.ts              # 资源 API
-│   │   └── tree.ts                # 目录树 API
+│   │   ├── tree.ts                # 目录树 API
+│   │   ├── aboutme.ts             # About Me API（v1.2）
+│   │   └── timeline.ts            # 文章时间线 API
 │   │
 │   ├── hooks/                     # React Hooks
 │   │   ├── useArticles.ts         # 文章数据管理
 │   │   ├── useCommand.ts          # 命令处理
 │   │   ├── useCurrentPath.ts      # 当前路径管理
-│   │   └── useTerminalState.ts    # 终端状态管理
+│   │   ├── useSort.ts             # 排序状态管理（v1.2）
+│   │   └── useBrutalistState.ts   # UI 状态管理（v1.2）
 │   │
 │   └── utils/                     # 工具函数
 │   │   ├── path-transform.ts      # 图片路径转换
 │   │   ├── markdown-plugins.ts    # Markdown 插件配置
-│   │   ├── terminal-format.ts     # 终端输出格式化
-│   │   └── date-format.ts         # 日期格式化
+│   │   ├── date-format.ts         # 日期格式化（相对时间，v1.2）
+│   │   └── version-calc.ts        # 版本号计算逻辑（v1.2）
 │
 ├── styles/                        # 样式文件
-│   ├── dracula.css                # Dracula 配色定义
-│   └── terminal.css               # 终端样式
+│   ├── dracula-spectrum.css       # Dracula Spectrum 配色定义（v1.2）
+│   ├── fonts.css                  # 三字体系统定义（v1.2）
+│   └── glass.css                  # Glass 效果样式（v1.2）
 │
 ├── types/                         # TypeScript 类型定义
 │   ├── article.ts                 # Article 类型
 │   ├── commit.ts                  # Commit 类型
 │   ├── tree.ts                    # Tree 类型
 │   ├── command.ts                 # Command 类型
+│   ├── sort.ts                    # 排序类型（v1.2）
+│   ├── version.ts                 # 版本号类型（v1.2）
 │   └── api.ts                     # API 响应类型
 │
 ├── public/                        # 静态资源
-│   └── fonts/                     # 字体文件
+│   └── fonts/                     # 字体文件（可选，使用 CDN 时不需要）
 │
 ├── next.config.js                 # Next.js 配置
-├── tailwind.config.js             # Tailwind 配置
+├── tailwind.config.js             # Tailwind 配置（Dracula Spectrum + 字体）
 ├── components.json                # shadcn/ui 配置
 ├── tsconfig.json                  # TypeScript 配置
 ├── package.json

@@ -46,6 +46,7 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 
 	articleSvc := service.NewArticleService(fileSvc, gitSvc)
 	assetSvc := service.NewAssetService(fileSvc)
+	versionSvc := service.NewVersionService(articleSvc, gitSvc, fileSvc) // v1.2
 
 	// Create test auth config
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte("testpass"), bcrypt.DefaultCost)
@@ -62,7 +63,7 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 	_ = authSvc // unused for now
 
 	// Create handlers
-	articleHandler := handler.NewArticleHandler(articleSvc)
+	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc)
 	assetHandler := handler.NewAssetHandler(assetSvc)
 	searchHandler := handler.NewSearchHandler(articleSvc)
 	treeHandler := handler.NewTreeHandler(articleSvc)

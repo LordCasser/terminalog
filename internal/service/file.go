@@ -12,6 +12,10 @@ import (
 	"terminalog/pkg/utils"
 )
 
+// SpecialFilePrefix is the prefix for special files that should be excluded from article lists.
+// Files starting with this prefix are reserved for special purposes (e.g., _ABOUTME.md).
+const SpecialFilePrefix = "_"
+
 // FileService provides file system operations.
 type FileService struct {
 	// baseDir is the absolute path to the content directory.
@@ -30,6 +34,7 @@ func NewFileService(baseDir string) (*FileService, error) {
 
 // ScanMarkdownFiles scans the directory for all Markdown files.
 // It returns a list of relative paths to Markdown files.
+// Files starting with "_" (SpecialFilePrefix) are excluded.
 func (s *FileService) ScanMarkdownFiles(ctx context.Context, dir string) ([]string, error) {
 	// Validate and get absolute path
 	absDir, err := utils.ValidatePath(s.baseDir, dir)
@@ -66,6 +71,14 @@ func (s *FileService) ScanMarkdownFiles(ctx context.Context, dir string) ([]stri
 			return nil
 		}
 
+		// Skip special files (starting with "_")
+		if strings.HasPrefix(d.Name(), SpecialFilePrefix) {
+			if d.IsDir() {
+				return filepath.SkipDir // Skip entire special directory
+			}
+			return nil // Skip special file
+		}
+
 		// Only include Markdown files
 		if !d.IsDir() && utils.IsMarkdownFile(path) {
 			// Convert to relative path
@@ -87,6 +100,42 @@ func (s *FileService) ScanMarkdownFiles(ctx context.Context, dir string) ([]stri
 	sort.Strings(files)
 
 	return files, nil
+}
+
+// ReadSpecialFile reads a special file (e.g., _ABOUTME.md).
+// This method allows reading files that start with "_" prefix.
+func (s *FileService) ReadSpecialFile(ctx context.Context, filename string) ([]byte, error) {
+	// Validate that the filename starts with special prefix
+	if !strings.HasPrefix(filename, SpecialFilePrefix) {
+		return nil, model.ErrNotFound
+	}
+
+	// Validate path (but allow special files)
+	absPath, err := utils.ValidatePath(s.baseDir, filename)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if file exists
+	info, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+
+	if info.IsDir() {
+		return nil, model.ErrNotFound
+	}
+
+	// Read file content
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return content, nil
 }
 
 // ReadFile reads the content of a file.

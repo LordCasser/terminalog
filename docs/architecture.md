@@ -1,8 +1,9 @@
 # Terminalog - 系统架构总览
 
-> 文档版本：v1.1
+> 文档版本：v1.2
 > 创建日期：2026-04-15
-> 基于需求文档：requirements.md v1.1
+> 最后更新：2026-04-16
+> 基于需求文档：requirements.md v1.2
 
 ---
 
@@ -84,10 +85,12 @@ Terminalog 采用**前后端分离 + 单文件部署**的架构模式：
 
 | 模块 | 职责 |
 |------|------|
-| Terminal UI | 终端风格 UI 组件，Dracula 配色实现 |
-| Command Parser | 命令行输入解析与执行 |
-| Markdown Renderer | Markdown 内容渲染（代码高亮、公式、Mermaid） |
-| Article Viewer | 文章详情页展示（时间线、元数据） |
+| Brutalist UI | Brutalist 风格 UI 组件，Dracula Spectrum 配色，Glass 效果，0px 圆角 |
+| Command Parser | 命令行输入解析与执行（**无 clear 命令**） |
+| Sort Manager | 排序状态管理（表头点击 + 命令行排序共用） |
+| Markdown Renderer | Markdown 内容渲染（代码高亮、公式、Mermaid，Inter 字体） |
+| Article Viewer | 文章详情页展示（版本号、折叠式历史、EOF、标签） |
+| About Me | About Me 页面展示（读取 `_ABOUTME.md`） |
 | API Client | 与后端 API 通信 |
 | Path Transformer | 图片路径转换 |
 
@@ -98,9 +101,11 @@ Terminalog 采用**前后端分离 + 单文件部署**的架构模式：
 | 模块 | 职责 |
 |------|------|
 | HTTP Server | HTTP 路由分发，静态资源服务 |
-| Article Service | 文章列表、内容读取、元数据获取 |
+| Article Service | 文章列表、内容读取、元数据获取（**过滤 `_` 开头文件**） |
+| About Me Service | 读取并返回 `_ABOUTME.md` 内容 |
+| Version Service | 基于行数变化计算语义版本号 |
 | Git Service | Git 历史查询，Smart HTTP 协议实现 |
-| File Service | 文件系统操作，目录扫描 |
+| File Service | 文件系统操作，目录扫描，特殊文件过滤 |
 | Auth Service | 用户认证校验，密码验证 |
 | Asset Service | 图片等静态资源读取与响应 |
 | Config Manager | TOML 配置文件解析与管理 |
@@ -161,12 +166,14 @@ Terminalog 采用**前后端分离 + 单文件部署**的架构模式：
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/articles` | GET | 获取文章列表 |
+| `/api/articles` | GET | 获取文章列表（**排除 `_` 开头文件**，支持 `?sort=created|edited&order=asc|desc`） |
 | `/api/articles/{path}` | GET | 获取文章内容 |
 | `/api/articles/{path}/timeline` | GET | 获取文章 Git 时间线 |
-| `/api/tree` | GET | 获取目录树结构 |
-| `/api/search` | GET | 搜索文章标题 |
+| `/api/articles/{path}/version` | GET | 获取文章版本号及历史（v1.2 新增） |
+| `/api/tree` | GET | 获取目录树结构（**排除 `_` 开头文件**） |
+| `/api/search` | GET | 搜索文章标题（**排除 `_` 开头文件**） |
 | `/api/assets/{path}` | GET | 获取图片等静态资源 |
+| `/api/aboutme` | GET | 获取 About Me 内容（v1.2 新增） |
 
 ### 4.2 Git Smart HTTP API
 
@@ -237,6 +244,9 @@ terminalog/
 | 样式 | Tailwind CSS |
 | Markdown | react-markdown + rehype-highlight + KaTeX + Mermaid |
 | 语言 | TypeScript 5+ |
+| 标题字体 | Space Grotesk（Google Fonts） |
+| 正文字体 | Inter（Google Fonts） |
+| UI 字体 | JetBrains Mono（Google Fonts） |
 
 ### 6.2 后端技术栈
 
@@ -337,13 +347,21 @@ make release     # 跨平台构建
 
 ### 10.1 MVP（当前版本）
 
-- ✅ 基础 Blog 展示（终端风格 UI）
-- ✅ 命令行交互（cd, ls, view, search, help, clear, exit）
-- ✅ 鼠标点击导航
+- ✅ 基础 Blog 展示（Brutalist 编辑器 UI，Dracula Spectrum 配色）
+- ✅ 版本号自动生成（基于行数变化计算语义版本号）
+- ✅ About Me 页面（从 `_ABOUTME.md` 读取）
+- ✅ 特殊文件处理（`_` 开头文件不参与列表展示）
+- ✅ 鼠标交互（顶部导航 + 底部单行 prompt）
+- ✅ 命令行交互（cd, view, search, help，支持 `cd ..`/`cd .`/`cd` 空）
+- ❌ 移除命令：ls、clear、exit
+- ✅ 文章列表 5 列表格（Created/Updated/Editors/Filename/Latest Commit）
+- ✅ 表头点击排序（与命令行排序共用逻辑）
+- ✅ 三字体系统（Space Grotesk + JetBrains Mono + Inter）
+- ✅ 0px 圆角 Brutalist 风格
 - ✅ Git HTTP 协议（Clone/Push）
 - ✅ Markdown 渲染（代码高亮、公式、Mermaid、图片）
 - ✅ 文章元数据（Git 历史）
-- ✅ 光标闪烁效果
+- ❌ 不支持移动端响应式
 
 ### 10.2 后续迭代
 
@@ -371,5 +389,5 @@ make release     # 跨平台构建
 
 **文档结束**
 
-> 本系统架构总览基于 requirements.md v1.1
+> 本系统架构总览基于 requirements.md v1.2（Brutalist 编辑器 + 版本号规则 + 特殊文件处理）
 > 下一步：进入实现阶段（Coder 模式）

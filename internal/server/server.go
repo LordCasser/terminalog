@@ -41,6 +41,7 @@ type Handlers struct {
 	Tree    *handler.TreeHandler
 	Static  *handler.StaticHandler
 	Health  *handler.HealthHandler
+	AboutMe *handler.AboutMeHandler
 }
 
 // NewServer creates a new Server instance.
@@ -115,6 +116,11 @@ func (s *Server) setupRoutes() {
 
 		// Assets API (use wildcard to match nested paths)
 		r.Get("/assets/*", s.Handlers.Asset.Get)
+
+		// About Me API (v1.2)
+		if s.Handlers.AboutMe != nil {
+			r.Get("/aboutme", s.Handlers.AboutMe.Get)
+		}
 	})
 
 	// Git Smart HTTP routes

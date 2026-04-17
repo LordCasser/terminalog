@@ -1,9 +1,10 @@
 # Terminalog - 后端架构设计文档
 
-> 文档版本：v1.0
+> 文档版本：v1.2
 > 创建日期：2026-04-15
-> 基于需求文档：requirements.md v1.1
-> 关联文档：frontend-architecture.md, api-spec.md
+> 最后更新：2026-04-16
+> 基于需求文档：requirements.md v1.2
+> 关联文档：frontend-architecture.md, api-spec.md, architecture.md
 
 ---
 
@@ -12,10 +13,12 @@
 ### 1.1 后端定位
 
 Terminalog 后端是一个 **Go HTTP 服务**，提供以下核心功能：
-- RESTful API（文章列表、内容、搜索、目录树）
+- RESTful API（文章列表、内容、搜索、目录树、About Me、版本号）
 - 静态资源服务（前端页面，通过 embed）
 - Git Smart HTTP 服务（Git Clone/Push）
 - 图片资源服务（从 Git 仓库读取）
+- **特殊文件过滤**：以 `_` 开头的文件不出现在列表中
+- **版本号自动生成**：基于行数变化计算语义版本号
 
 ### 1.2 后端架构图
 
@@ -63,9 +66,11 @@ Terminalog 后端是一个 **Go HTTP 服务**，提供以下核心功能：
 | 模块 | 负责人 | 职责边界 | 依赖关系 |
 |------|--------|---------|---------|
 | **HTTP Server** | 后端 | HTTP 路由分发，静态资源服务 | Go net/http 或 chi |
-| **Article Service** | 后端 | 文章列表、内容读取、元数据获取 | Git Service, File Service |
+| **Article Service** | 后端 | 文章列表、内容读取、元数据获取（**过滤 `_` 开头文件**） | Git Service, File Service |
+| **About Me Service** | 后端 | 读取并返回 `_ABOUTME.md` 内容（v1.2 新增） | File Service, Git Service |
+| **Version Service** | 后端 | 基于行数变化计算语义版本号（v1.2 新增） | Git Service |
 | **Git Service** | 后端 | Git 历史查询，Smart HTTP 协议实现 | go-git/v5 |
-| **File Service** | 后端 | 文件系统操作，目录扫描 | Go os/fs 包 |
+| **File Service** | 后端 | 文件系统操作，目录扫描，特殊文件过滤 | Go os/fs 包 |
 | **Auth Service** | 后端 | 用户认证校验，密码验证 | Config Manager |
 | **Asset Service** | 后端 | 图片等静态资源读取与响应 | File Service |
 | **Config Manager** | 后端 | TOML 配置文件解析与管理 | pelletier/go-toml/v2 |

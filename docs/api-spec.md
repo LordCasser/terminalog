@@ -1,9 +1,10 @@
 # Terminalog - API 接口文档
 
-> 文档版本：v1.0
+> 文档版本：v1.2
 > 创建日期：2026-04-15
-> 基于需求文档：requirements.md v1.1
-> 关联文档：frontend-architecture.md, backend-architecture.md
+> 最后更新：2026-04-16
+> 基于需求文档：requirements.md v1.2
+> 关联文档：frontend-architecture.md, backend-architecture.md, architecture.md
 
 ---
 
@@ -103,7 +104,7 @@ http://blog.example.com
 
 **端点**：`GET /api/articles`
 
-**描述**：获取指定目录下的文章列表（仅返回已提交到 Git 的 Markdown 文件）
+**描述**：获取指定目录下的文章列表（仅返回已提交到 Git 的 Markdown 文件，**排除**以 `_` 开头的特殊文件）
 
 **认证**：无
 
@@ -357,7 +358,7 @@ curl http://localhost:8080/api/tree
 
 **端点**：`GET /api/search`
 
-**描述**：搜索文章标题（简单匹配）
+**描述**：搜索文章标题（简单匹配，**排除**以 `_` 开头的特殊文件）
 
 **认证**：无
 
@@ -650,6 +651,111 @@ git push http://localhost:8080/repo.git main
 Username: admin
 Password: [输入配置文件中的密码]
 ```
+
+---
+
+### 3.5 About Me API（v1.2 新增）
+
+---
+
+#### 3.5.1 获取 About Me 页面内容
+
+**端点**：`GET /api/aboutme`
+
+**描述**：获取 `_ABOUTME.md` 文件的内容，用于 About Me 页面渲染
+
+**认证**：无
+
+**请求示例**：
+
+```bash
+curl http://localhost:8080/api/aboutme
+```
+
+**响应示例（200 OK）**：
+
+```json
+{
+  "path": "_ABOUTME.md",
+  "title": "About Me",
+  "content": "# About Me\n\nWelcome to my blog...\n"
+}
+```
+
+**错误响应**：
+
+| 状态码 | 错误 | 说明 |
+|--------|------|------|
+| 404 | `"About Me not found"` | `_ABOUTME.md` 文件不存在 |
+| 500 | `"Internal server error"` | 服务器内部错误 |
+
+---
+
+### 3.6 版本号 API（v1.2 新增）
+
+---
+
+#### 3.6.1 获取文章版本号
+
+**端点**：`GET /api/articles/{path}/version`
+
+**描述**：获取文章当前版本号及历史版本列表。版本号基于行数变化自动计算。
+
+**认证**：无
+
+**Path Parameters**：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `path` | string | 是 | 文件路径 |
+
+**请求示例**：
+
+```bash
+curl http://localhost:8080/api/articles/tech/golang.md/version
+```
+
+**响应示例（200 OK）**：
+
+```json
+{
+  "currentVersion": "v2.0.48",
+  "history": [
+    {
+      "version": "v2.0.48",
+      "hash": "a1b2c3d",
+      "author": "developer2",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "linesChanged": 5,
+      "changeType": "patch"
+    },
+    {
+      "version": "v2.0.47",
+      "hash": "e4f5g6h",
+      "author": "developer1",
+      "timestamp": "2024-01-14T15:20:00Z",
+      "linesChanged": 150,
+      "changeType": "minor"
+    },
+    {
+      "version": "v2.0.0",
+      "hash": "i7j8k9l",
+      "author": "developer1",
+      "timestamp": "2024-01-10T09:00:00Z",
+      "linesChanged": 500,
+      "changeType": "major"
+    }
+  ]
+}
+```
+
+**版本号计算规则**：
+
+| 变更类型 | 行数变化 | 版本号变化 |
+|---------|---------|-----------|
+| `patch` | < 10 行 | 补丁版本 +1（vX.Y.Z → vX.Y.Z+1） |
+| `minor` | 10~50% 总行数 | 子版本 +1（vX.Y.Z → vX.(Y+1).0） |
+| `major` | > 50% 总行数 | 主版本 +1（vX.Y.Z → v(X+1).0.0） |
 
 ---
 

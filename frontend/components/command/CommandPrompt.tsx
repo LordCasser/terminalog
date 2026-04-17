@@ -8,6 +8,7 @@
  * - Global keyboard focus (press any key to focus)
  * - Search icon click focus
  * - Core commands: search, open, cd
+ * - Tab key auto-completion (disabled browser default Tab behavior)
  */
 
 "use client";
@@ -17,6 +18,9 @@ import { useRouter } from "next/navigation";
 
 // Custom event for search icon click
 export const FOCUS_COMMAND_INPUT = "focusCommandInput";
+
+// Available commands for auto-completion
+const COMMANDS = ["search", "open", "cd"];
 
 export function CommandPrompt() {
   const [input, setInput] = useState("");
@@ -41,20 +45,52 @@ export function CommandPrompt() {
       if (isFocused || e.metaKey || e.ctrlKey || e.altKey) return;
       
       // Ignore navigation keys, function keys, etc.
+      // Note: Tab is handled separately (disabled browser default behavior)
       const ignoreKeys = [
-        "Tab", "Escape", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+        "Escape", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
         "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
         "PageUp", "PageDown", "Home", "End",
       ];
       if (ignoreKeys.includes(e.key)) return;
       
-      // Focus input
+      // Focus input (including Tab key)
+      if (e.key === "Tab") {
+        e.preventDefault(); // Disable browser default Tab behavior (focus switching)
+        inputRef.current?.focus();
+        return;
+      }
+      
+      // Focus input on other keys
       inputRef.current?.focus();
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isFocused]);
+  
+  // Handle Tab key auto-completion
+  const handleTabCompletion = useCallback((e: React.KeyboardEvent) => {
+    if (e.key !== "Tab") return;
+    
+    e.preventDefault(); // Always prevent default Tab behavior
+    
+    const trimmedInput = input.trim();
+    const parts = trimmedInput.split(/\s+/);
+    
+    // Auto-complete commands
+    if (parts.length === 1 && parts[0].length > 0) {
+      const partialCmd = parts[0].toLowerCase();
+      const matchingCommands = COMMANDS.filter(cmd => cmd.startsWith(partialCmd));
+      
+      if (matchingCommands.length === 1) {
+        // Complete the command
+        setInput(matchingCommands[0] + " ");
+      } else if (matchingCommands.length > 1) {
+        // Show matching commands in console (optional)
+        console.log("Matching commands:", matchingCommands.join(", "));
+      }
+    }
+  }, [input]);
 
   // Handle command execution
   const executeCommand = useCallback((cmd: string) => {
@@ -111,9 +147,10 @@ export function CommandPrompt() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleTabCompletion}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            className="w-full bg-transparent text-on-surface outline-none border-none placeholder-on-surface-variant"
+            className="w-full bg-transparent text-on-surface outline-none border-none placeholder-on-surface-variant placeholder-opacity-50"
             placeholder="type a command..."
             aria-label="Command input"
           />

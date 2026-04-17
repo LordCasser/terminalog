@@ -316,10 +316,18 @@ type SearchResult struct {
 **职责**：
 - 查询文件 Git 历史（创建时间、编辑时间、贡献者）
 - 检查文件是否已提交到 Git
-- 实现 Git Smart HTTP 协议：
-  - `git-upload-pack`（Clone/Fetch）
-  - `git-receive-pack`（Push）
-- Git push 认证校验（通过 Auth Service）
+- 实现 Git Smart HTTP 协议（**使用系统 git 子进程**）：
+  - `git-upload-pack --stateless-rpc`（Clone/Fetch）
+  - `git-receive-pack --stateless-rpc`（Push）
+  - `git {service} --stateless-rpc --advertise-refs`（refs advertisement）
+- Push 后 checkout 工作目录同步
+- Push 后重新加载 go-git 仓库缓存
+
+**架构说明**：
+- Smart HTTP 协议的写路径（push）和读路径（clone/fetch）使用系统 git 子进程处理
+- 这遵循 Gitea/Giteria 的架构设计，利用 git 原生的 packfile 处理能力
+- 系统 git 子进程正确处理：delta objects 解析、gzip 编码、大文件传输、并发安全
+- go-git/v5 仅用于读操作（文件历史查询、commit 遍历等）
 
 **边界**：
 - 不负责文件内容读取（File Service 负责）
@@ -330,32 +338,31 @@ type SearchResult struct {
 ```go
 // internal/service/git.go
 
-type GitService interface {
-    // 获取文件的 Git 历史
-    GetFileHistory(ctx context.Context, filePath string) (*FileHistory, error)
-    
-    // 检查文件是否已提交到 Git
-    IsFileCommitted(ctx context.Context, filePath string) (bool, error)
-    
-    // Smart HTTP: 获取 refs advertisement (upload-pack)
-    GetUploadPackRefs(ctx context.Context) ([]byte, error)
-    
-    // Smart HTTP: 处理 git-upload-pack 请求
-    HandleUploadPack(ctx context.Context, body io.Reader) ([]byte, error)
-    
-    // Smart HTTP: 获取 refs advertisement (receive-pack)
-    GetReceivePackRefs(ctx context.Context) ([]byte, error)
-    
-    // Smart HTTP: 处理 git-receive-pack 请求
-    HandleReceivePack(ctx context.Context, body io.Reader, auth *AuthInfo) ([]byte, error)
+type GitService struct {
+    repoPath string    // Git 仓库绝对路径
+    repo     *git.Repository  // go-git 仓库实例（仅用于读操作）
 }
 
-type FileHistory struct {
-    FirstCommit  CommitInfo   // 首个 commit
-    LastCommit   CommitInfo   // 最后 commit
-    AllCommits   []CommitInfo // 所有 commit（按时间倒序）
-    Contributors []string     // 所有作者
-}
+// Smart HTTP 协议（git 子进程）
+func (s *GitService) GetInfoRefs(service string) ([]byte, error)
+    // 运行: git {upload-pack|receive-pack} --stateless-rpc --advertise-refs .
+    // 返回 refs advertisement 数据
+
+func (s *GitService) ServiceRPC(service string, reqBody io.Reader, respWriter io.Writer) error
+    // 运行: git {upload-pack|receive-pack} --stateless-rpc .
+    // 直接 pipe HTTP body 到子进程 stdin，子进程 stdout 到 HTTP response
+
+// Push 后辅助操作
+func (s *GitService) CheckoutWorkingTree() error
+    // 运行: git checkout --force（同步工作目录到 HEAD）
+    // git receive-pack 只更新 refs/objects，不更新工作目录
+
+func (s *GitService) ReloadRepo() error
+    // 重新打开 go-git 仓库（刷新缓存状态）
+
+// 读操作（go-git）
+func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*FileHistory, error)
+func (s *GitService) IsFileCommitted(ctx context.Context, filePath string) (bool, error)
 ```
 
 ### 3.3.1 WebSocket Service (v1.4新增)
@@ -599,7 +606,8 @@ type UserConfig struct {
 | 组件 | 推荐方案 | 版本 | 理由 |
 |------|---------|------|------|
 | HTTP 路由 | **chi** | v5 | 轻量、RESTful 友好、兼容 net/http |
-| Git 操作 | **go-git/v5** | v5 | 纯 Go 实现，无需依赖系统 git 命令 |
+| Git Smart HTTP | **系统 git 子进程** | 系统版本 | 原生 packfile 处理，delta/gzip/大文件支持，Gitea架构 |
+| Git 读操作 | **go-git/v5** | v5 | 纯 Go commit遍历和文件历史查询，无需系统 git |
 | TOML 解析 | **pelletier/go-toml/v2** | v2 | 性能好，API 简洁 |
 | 日志 | **slog** | Go 1.21+ 标准库 | 结构化日志，无额外依赖 |
 | 密码哈希 | **bcrypt** | 标准库 | 安全、简单 |

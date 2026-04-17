@@ -1033,7 +1033,8 @@ func TestScenario15_ErrorHandling(t *testing.T) {
 		name       string
 		endpoint   string
 		wantStatus int
-		wantError  string
+		wantError  string // JSON error response check
+		wantBody   string // Plain text body check (for Git HTTP responses)
 	}{
 		{
 			name:       "Article not found",
@@ -1063,7 +1064,7 @@ func TestScenario15_ErrorHandling(t *testing.T) {
 			name:       "Git push without auth",
 			endpoint:   "/api/v1/git/info/refs?service=git-receive-pack",
 			wantStatus: http.StatusUnauthorized,
-			wantError:  "Authentication required",
+			wantBody:   "Authentication required", // Git HTTP returns plain text, not JSON
 		},
 	}
 
@@ -1082,6 +1083,10 @@ func TestScenario15_ErrorHandling(t *testing.T) {
 				var errorResp model.ErrorResponse
 				json.Unmarshal(body, &errorResp)
 				assert.Contains(t, errorResp.Error, tt.wantError)
+			}
+
+			if tt.wantBody != "" {
+				assert.Contains(t, string(body), tt.wantBody)
 			}
 		})
 	}

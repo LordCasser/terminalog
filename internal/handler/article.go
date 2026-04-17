@@ -4,6 +4,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -103,6 +104,14 @@ func (h *ArticleHandler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *ArticleHandler) HandleArticleRequest(w http.ResponseWriter, r *http.Request) {
 	// Get path from URL (using wildcard pattern)
 	path := chi.URLParam(r, "*")
+
+	// Decode URL-encoded path (e.g., tech%2Ffrontend%2Fvue-components.md -> tech/frontend/vue-components.md)
+	decodedPath, err := url.PathUnescape(path)
+	if err != nil {
+		utils.RespondBadRequest(w, "Invalid path encoding")
+		return
+	}
+	path = decodedPath
 
 	// Check if this is a timeline request
 	if strings.HasSuffix(path, "/timeline") {

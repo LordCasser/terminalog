@@ -99,7 +99,9 @@ export function CommandPrompt() {
   // Initialize WebSocket connection
   useEffect(() => {
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsHost = window.location.host || "localhost:18085";
+    // In debug mode, use API_BASE from env, otherwise use window.location.host
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE || '';
+    const wsHost = apiBase ? apiBase.replace(/^https?:\/\//, '').replace(/^http:\/\//, '') : (window.location.host || "localhost:18085");
     const wsUrl = `${wsProtocol}//${wsHost}/ws/terminal`;
 
     const connectWebSocket = () => {

@@ -14,6 +14,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { apiClient } from "@/lib/api/client";
 
 // Frontend config response from /api/config
 interface FrontendConfig {
@@ -49,11 +50,8 @@ export function TerminalConfigProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await fetch("/api/config");
-        if (response.ok) {
-          const config: FrontendConfig = await response.json();
-          setOwner(config.owner || DEFAULT_OWNER);
-        }
+        const config = await apiClient.get<FrontendConfig>("/api/config");
+        setOwner(config.owner || DEFAULT_OWNER);
       } catch (error) {
         console.error("Failed to fetch config:", error);
         // Use default owner on error

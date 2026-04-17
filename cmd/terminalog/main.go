@@ -103,7 +103,8 @@ func main() {
 	articleSvc := service.NewArticleService(fileSvc, gitSvc)
 	authSvc := service.NewAuthService(cfg)
 	assetSvc := service.NewAssetService(fileSvc)
-	versionSvc := service.NewVersionService(articleSvc, gitSvc, fileSvc) // v1.2
+	versionSvc := service.NewVersionService(articleSvc, gitSvc, fileSvc)       // v1.2
+	completionSvc := service.NewCompletionService(articleSvc, fileSvc, gitSvc) // v1.4 - for WebSocket path completion
 
 	// Handle default user generation if no users configured
 	if !cfg.HasUsers() {
@@ -131,14 +132,15 @@ func main() {
 
 	// Create handlers
 	handlers := &server.Handlers{
-		Article: handler.NewArticleHandler(articleSvc, versionSvc),
-		Asset:   handler.NewAssetHandler(assetSvc),
-		Git:     handler.NewGitHandler(gitSvc, authSvc),
-		Search:  handler.NewSearchHandler(articleSvc),
-		Tree:    handler.NewTreeHandler(articleSvc),
-		Health:  healthHandler,
-		AboutMe: handler.NewAboutMeHandler(fileSvc),       // v1.2
-		Config:  handler.NewConfigHandler(cfg.GetOwner()), // v1.5
+		Article:   handler.NewArticleHandler(articleSvc, versionSvc),
+		Asset:     handler.NewAssetHandler(assetSvc),
+		Git:       handler.NewGitHandler(gitSvc, authSvc),
+		Search:    handler.NewSearchHandler(articleSvc),
+		Tree:      handler.NewTreeHandler(articleSvc),
+		Health:    healthHandler,
+		AboutMe:   handler.NewAboutMeHandler(fileSvc),                                  // v1.2
+		Config:    handler.NewConfigHandler(cfg.GetOwner()),                            // v1.5
+		WebSocket: server.NewWebSocketHandler(completionSvc, logger, cfg.Server.Debug), // v1.4
 	}
 
 	// Create HTTP server

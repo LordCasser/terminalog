@@ -7,13 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os/exec"
 	"sort"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/storage/filesystem"
 
 	"terminalog/internal/model"
 )
@@ -26,8 +26,8 @@ type GitService struct {
 	// repo is the opened Git repository.
 	repo *git.Repository
 
-	// storer is the storage backend.
-	storer *filesystem.Storage
+	// useSystemGit indicates whether to use system git commands for Smart HTTP.
+	useSystemGit bool
 }
 
 // NewGitService creates a new GitService instance.
@@ -38,8 +38,9 @@ func NewGitService(repoPath string) (*GitService, error) {
 	}
 
 	return &GitService{
-		repoPath: repoPath,
-		repo:     repo,
+		repoPath:     repoPath,
+		repo:         repo,
+		useSystemGit: true, // Use system git for Smart HTTP by default
 	}, nil
 }
 
@@ -162,16 +163,38 @@ func (s *GitService) GetUploadPackRefs(ctx context.Context) ([]byte, error) {
 }
 
 // HandleUploadPack handles the git-upload-pack request (Clone/Fetch).
-// For MVP, this uses a simplified implementation.
+// Uses system git command for full protocol support.
 func (s *GitService) HandleUploadPack(ctx context.Context, body io.Reader) ([]byte, error) {
-	// Read and parse the wants/haves from the request body
-	// For MVP, we use a simplified approach
-	// The full implementation would require proper packfile generation
+	if s.useSystemGit {
+		return s.handleUploadPackSystemGit(ctx, body)
+	}
 
-	// This is a placeholder - full implementation would use go-git's
-	// internal packfile generation mechanisms
-	// For now, return an error indicating this needs system git
-	return nil, fmt.Errorf("git-upload-pack requires system git binary for full functionality")
+	// Fallback to simplified implementation (not fully functional)
+	return nil, fmt.Errorf("git-upload-pack requires system git")
+}
+
+// handleUploadPackSystemGit uses system git command for upload-pack.
+func (s *GitService) handleUploadPackSystemGit(ctx context.Context, body io.Reader) ([]byte, error) {
+	// Execute git upload-pack with the request body
+	cmd := exec.CommandContext(ctx, "git", "upload-pack", "--stateless-rpc", s.repoPath)
+
+	// Set stdin from request body
+	cmd.Stdin = body
+
+	// Capture output
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	// Capture errors
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	// Run command
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("git upload-pack failed: %w, stderr: %s", err, stderr.String())
+	}
+
+	return stdout.Bytes(), nil
 }
 
 // GetReceivePackRefs returns the refs advertisement for git-receive-pack (Push).
@@ -211,20 +234,54 @@ func (s *GitService) GetReceivePackRefs(ctx context.Context) ([]byte, error) {
 }
 
 // HandleReceivePack handles the git-receive-pack request (Push).
-// For MVP, this uses a simplified implementation.
+// Uses system git command for full protocol support.
 func (s *GitService) HandleReceivePack(ctx context.Context, body io.Reader) ([]byte, error) {
-	// For MVP, we use a simplified approach
-	// The full implementation would require proper packfile parsing
+	if s.useSystemGit {
+		return s.handleReceivePackSystemGit(ctx, body)
+	}
 
-	// This is a placeholder - full implementation would use go-git's
-	// packfile parsing and object storage mechanisms
-	// For now, return an error indicating this needs system git
-	return nil, fmt.Errorf("git-receive-pack requires system git binary for full functionality")
+	// Fallback to simplified implementation (not fully functional)
+	return nil, fmt.Errorf("git-receive-pack requires system git")
+}
+
+// handleReceivePackSystemGit uses system git command for receive-pack.
+func (s *GitService) handleReceivePackSystemGit(ctx context.Context, body io.Reader) ([]byte, error) {
+	// Execute git receive-pack with the request body
+	cmd := exec.CommandContext(ctx, "git", "receive-pack", "--stateless-rpc", s.repoPath)
+
+	// Set stdin from request body
+	cmd.Stdin = body
+
+	// Capture output
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	// Capture errors
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	// Run command
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("git receive-pack failed: %w, stderr: %s", err, stderr.String())
+	}
+
+	return stdout.Bytes(), nil
 }
 
 // GetRepo returns the underlying git repository.
 func (s *GitService) GetRepo() *git.Repository {
 	return s.repo
+}
+
+// GetRepoPath returns the repository path.
+func (s *GitService) GetRepoPath() string {
+	return s.repoPath
+}
+
+// CheckGitAvailable checks if system git command is available.
+func (s *GitService) CheckGitAvailable() bool {
+	cmd := exec.Command("git", "--version")
+	return cmd.Run() == nil
 }
 
 // Helper functions

@@ -51,17 +51,44 @@ func main() {
 		logger.Info("Please edit config.toml and set your content directory")
 	}
 
-	// Validate configuration
-	if err := cfg.Validate(); err != nil {
-		logger.Error("Configuration validation failed", "error", err)
-		logger.Info("Make sure blog.content_dir points to an existing Git repository")
+	// Apply command-line overrides
+	if flags.host != "" {
+		cfg.Server.Host = flags.host
+		logger.Info("Overriding server host from command line", "host", flags.host)
+	}
+	if flags.port != 0 {
+		cfg.Server.Port = flags.port
+		logger.Info("Overriding server port from command line", "port", flags.port)
+	}
+	if flags.contentDir != "" {
+		cfg.Blog.ContentDir = flags.contentDir
+		logger.Info("Overriding content directory from command line", "contentDir", flags.contentDir)
+	}
+
+	// Ensure Git repository exists
+	gitInitSvc := service.NewGitInitService()
+	if err := gitInitSvc.EnsureGitRepo(cfg.Blog.ContentDir, flags.autoInit); err != nil {
+		if flags.autoInit {
+			logger.Error("Failed to initialize Git repository", "error", err)
+		} else {
+			logger.Error("Content directory is not a Git repository", "error", err)
+			logger.Info("Use --init flag to auto-initialize a Git repository")
+		}
 		os.Exit(1)
 	}
 
-	logger.Info("Configuration loaded",
-		"contentDir", cfg.Blog.ContentDir,
-		"serverAddr", cfg.GetAddr(),
-	)
+	if flags.autoInit {
+		logger.Info("Git repository initialized", "path", cfg.Blog.ContentDir)
+	}
+
+	// Get repository status
+	repoStatus, err := gitInitSvc.GetRepoStatus(cfg.Blog.ContentDir)
+	if err == nil {
+		logger.Info("Git repository status",
+			"branch", repoStatus.CurrentBranch,
+			"commits", repoStatus.CommitCount,
+		)
+	}
 
 	// Initialize services
 	fileSvc, err := service.NewFileService(cfg.Blog.ContentDir)
@@ -74,6 +101,13 @@ func main() {
 	if err != nil {
 		logger.Error("Failed to initialize git service", "error", err)
 		os.Exit(1)
+	}
+
+	// Check system git availability
+	if gitSvc.CheckGitAvailable() {
+		logger.Info("System git available - full Git Smart HTTP support enabled")
+	} else {
+		logger.Warn("System git not available - Git clone/push may have limited functionality")
 	}
 
 	articleSvc := service.NewArticleService(fileSvc, gitSvc)
@@ -101,6 +135,9 @@ func main() {
 		logger.Warn("Please change the default password in config.toml")
 	}
 
+	// Create health handler
+	healthHandler := handler.NewHealthHandler(gitSvc, articleSvc.GetCacheStats)
+
 	// Create handlers
 	handlers := &server.Handlers{
 		Article: handler.NewArticleHandler(articleSvc),
@@ -108,10 +145,14 @@ func main() {
 		Git:     handler.NewGitHandler(gitSvc, authSvc),
 		Search:  handler.NewSearchHandler(articleSvc),
 		Tree:    handler.NewTreeHandler(articleSvc),
+		Health:  healthHandler,
 	}
 
 	// Create HTTP server
 	srv := server.NewServer(cfg.GetAddr(), handlers, logger, embed.StaticFS)
+
+	// Mark server as ready
+	healthHandler.SetReady()
 
 	// Setup graceful shutdown
 	shutdownCh := make(chan os.Signal, 1)
@@ -120,6 +161,9 @@ func main() {
 	go func() {
 		sig := <-shutdownCh
 		logger.Info("Received shutdown signal", "signal", sig.String())
+
+		// Mark server as not ready
+		healthHandler.SetNotReady()
 
 		// Give server time to finish pending requests
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -134,6 +178,7 @@ func main() {
 	logger.Info("Server started", "addr", cfg.GetAddr())
 	logger.Info("Access the blog at http://" + cfg.GetAddr())
 	logger.Info("Git clone URL: http://" + cfg.GetAddr() + "/.git")
+	logger.Info("Health check: http://" + cfg.GetAddr() + "/healthz")
 
 	if err := srv.Start(); err != nil {
 		if err.Error() != "http: Server closed" {
@@ -147,10 +192,13 @@ func main() {
 
 // Flags holds command-line flags.
 type Flags struct {
-	host       string
-	port       int
-	configPath string
-	logLevel   string
+	host        string
+	port        int
+	configPath  string
+	logLevel    string
+	contentDir  string
+	autoInit    bool
+	showVersion bool
 }
 
 // parseFlags parses command-line flags.
@@ -161,7 +209,17 @@ func parseFlags() *Flags {
 	flag.IntVar(&f.port, "port", 0, "Server port (overrides config)")
 	flag.StringVar(&f.configPath, "config", "config.toml", "Configuration file path")
 	flag.StringVar(&f.logLevel, "log", "info", "Log level (debug, info, warn, error)")
+	flag.StringVar(&f.contentDir, "content", "", "Content directory path (overrides config)")
+	flag.BoolVar(&f.autoInit, "init", false, "Auto-initialize Git repository if not exists")
+	flag.BoolVar(&f.showVersion, "version", false, "Show version information")
+
 	flag.Parse()
+
+	// Handle version flag
+	if f.showVersion {
+		fmt.Printf("Terminalog %s (built %s)\n", version, buildDate)
+		os.Exit(0)
+	}
 
 	return f
 }
@@ -205,9 +263,11 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Example:")
 	fmt.Println("  terminalog --config config.toml --log debug")
+	fmt.Println("  terminalog --port 3000 --init --content ./my-blog")
 	fmt.Println()
 	fmt.Println("First run:")
 	fmt.Println("  1. terminalog will create a default config.toml")
 	fmt.Println("  2. Edit config.toml to set your content directory (Git repository)")
-	fmt.Println("  3. Restart terminalog")
+	fmt.Println("  3. Or use --init --content ./my-blog to auto-initialize")
+	fmt.Println("  4. Restart terminalog")
 }

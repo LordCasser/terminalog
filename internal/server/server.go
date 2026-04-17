@@ -40,6 +40,7 @@ type Handlers struct {
 	Search  *handler.SearchHandler
 	Tree    *handler.TreeHandler
 	Static  *handler.StaticHandler
+	Health  *handler.HealthHandler
 }
 
 // NewServer creates a new Server instance.
@@ -91,6 +92,14 @@ func (s *Server) setupRoutes() {
 	r.Use(s.loggingMiddleware)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+
+	// Health check routes (no auth required)
+	if s.Handlers.Health != nil {
+		r.Get("/healthz", s.Handlers.Health.Healthz)
+		r.Get("/readyz", s.Handlers.Health.Readyz)
+		r.Get("/livez", s.Handlers.Health.Livez)
+		r.Get("/status", s.Handlers.Health.Status)
+	}
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {

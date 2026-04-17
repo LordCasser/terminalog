@@ -2,19 +2,18 @@
  * Home Page - Main Article List
  * 
  * Displays article table with Brutalist styling.
+ * Navbar and CommandPrompt are public components in layout.tsx.
  */
 
 "use client";
 
 import { useState, useEffect } from "react";
-import { Navbar } from "@/components/brutalist/Navbar";
 import { ArticleTable } from "@/components/brutalist/ArticleTable";
 import { getArticles } from "@/lib/api/articles";
 import type { Article } from "@/types";
 
 export default function Home() {
   const [articles, setArticles] = useState<Article[]>([]);
-  const [currentPath, setCurrentPath] = useState("~/lordcasser");
   const [sortField, setSortField] = useState<string>("edited");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
@@ -28,7 +27,6 @@ export default function Home() {
           order: sortOrder,
         });
         setArticles(response.articles);
-        setCurrentPath(response.currentPath ? `~/lordcasser/${response.currentPath}` : "~/lordcasser");
       } catch (error) {
         console.error("Failed to fetch articles:", error);
         // Use mock data for static export preview
@@ -116,11 +114,8 @@ export default function Home() {
   
   return (
     <div className="min-h-screen">
-      {/* Navbar */}
-      <Navbar currentPath={currentPath} />
-      
-      {/* Main Content */}
-      <main className="flex-grow w-full bg-surface-lowest pt-20 px-0 overflow-x-auto">
+      {/* Main Content - Navbar is in layout.tsx */}
+      <main className="flex-grow w-full bg-surface-lowest px-0 overflow-x-auto">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <span className="text-outline font-mono">Loading...</span>

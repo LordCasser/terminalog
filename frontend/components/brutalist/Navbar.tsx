@@ -1,8 +1,9 @@
 /**
- * Navbar Component - TopAppBar
+ * Navbar Component - TopAppBar (Public Component)
  * 
- * Fixed navigation bar with:
- * - Logo/Path display (JetBrains Mono uppercase)
+ * Fixed navigation bar integrated in layout.tsx for all pages.
+ * Features:
+ * - Logo/Path display (~/lordcasser, JetBrains Mono uppercase)
  * - Navigation links (POSTS, ABOUTME)
  * - Search button (triggers focus on CommandPrompt)
  */
@@ -12,11 +13,7 @@
 import Link from "next/link";
 import { FOCUS_COMMAND_INPUT } from "@/components/command";
 
-interface NavbarProps {
-  currentPath?: string;
-}
-
-export function Navbar({ currentPath = "~/lordcasser" }: NavbarProps) {
+export function Navbar() {
   // Handle search icon click - focus command input
   const handleSearchClick = () => {
     window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
@@ -25,9 +22,9 @@ export function Navbar({ currentPath = "~/lordcasser" }: NavbarProps) {
   return (
     <header className="fixed top-0 w-full z-50 bg-surface text-primary-container font-mono uppercase tracking-tighter text-sm flex justify-between items-center px-6 py-4">
       <div className="flex items-center gap-6">
-        {/* Path Display - Keep uppercase */}
+        {/* Path Display - Fixed path ~/lordcasser */}
         <Link href="/" className="text-lg font-bold text-primary hover:text-secondary transition-colors">
-          {currentPath}
+          ~/lordcasser
         </Link>
         
         {/* Navigation Links - All uppercase */}

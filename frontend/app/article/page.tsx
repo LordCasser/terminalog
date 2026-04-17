@@ -3,15 +3,15 @@
  * 
  * Displays article content with Brutalist styling.
  * Uses query parameter for article path (compatible with static export).
+ * Navbar and CommandPrompt are public components in layout.tsx.
  */
 
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getArticleContent, getArticleTimeline, getArticleVersion } from "@/lib/api/articles";
-import { Navbar } from "@/components/brutalist";
+import { MarkdownRenderer } from "@/components/article/MarkdownRenderer";
 import type { Article, CommitInfo, VersionInfo, VersionHistoryEntry } from "@/types";
 
 function ArticleContent() {
@@ -117,21 +117,26 @@ To add visual "soul," we implement what we call **"Terminal Fog"**. This is the 
     );
   }
   
+  // Extract quote from content (first blockquote)
+  const extractQuote = (markdown: string): string => {
+    const match = markdown.match(/^> (.+)$/m);
+    return match ? match[1] : "";
+  };
+  
+  const quote = extractQuote(content);
+  
+  // Extract base path for image transformation
+  const basePath = decodedPath.replace(/\/[^\/]+\.md$/, '');
+  
   // Format date
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" });
   };
   
-  // Extract quote from content (first blockquote or first paragraph)
-  const quote = "We are not just building a blog; we are building a high-fidelity documentation of thought.";
-  
   return (
     <div className="min-h-screen">
-      {/* Navbar */}
-      <Navbar currentPath={`~/lordcasser/${decodedPath}`} />
-      
-      {/* Main Content */}
+      {/* Main Content - Navbar is in layout.tsx */}
       <main className="pt-24 pb-32 px-6 max-w-4xl mx-auto">
         {/* Post Header */}
         <section className="mb-16">
@@ -153,37 +158,17 @@ To add visual "soul," we implement what we call **"Terminal Fog"**. This is the 
             {article?.title?.toUpperCase() || "UNTITLED"}
           </h1>
           
-          {/* Quote Blockquote */}
-          <p className="font-mono text-lg text-primary max-w-2xl border-l-4 border-primary pl-6 py-2 italic bg-surface-container-low">
-            "{quote}"
-          </p>
+          {/* Quote Blockquote - only show if quote exists */}
+          {quote && (
+            <p className="font-mono text-lg text-primary max-w-2xl border-l-4 border-primary pl-6 py-2 italic bg-surface-container-low">
+              "{quote}"
+            </p>
+          )}
         </section>
         
-        {/* Content */}
-        <article className="space-y-12 text-on-surface-variant leading-relaxed">
-          {/* Simple Markdown Rendering */}
-          <div className="markdown-body">
-            {content.split("\n").map((line, i) => {
-              if (line.startsWith("## ")) {
-                return <h2 key={i} className="font-headline text-3xl font-bold text-secondary-fixed-dim mb-6">{line.replace("## ", "")}</h2>;
-              }
-              if (line.startsWith("- **")) {
-                const text = line.replace("- **", "").replace("**:", ":").replace("**", "");
-                return (
-                  <div key={i} className="flex items-start gap-4 mb-4">
-                    <span className="text-tertiary">➜</span>
-                    <span>
-                      {text.split(":").map((part, j) => (
-                        j === 0 ? <span key={j} className="text-primary font-bold">{part}</span> : <span key={j}>:{part}</span>
-                      ))}
-                    </span>
-                  </div>
-                );
-              }
-              if (line.trim() === "") return null;
-              return <p key={i} className="text-lg mb-4">{line}</p>;
-            })}
-          </div>
+        {/* Content - Use MarkdownRenderer */}
+        <article className="space-y-12">
+          <MarkdownRenderer content={content} basePath={basePath} />
           
           {/* EOF Section */}
           <section className="border-t border-surface-container pt-12">

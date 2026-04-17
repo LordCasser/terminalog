@@ -14,9 +14,13 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { SEARCH_MODAL_VISIBLE } from "@/components/command/CommandPrompt";
 
 // Custom event for showing search results modal
 export const SHOW_SEARCH_RESULTS_MODAL = "showSearchResultsModal";
+
+// Custom event for result selection (to avoid React callback error)
+export const SEARCH_RESULT_SELECTED = "searchResultSelected";
 
 // Search result item interface
 export interface SearchResultItem {
@@ -25,10 +29,9 @@ export interface SearchResultItem {
   lastModified?: string; // Date string (optional)
 }
 
-// Event detail interface (includes optional onSelect callback)
+// Event detail interface (no callback - use event instead)
 export interface SearchResultsEventDetail {
   results: SearchResultItem[];
-  onSelect?: (path: string) => void; // Navigation callback
 }
 
 export function SearchResultsModal() {
@@ -36,7 +39,6 @@ export function SearchResultsModal() {
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
-  const [onSelectCallback, setOnSelectCallback] = useState<((path: string) => void) | null>(null);
 
   // Manual close handler (clear timer)
   const handleClose = useCallback(() => {
@@ -47,16 +49,16 @@ export function SearchResultsModal() {
     setIsVisible(false);
     setResults([]);
     setSelectedIndex(0);
-    setOnSelectCallback(null);
+    // Notify CommandPrompt that modal is hidden
+    window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: false }));
   }, [timer]);
 
   // Handle result selection (Enter key or click)
+  // Dispatch event to let CommandPrompt handle navigation
   const handleSelect = useCallback((result: SearchResultItem) => {
-    if (onSelectCallback) {
-      onSelectCallback(result.path);
-    }
+    window.dispatchEvent(new CustomEvent(SEARCH_RESULT_SELECTED, { detail: result.path }));
     handleClose();
-  }, [onSelectCallback, handleClose]);
+  }, [handleClose]);
 
   // Listen for custom event to show modal
   useEffect(() => {
@@ -67,18 +69,17 @@ export function SearchResultsModal() {
         setSelectedIndex(0);
         setIsVisible(true);
         
-        // Store callback if provided
-        if (detail.onSelect) {
-          setOnSelectCallback(detail.onSelect);
-        }
+        // Notify CommandPrompt that modal is visible
+        window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: true }));
         
         // Start 10-second auto-close timer
         const autoCloseTimer = setTimeout(() => {
           setIsVisible(false);
           setResults([]);
           setSelectedIndex(0);
-          setOnSelectCallback(null);
           setTimer(null);
+          // Notify CommandPrompt that modal is hidden
+          window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: false }));
         }, 10000);
         
         setTimer(autoCloseTimer);
@@ -92,31 +93,41 @@ export function SearchResultsModal() {
   // Keyboard navigation handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      console.log("[SearchResultsModal] handleKeyDown triggered:", e.key, "isVisible:", isVisible);
       if (!isVisible) return;
       
       if (e.key === "ArrowDown") {
         e.preventDefault();
+        e.stopPropagation(); // Stop event propagation to prevent conflict with CommandPrompt
+        console.log("[SearchResultsModal] ArrowDown pressed, selectedIndex will change");
         setSelectedIndex(prev => 
           prev < results.length - 1 ? prev + 1 : prev
         );
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
+        e.stopPropagation();
+        console.log("[SearchResultsModal] ArrowUp pressed, selectedIndex will change");
         setSelectedIndex(prev => 
           prev > 0 ? prev - 1 : prev
         );
       } else if (e.key === "Enter") {
         e.preventDefault();
+        e.stopPropagation();
+        console.log("[SearchResultsModal] Enter pressed, selecting result");
         if (results[selectedIndex]) {
           handleSelect(results[selectedIndex]);
         }
       } else if (e.key === "Escape") {
         e.preventDefault();
+        e.stopPropagation();
+        console.log("[SearchResultsModal] Escape pressed, closing modal");
         handleClose();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    // Use capture phase to ensure this handler runs before CommandPrompt's window handler
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [isVisible, results, selectedIndex, handleSelect, handleClose]);
 
   if (!isVisible || results.length === 0) return null;

@@ -17,11 +17,14 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { SHOW_HELP_MODAL, SHOW_SEARCH_RESULTS_MODAL, SearchResultsEventDetail } from "@/components/modal";
+import { SHOW_HELP_MODAL, SHOW_SEARCH_RESULTS_MODAL, SEARCH_RESULT_SELECTED, SearchResultsEventDetail } from "@/components/modal";
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 
 // Custom event for search icon click
 export const FOCUS_COMMAND_INPUT = "focusCommandInput";
+
+// Custom event for modal visibility (to prevent keyboard conflict)
+export const SEARCH_MODAL_VISIBLE = "searchModalVisible";
 
 // Available commands for auto-completion
 const COMMANDS = ["search", "open", "cd", "help"];
@@ -62,6 +65,7 @@ type WebSocketMessage = CompletionResponse | SearchResponse | ErrorResponse;
 export function CommandPrompt() {
   const [input, setInput] = useState("");
   const [isFocused, setIsFocused] = useState(false);
+  const [searchModalVisible, setSearchModalVisible] = useState(false);
   // Initialize history from localStorage (lazy initialization)
   const [history, setHistory] = useState<string[]>(() => {
     try {
@@ -149,6 +153,27 @@ export function CommandPrompt() {
     window.addEventListener(FOCUS_COMMAND_INPUT, handleFocusEvent);
     return () => window.removeEventListener(FOCUS_COMMAND_INPUT, handleFocusEvent);
   }, []);
+
+  // Listen for search modal visibility changes
+  useEffect(() => {
+    const handleModalVisible = (e: CustomEvent<boolean>) => {
+      setSearchModalVisible(e.detail);
+    };
+
+    window.addEventListener(SEARCH_MODAL_VISIBLE, handleModalVisible as EventListener);
+    return () => window.removeEventListener(SEARCH_MODAL_VISIBLE, handleModalVisible as EventListener);
+  }, []);
+
+  // Listen for search result selection from SearchResultsModal
+  useEffect(() => {
+    const handleResultSelected = (e: CustomEvent<string>) => {
+      const path = e.detail;
+      router.push(`/article?path=${encodeURIComponent(path)}`);
+    };
+
+    window.addEventListener(SEARCH_RESULT_SELECTED, handleResultSelected as EventListener);
+    return () => window.removeEventListener(SEARCH_RESULT_SELECTED, handleResultSelected as EventListener);
+  }, [router]);
 
   // Global keyboard listener - focus input on any key press
   useEffect(() => {
@@ -269,6 +294,9 @@ export function CommandPrompt() {
 
   // Handle ArrowUp/ArrowDown for history navigation
   const handleHistoryNavigation = useCallback((e: React.KeyboardEvent) => {
+    // Don't navigate history when search modal is open
+    if (searchModalVisible) return;
+    
     if (e.key === "ArrowUp") {
       e.preventDefault();
       if (history.length > 0 && historyIndex < history.length - 1) {
@@ -287,7 +315,7 @@ export function CommandPrompt() {
         setInput("");
       }
     }
-  }, [history, historyIndex]);
+  }, [history, historyIndex, searchModalVisible]);
 
   // Handle keyboard events
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -319,7 +347,7 @@ export function CommandPrompt() {
           if (response.results.length === 1) {
             router.push(`/article?path=${encodeURIComponent(response.results[0].path)}`);
           } 
-          // Multiple results: show modal
+          // Multiple results: show modal (no callback - use event instead)
           else {
             const event = new CustomEvent<SearchResultsEventDetail>(
               SHOW_SEARCH_RESULTS_MODAL,
@@ -330,9 +358,6 @@ export function CommandPrompt() {
                     title: r.title,
                     lastModified: undefined, // TODO: get from backend
                   })),
-                  onSelect: (path: string) => {
-                    router.push(`/article?path=${encodeURIComponent(path)}`);
-                  },
                 },
               }
             );

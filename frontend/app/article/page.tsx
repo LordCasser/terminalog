@@ -167,7 +167,7 @@ To add visual "soul," we implement what we call **"Terminal Fog"**. This is the 
         </section>
         
         {/* Content - Use MarkdownRenderer */}
-        <article className="space-y-12">
+        <article className="space-y-12 text-on-surface-variant leading-relaxed">
           <MarkdownRenderer content={content} basePath={basePath} />
           
           {/* EOF Section */}

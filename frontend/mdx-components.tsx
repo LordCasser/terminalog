@@ -3,12 +3,15 @@ import type { MDXComponents } from 'mdx/types'
 /**
  * Global MDX Components Configuration
  * 
- * Defines custom styles for Markdown elements following Dracula Spectrum design system.
+ * Defines custom styles for Markdown elements following Dracula Spectrum design system,
+ * aligned with the article view prototype HTML.
  * - Headings: Space Grotesk font, secondary-fixed-dim color
- * - Body text: Inter font, text-lg size
- * - Code blocks: JetBrains Mono font, bg-surface-container-lowest
+ * - Body text: inherits from article container (text-on-surface-variant leading-relaxed)
+ * - Code blocks: wrapped in section with bg-surface-container-lowest, language tag top-right, p-8 padding
+ * - Inline code: JetBrains Mono, bg-surface-container-low, text-tertiary
  * - Blockquotes: JetBrains Mono font, border-l-4 border-primary
- * - Lists: JetBrains Mono font, with tertiary arrow symbols
+ * - Lists: JetBrains Mono font, space-y-4, with tertiary arrow symbols
+ * - Paragraphs: minimal styling, inherits color/leading from container
  */
 
 const components: MDXComponents = {
@@ -20,7 +23,7 @@ const components: MDXComponents = {
   ),
   
   h2: ({ children }) => (
-    <h2 className="font-headline text-3xl font-bold text-secondary-fixed-dim mb-6">
+    <h2 className="font-headline text-3xl font-bold text-secondary-fixed-dim">
       {children}
     </h2>
   ),
@@ -37,20 +40,37 @@ const components: MDXComponents = {
     </h4>
   ),
   
-  // Body text - Inter font, text-lg
+  // Body text - inherits color/leading from article container
   p: ({ children }) => (
-    <p className="text-lg text-on-surface-variant mb-4 leading-relaxed">
+    <p className="mb-4">
       {children}
     </p>
   ),
   
-  // Code blocks - JetBrains Mono font
-  pre: ({ children }) => (
-    <pre className="font-mono text-sm bg-surface-container-lowest text-on-surface p-4 rounded-none overflow-x-auto mb-6">
-      {children}
-    </pre>
-  ),
+  // Code blocks - wrapped in section with bg-surface-container-lowest, language tag, p-8
+  pre: ({ children, ...props }) => {
+    // Extract language from className
+    const className = (props as any)?.className || '';
+    const langMatch = /language-(\w+)/.exec(className);
+    const language = langMatch ? langMatch[1] : '';
+    
+    return (
+      <section className="bg-surface-container-lowest p-8 relative">
+        {language && (
+          <div className="absolute top-0 right-0 p-4 font-mono text-xs text-outline-variant">
+            {language}
+          </div>
+        )}
+        <pre className="font-mono text-sm overflow-x-auto text-on-surface leading-loose">
+          <code className={className}>
+            {children}
+          </code>
+        </pre>
+      </section>
+    );
+  },
   
+  // Inline code
   code: ({ children }) => (
     <code className="font-mono text-sm bg-surface-container-low text-tertiary px-2 py-0.5">
       {children}
@@ -64,21 +84,21 @@ const components: MDXComponents = {
     </blockquote>
   ),
   
-  // Lists - JetBrains Mono font, with tertiary arrow symbols
+  // Lists - JetBrains Mono font, space-y-4, with tertiary arrow symbols
   ul: ({ children }) => (
-    <ul className="font-mono text-base space-y-2 mb-6">
+    <ul className="space-y-4 font-mono mb-6">
       {children}
     </ul>
   ),
   
   ol: ({ children }) => (
-    <ol className="font-mono text-base space-y-2 mb-6 list-decimal list-inside">
+    <ol className="space-y-4 font-mono mb-6 list-decimal list-inside">
       {children}
     </ol>
   ),
   
   li: ({ children }) => (
-    <li className="text-on-surface-variant flex items-start gap-4">
+    <li className="flex items-start gap-4">
       <span className="text-tertiary">➜</span>
       <span>{children}</span>
     </li>

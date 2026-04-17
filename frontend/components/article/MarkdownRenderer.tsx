@@ -7,7 +7,7 @@
  * - Code syntax highlighting (rehype-highlight)
  * - Math formula rendering (remark-math + rehype-katex)
  * - Image path transformation (relative → API paths)
- * - Dracula Spectrum styling (consistent with mdx-components.tsx)
+ * - Dracula Spectrum styling (aligned with article view prototype HTML)
  * 
  * Usage:
  * <MarkdownRenderer content={markdownContent} basePath="tech/blog" />
@@ -33,31 +33,21 @@ interface MarkdownRendererProps {
  * Rules:
  * 1. External links (http/https): keep as-is
  * 2. Relative paths: convert to /api/assets/{basePath}/{imagePath}
- * 
- * @example
- * transformImagePath("./images/photo.png", "tech/blog")
- * // Returns: "/api/assets/tech/blog/images/photo.png"
  */
 function transformImagePath(src: string, basePath?: string): string {
-  // External links: keep as-is
   if (src.startsWith('http://') || src.startsWith('https://')) {
     return src;
   }
   
-  // Absolute path (relative to repo root)
   if (src.startsWith('/')) {
     return `/api/assets${src}`;
   }
   
-  // Relative path: convert to API path
   let normalizedPath = src;
-  
-  // Remove ./ prefix
   if (normalizedPath.startsWith('./')) {
     normalizedPath = normalizedPath.slice(2);
   }
   
-  // Combine basePath and image path
   const fullPath = basePath 
     ? `${basePath}/${normalizedPath}` 
     : normalizedPath;
@@ -80,7 +70,7 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
           ),
           
           h2: ({ children }) => (
-            <h2 className="font-headline text-3xl font-bold text-secondary-fixed-dim mb-6">
+            <h2 className="font-headline text-3xl font-bold text-secondary-fixed-dim">
               {children}
             </h2>
           ),
@@ -97,20 +87,39 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
             </h4>
           ),
           
-          // Body text - Inter font, text-lg
+          // Body text - inherits color/leading from article container
           p: ({ children }) => (
-            <p className="text-lg text-on-surface-variant mb-4 leading-relaxed">
+            <p className="mb-4">
               {children}
             </p>
           ),
           
-          // Code blocks - JetBrains Mono font
-          pre: ({ children }) => (
-            <pre className="font-mono text-sm bg-surface-container-lowest text-on-surface p-4 rounded-none overflow-x-auto mb-6">
-              {children}
-            </pre>
-          ),
+          // Code blocks - wrapped in section with bg-surface-container-lowest, language tag, p-8
+          pre: ({ children, ...props }) => {
+            // Extract language from code element's className
+            const childCode = Array.isArray(children) ? children[0] : children;
+            const codeProps = (childCode as any)?.props || {};
+            const className = codeProps.className || '';
+            const langMatch = /language-(\w+)/.exec(className);
+            const language = langMatch ? langMatch[1] : '';
+            
+            return (
+              <section className="bg-surface-container-lowest p-8 relative">
+                {language && (
+                  <div className="absolute top-0 right-0 p-4 font-mono text-xs text-outline-variant">
+                    {language}
+                  </div>
+                )}
+                <pre className="font-mono text-sm overflow-x-auto text-on-surface leading-loose">
+                  <code className={className}>
+                    {children}
+                  </code>
+                </pre>
+              </section>
+            );
+          },
           
+          // Inline code (no className) vs code block
           code: ({ className, children, ...props }) => {
             // Inline code (no className)
             if (!className) {
@@ -121,7 +130,7 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
               );
             }
             
-            // Code block (has className like language-xxx)
+            // Code block (has className like language-xxx) - rendered inside pre
             return (
               <code className={className} {...props}>
                 {children}
@@ -136,21 +145,21 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
             </blockquote>
           ),
           
-          // Lists - JetBrains Mono font, with tertiary arrow symbols
+          // Lists - JetBrains Mono font, space-y-4, with tertiary arrow symbols
           ul: ({ children }) => (
-            <ul className="font-mono text-base space-y-2 mb-6">
+            <ul className="space-y-4 font-mono mb-6">
               {children}
             </ul>
           ),
           
           ol: ({ children }) => (
-            <ol className="font-mono text-base space-y-2 mb-6 list-decimal list-inside">
+            <ol className="space-y-4 font-mono mb-6 list-decimal list-inside">
               {children}
             </ol>
           ),
           
           li: ({ children }) => (
-            <li className="text-on-surface-variant flex items-start gap-4">
+            <li className="flex items-start gap-4">
               <span className="text-tertiary">➜</span>
               <span>{children}</span>
             </li>
@@ -175,7 +184,6 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
           // Images - Transform paths
           img: ({ src, alt, ...props }) => {
             if (!src) return null;
-            // Ensure src is string (React img src can be string | Blob)
             const srcString = typeof src === 'string' ? src : '';
             const transformedSrc = transformImagePath(srcString, basePath);
             return (

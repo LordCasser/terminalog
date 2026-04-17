@@ -6,7 +6,7 @@
  * - GitHub Flavored Markdown support (remark-gfm)
  * - Code syntax highlighting (rehype-highlight)
  * - Math formula rendering (remark-math + rehype-katex)
- * - Image path transformation (relative → API paths)
+ * - Image path transformation (relative → /api/v1/assets/ paths)
  * - Dracula Spectrum styling (aligned with article view prototype HTML)
  * 
  * Usage:
@@ -30,12 +30,12 @@ interface MarkdownRendererProps {
 /**
  * Transform Markdown image paths to API resource paths
  * 
- * Rules:
+ * Rules (RESTful v1 API):
  * 1. External links (http/https): keep as-is
- * 2. Absolute paths (/...): convert to /api/assets{src}
+ * 2. Absolute paths (/...): convert to /api/v1/assets{src}
  * 3. Relative paths starting with .assets: strip .assets layer for cleaner API path
- *    e.g., "./.assets/images/photo.png" + basePath="guides" → "/api/assets/guides/images/photo.png"
- * 4. Other relative paths: convert to /api/assets/{basePath}/{imagePath}
+ *    e.g., "./.assets/images/photo.png" + basePath="guides" → "/api/v1/assets/guides/images/photo.png"
+ * 4. Other relative paths: convert to /api/v1/assets/{basePath}/{imagePath}
  */
 function transformImagePath(src: string, basePath?: string): string {
   // External links: keep as-is
@@ -43,9 +43,9 @@ function transformImagePath(src: string, basePath?: string): string {
     return src;
   }
   
-  // Absolute paths: add /api/assets prefix
+  // Absolute paths: add /api/v1/assets prefix
   if (src.startsWith('/')) {
-    return `/api/assets${src}`;
+    return `/api/v1/assets${src}`;
   }
   
   // Normalize relative path
@@ -55,8 +55,8 @@ function transformImagePath(src: string, basePath?: string): string {
   }
   
   // Special handling for .assets directory: strip the .assets layer
-  // This simplifies API path from /api/assets/guides/.assets/images/photo.png
-  // to /api/assets/guides/images/photo.png
+  // This simplifies API path from /api/v1/assets/guides/.assets/images/photo.png
+  // to /api/v1/assets/guides/images/photo.png
   if (normalizedPath.startsWith('.assets/')) {
     normalizedPath = normalizedPath.slice(8); // Remove ".assets/" prefix
   }
@@ -65,7 +65,7 @@ function transformImagePath(src: string, basePath?: string): string {
     ? `${basePath}/${normalizedPath}` 
     : normalizedPath;
   
-  return `/api/assets/${fullPath}`;
+  return `/api/v1/assets/${fullPath}`;
 }
 
 export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {

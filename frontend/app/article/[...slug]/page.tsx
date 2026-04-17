@@ -1,23 +1,26 @@
 /**
- * Article Detail Page
+ * Article Detail Page (Dynamic Route)
  * 
  * Displays article content with Brutalist styling.
- * Uses query parameter for article path (compatible with static export).
+ * RESTful routing: /article/{path} (path parameter, not query parameter)
+ * Uses Next.js catch-all route [...slug] to capture nested paths.
  * Navbar and CommandPrompt are public components in layout.tsx.
  */
 
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
 import { getArticleContent, getArticleTimeline, getArticleVersion } from "@/lib/api/articles";
 import { MarkdownRenderer } from "@/components/article/MarkdownRenderer";
 import type { Article, CommitInfo, VersionInfo, VersionHistoryEntry } from "@/types";
 
-function ArticleContent() {
-  const searchParams = useSearchParams();
-  const articlePath = searchParams.get("path") || "blog.md";
-  const decodedPath = decodeURIComponent(articlePath);
+export default function ArticlePage() {
+  // Get path from URL params (catch-all route)
+  // slug = ['guides', 'image-test.md'] → articlePath = 'guides/image-test.md'
+  const params = useParams();
+  const slug = params.slug as string[];
+  const articlePath = slug.join("/");
   
   const [article, setArticle] = useState<Article | null>(null);
   const [content, setContent] = useState<string>("");
@@ -31,16 +34,16 @@ function ArticleContent() {
     const fetchData = async () => {
       try {
         // Fetch article content
-        const articleResponse = await getArticleContent(decodedPath);
+        const articleResponse = await getArticleContent(articlePath);
         setArticle(articleResponse.article);
         setContent(articleResponse.content || "");
         
         // Fetch timeline
-        const timelineResponse = await getArticleTimeline(decodedPath);
+        const timelineResponse = await getArticleTimeline(articlePath);
         setCommits(timelineResponse.commits);
         
         // Fetch version info
-        const versionResponse = await getArticleVersion(decodedPath);
+        const versionResponse = await getArticleVersion(articlePath);
         setVersionInfo(versionResponse.version);
         setVersionHistory(versionResponse.history);
       } catch (error) {
@@ -57,12 +60,12 @@ function ArticleContent() {
     };
     
     fetchData();
-  }, [decodedPath]);
+  }, [articlePath]);
   
   // Mock data for static export preview
   const mockArticle: Article = {
-    path: decodedPath,
-    name: decodedPath.split("/").pop() || "blog.md",
+    path: articlePath,
+    name: articlePath.split("/").pop() || "blog.md",
     title: "The Brutalist Compiler",
     type: "file",
     createdAt: "2024-05-18",
@@ -126,7 +129,7 @@ To add visual "soul," we implement what we call **"Terminal Fog"**. This is the 
   const quote = extractQuote(content);
   
   // Extract base path for image transformation
-  const basePath = decodedPath.replace(/\/[^\/]+\.md$/, '');
+  const basePath = articlePath.replace(/\/[^\/]+\.md$/, '');
   
   // Format date
   const formatDate = (dateStr: string) => {
@@ -208,17 +211,5 @@ To add visual "soul," we implement what we call **"Terminal Fog"**. This is the 
         </article>
       </main>
     </div>
-  );
-}
-
-export default function ArticlePage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="text-outline font-mono">Loading...</span>
-      </div>
-    }>
-      <ArticleContent />
-    </Suspense>
   );
 }

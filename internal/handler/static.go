@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // StaticHandler handles static file serving for the frontend.
@@ -142,6 +144,26 @@ func getContentType(path string) string {
 		return "font/woff2"
 	}
 	return "application/octet-stream"
+}
+
+// ServeResources handles static resource requests for /api/v1/resources/*.
+// This route is used for serving frontend compiled resources (like _next/static/chunks).
+// It strips the /api/v1/resources prefix and serves from the embedded static directory.
+func (h *StaticHandler) ServeResources(w http.ResponseWriter, r *http.Request) {
+	// Get the path from chi wildcard parameter
+	// Path will be like "_next/static/chunks/main.js"
+	path := chi.URLParam(r, "*")
+
+	// Clean path
+	path = strings.TrimPrefix(path, "/")
+
+	// Try to serve the file directly
+	if h.serveFile(w, r, path) {
+		return
+	}
+
+	// File not found
+	http.NotFound(w, r)
 }
 
 // SetFS sets the filesystem for the handler (used for testing).

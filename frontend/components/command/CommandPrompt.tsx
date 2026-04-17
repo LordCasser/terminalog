@@ -193,7 +193,8 @@ export function CommandPrompt() {
   useEffect(() => {
     const handleResultSelected = (e: CustomEvent<string>) => {
       const path = e.detail;
-      router.push(`/article?path=${encodeURIComponent(path)}`);
+      // RESTful routing: /article/{path} (path parameter)
+      router.push(`/article/${path}`);
     };
 
     window.addEventListener(SEARCH_RESULT_SELECTED, handleResultSelected as EventListener);
@@ -418,7 +419,8 @@ export function CommandPrompt() {
           if (response.results.length > 0) {
             // Single result: directly navigate
             if (response.results.length === 1) {
-              router.push(`/article?path=${encodeURIComponent(response.results[0].path)}`);
+              // RESTful routing: /article/{path} (path parameter)
+              router.push(`/article/${response.results[0].path}`);
             } 
             // Multiple results: show modal
             else {
@@ -451,7 +453,8 @@ export function CommandPrompt() {
     
     if (trimmedCmd.startsWith("open ")) {
       const article = cmd.trim().slice(5);
-      router.push(`/article?path=${encodeURIComponent(article)}`);
+      // RESTful routing: /article/{path} (path parameter)
+      router.push(`/article/${article}`);
       return;
     }
     

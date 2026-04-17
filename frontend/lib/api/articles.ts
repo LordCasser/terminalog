@@ -2,6 +2,7 @@
  * Articles API
  * 
  * Handles fetching article list, article content, and timeline.
+ * RESTful v1 API paths (see docs/api-spec.md)
  */
 
 import { apiClient } from './client';
@@ -15,6 +16,7 @@ interface GetArticlesParams {
 
 /**
  * Get list of articles in a directory
+ * GET /api/v1/articles
  */
 export async function getArticles(params: GetArticlesParams = {}): Promise<ArticleListResponse> {
   const query = new URLSearchParams();
@@ -23,33 +25,37 @@ export async function getArticles(params: GetArticlesParams = {}): Promise<Artic
   if (params.sort) query.set('sort', params.sort);
   if (params.order) query.set('order', params.order);
   
-  return apiClient.get<ArticleListResponse>(`/api/articles?${query}`);
+  return apiClient.get<ArticleListResponse>(`/api/v1/articles?${query}`);
 }
 
 /**
  * Get article content by path
+ * GET /api/v1/articles/{path}
  */
 export async function getArticleContent(path: string): Promise<ArticleResponse> {
-  return apiClient.get<ArticleResponse>(`/api/articles/${encodeURIComponent(path)}`);
+  return apiClient.get<ArticleResponse>(`/api/v1/articles/${encodeURIComponent(path)}`);
 }
 
 /**
  * Get article raw content (Markdown text)
+ * GET /api/v1/articles/{path}
  */
 export async function getArticleRaw(path: string): Promise<string> {
-  return apiClient.getText(`/api/articles/${encodeURIComponent(path)}`);
+  return apiClient.getText(`/api/v1/articles/${encodeURIComponent(path)}`);
 }
 
 /**
  * Get article Git timeline (commit history)
+ * GET /api/v1/articles/{path}/timeline
  */
 export async function getArticleTimeline(path: string): Promise<{ commits: CommitInfo[] }> {
-  return apiClient.get(`/api/articles/${encodeURIComponent(path)}/timeline`);
+  return apiClient.get(`/api/v1/articles/${encodeURIComponent(path)}/timeline`);
 }
 
 /**
  * Get article version info
+ * GET /api/v1/articles/{path}/version
  */
 export async function getArticleVersion(path: string): Promise<{ version: VersionInfo; history: VersionHistoryEntry[] }> {
-  return apiClient.get(`/api/articles/${encodeURIComponent(path)}/version`);
+  return apiClient.get(`/api/v1/articles/${encodeURIComponent(path)}/version`);
 }

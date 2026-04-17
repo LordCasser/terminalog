@@ -2,6 +2,7 @@
  * Tree API
  * 
  * Handles fetching directory tree structure.
+ * RESTful v1 API path: GET /api/v1/tree
  */
 
 import { apiClient } from './client';
@@ -17,8 +18,9 @@ interface TreeResponse {
 
 /**
  * Get directory tree structure
+ * GET /api/v1/tree?dir={dir}
  */
 export async function getTree(params: GetTreeParams = {}): Promise<TreeResponse> {
   const query = params.dir ? `?dir=${encodeURIComponent(params.dir)}` : '';
-  return apiClient.get<TreeResponse>(`/api/tree${query}`);
+  return apiClient.get<TreeResponse>(`/api/v1/tree${query}`);
 }

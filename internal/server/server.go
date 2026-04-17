@@ -116,29 +116,42 @@ func (s *Server) setupRoutes() {
 		r.Get("/status", s.Handlers.Health.Status)
 	}
 
-	// API routes
-	r.Route("/api", func(r chi.Router) {
-		// Articles API (use wildcard to match nested paths)
+	// API routes (RESTful v1)
+	// See docs/api-spec.md for complete API specification
+	r.Route("/api/v1", func(r chi.Router) {
+		// Articles API
+		// GET /api/v1/articles - list articles
+		// GET /api/v1/articles/search - search articles (merged from /api/search)
+		// GET /api/v1/articles/{path} - get article content
+		// GET /api/v1/articles/{path}/timeline - get article timeline
+		// GET /api/v1/articles/{path}/version - get article version
 		r.Get("/articles", s.Handlers.Article.List)
+		r.Get("/articles/search", s.Handlers.Search.Search)
 		r.Get("/articles/*", s.Handlers.Article.HandleArticleRequest)
 
 		// Tree API
 		r.Get("/tree", s.Handlers.Tree.Get)
 
-		// Search API
-		r.Get("/search", s.Handlers.Search.Search)
-
-		// Assets API (use wildcard to match nested paths)
+		// Assets API (images from Git repository)
 		r.Get("/assets/*", s.Handlers.Asset.Get)
 
-		// About Me API (v1.2)
+		// Special Pages API
+		// GET /api/v1/special/aboutme - About Me page content
 		if s.Handlers.AboutMe != nil {
-			r.Get("/aboutme", s.Handlers.AboutMe.Get)
+			r.Get("/special/aboutme", s.Handlers.AboutMe.Get)
 		}
 
-		// Config API (v1.5) - returns frontend configuration
+		// Settings API (frontend configuration)
+		// GET /api/v1/settings - returns frontend settings
 		if s.Handlers.Config != nil {
-			r.Get("/config", s.Handlers.Config.Get)
+			r.Get("/settings", s.Handlers.Config.Get)
+		}
+
+		// Resources API (frontend static resources like _next/static)
+		// In production, these are embedded in the binary
+		// In debug mode, frontend runs separately
+		if !s.debug && s.Handlers.Static != nil {
+			r.Get("/resources/*", s.Handlers.Static.ServeResources)
 		}
 	})
 

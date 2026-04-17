@@ -8,6 +8,7 @@
  * - Sortable headers (click to sort)
  * - Hover highlight
  * - File type icons
+ * - RESTful routing: /article/{path} (path parameter, not query parameter)
  */
 
 "use client";
@@ -168,7 +169,7 @@ export function ArticleTable({
               {/* Filename */}
               <td className="px-6 py-5 whitespace-nowrap">
                 <Link 
-                  href={article.type === "dir" ? `/?dir=${article.path}` : `/article?path=${encodeURIComponent(article.path)}`}
+                  href={article.type === "dir" ? `/?dir=${article.path}` : `/article/${article.path}`}
                   className="flex items-center gap-3 font-bold transition-colors"
                 >
                   <span className={`material-symbols-outlined text-[18px] ${getIconColor(article)}`}>

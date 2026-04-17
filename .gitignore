@@ -1,0 +1,49 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# Build artifacts
+dist/
+out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config files (keep example)
+config.toml
+!configs/config.toml.example
+
+# Frontend build cache
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# Log files
+*.log
+
+# Content directory (user specific)
+content/

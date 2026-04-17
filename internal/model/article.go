@@ -1,0 +1,159 @@
+// Package model defines the data structures used throughout the application.
+package model
+
+import "time"
+
+// Article represents a blog article metadata.
+type Article struct {
+	// Path is the file path relative to the repository root (e.g., "tech/go-best-practices.md").
+	Path string `json:"path"`
+
+	// Title is the article title extracted from the filename (without .md extension).
+	Title string `json:"title"`
+
+	// CreatedAt is the timestamp of the first commit that created this file.
+	CreatedAt time.Time `json:"createdAt"`
+
+	// CreatedBy is the author name of the first commit.
+	CreatedBy string `json:"createdBy"`
+
+	// EditedAt is the timestamp of the last commit that modified this file.
+	EditedAt time.Time `json:"editedAt"`
+
+	// EditedBy is the author name of the last commit.
+	EditedBy string `json:"editedBy"`
+
+	// Contributors is a list of all author names who have committed changes to this file.
+	Contributors []string `json:"contributors"`
+}
+
+// ArticleDetail represents an article with its content.
+type ArticleDetail struct {
+	Article
+
+	// Content is the raw Markdown content of the article.
+	Content string `json:"content"`
+}
+
+// CommitInfo represents a single Git commit information.
+type CommitInfo struct {
+	// Hash is the short commit hash (7 characters).
+	Hash string `json:"hash"`
+
+	// Author is the commit author name.
+	Author string `json:"author"`
+
+	// Timestamp is the commit timestamp.
+	Timestamp time.Time `json:"timestamp"`
+
+	// Message is the commit message.
+	Message string `json:"message"`
+}
+
+// NodeType represents the type of a tree node.
+type NodeType string
+
+const (
+	// NodeTypeDir indicates a directory.
+	NodeTypeDir NodeType = "dir"
+
+	// NodeTypeFile indicates a file.
+	NodeTypeFile NodeType = "file"
+)
+
+// TreeNode represents a node in the directory tree structure.
+type TreeNode struct {
+	// Name is the directory or file name.
+	Name string `json:"name"`
+
+	// Path is the full path relative to the repository root.
+	Path string `json:"path"`
+
+	// Type indicates whether this is a directory or file.
+	Type NodeType `json:"type"`
+
+	// Children contains child nodes (only for directories).
+	Children []*TreeNode `json:"children,omitempty"`
+}
+
+// SearchResult represents a search result.
+type SearchResult struct {
+	// Path is the file path relative to the repository root.
+	Path string `json:"path"`
+
+	// Title is the article title.
+	Title string `json:"title"`
+
+	// MatchedTitle is the title with matched portion highlighted (for future use).
+	MatchedTitle string `json:"matchedTitle"`
+}
+
+// FileHistory represents the complete Git history of a file.
+type FileHistory struct {
+	// FirstCommit is the commit that first created this file.
+	FirstCommit CommitInfo `json:"firstCommit"`
+
+	// LastCommit is the most recent commit that modified this file.
+	LastCommit CommitInfo `json:"lastCommit"`
+
+	// AllCommits is the list of all commits involving this file, ordered by time descending.
+	AllCommits []CommitInfo `json:"allCommits"`
+
+	// Contributors is the list of all unique author names.
+	Contributors []string `json:"contributors"`
+}
+
+// User represents a user for authentication.
+type User struct {
+	// Username is the user's login name.
+	Username string `json:"username"`
+
+	// PasswordHash is the bcrypt hashed password.
+	PasswordHash string `json:"-"`
+}
+
+// SortField represents the field to sort by.
+type SortField string
+
+const (
+	// SortCreated sorts by creation time (first commit).
+	SortCreated SortField = "created"
+
+	// SortEdited sorts by last edit time (last commit).
+	SortEdited SortField = "edited"
+)
+
+// SortOrder represents the sort direction.
+type SortOrder string
+
+const (
+	// OrderAsc sorts in ascending order (oldest first).
+	OrderAsc SortOrder = "asc"
+
+	// OrderDesc sorts in descending order (newest first).
+	OrderDesc SortOrder = "desc"
+)
+
+// ParseSortField parses a string into SortField, defaulting to SortEdited.
+func ParseSortField(s string) SortField {
+	switch s {
+	case "created":
+		return SortCreated
+	case "edited":
+		return SortEdited
+	default:
+		return SortEdited
+	}
+}
+
+// ParseSortOrder parses a string into SortOrder, defaulting to OrderDesc.
+func ParseSortOrder(s string) SortOrder {
+	switch s {
+	case "asc":
+		return OrderAsc
+	case "desc":
+		return OrderDesc
+	default:
+		return OrderDesc
+	}
+}

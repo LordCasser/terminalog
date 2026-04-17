@@ -1,0 +1,51 @@
+# Terminalog Configuration File
+# 
+# This is an example configuration file.
+# Copy this file to config.toml and customize it.
+
+[blog]
+# Path to your Git repository containing blog content.
+# This directory must be a Git repository (initialized with git init).
+# All Markdown files (.md) in this directory will be treated as blog articles.
+content_dir = "./content"
+
+[server]
+# Server host address (default: 0.0.0.0 for all interfaces)
+host = "0.0.0.0"
+
+# Server port (default: 8080)
+port = 8080
+
+[auth]
+# Users for Git push authentication.
+# When you push new content to the blog, you need to authenticate.
+# 
+# Password can be either:
+# 1. Plain text (will be hashed on first run) - easier for initial setup
+# 2. bcrypt hash (starts with $2a$, $2b$, or $2y$) - more secure
+#
+# On first run, if no users are configured, a default admin user
+# will be generated with a random password, which will be printed
+# to the console. You should change this password in config.toml.
+
+users = [
+  # Example user with plain text password (will be hashed on startup)
+  # { username = "admin", password = "your-password" },
+  
+  # Example user with bcrypt hashed password
+  # { username = "admin", password = "$2a$10$..." },
+]
+
+# Example configuration:
+# 
+# [blog]
+# content_dir = "/home/user/my-blog"
+# 
+# [server]
+# host = "127.0.0.1"
+# port = 3000
+# 
+# [auth]
+# users = [
+#   { username = "writer", password = "my-secure-password" },
+# ]

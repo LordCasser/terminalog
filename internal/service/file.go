@@ -16,6 +16,10 @@ import (
 // Files starting with this prefix are reserved for special purposes (e.g., _ABOUTME.md).
 const SpecialFilePrefix = "_"
 
+// AssetsDirName is the name of the assets directory that should be excluded from article lists.
+// Assets directories are hidden directories for storing images and other static resources.
+const AssetsDirName = ".assets"
+
 // FileService provides file system operations.
 type FileService struct {
 	// baseDir is the absolute path to the content directory.
@@ -67,6 +71,14 @@ func (s *FileService) ScanMarkdownFiles(ctx context.Context, dir string) ([]stri
 		if strings.Contains(path, "/.git/") || d.Name() == ".git" {
 			if d.IsDir() {
 				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Skip .assets directory (hidden assets storage)
+		if d.Name() == AssetsDirName {
+			if d.IsDir() {
+				return filepath.SkipDir // Skip entire .assets directory
 			}
 			return nil
 		}
@@ -221,6 +233,11 @@ func (s *FileService) GetDirectoryTree(ctx context.Context, dir string) (*model.
 	for _, entry := range entries {
 		// Skip .git directory
 		if entry.Name() == ".git" {
+			continue
+		}
+
+		// Skip .assets directory (hidden assets storage)
+		if entry.Name() == AssetsDirName {
 			continue
 		}
 

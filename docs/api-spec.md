@@ -992,14 +992,19 @@ function transformImagePath(src: string, basePath: string): string {
     normalized = normalized.slice(2);
   }
   
+  // .assets 目录特殊处理：去除 .assets 层级，简化 API 路径
+  if (normalized.startsWith('.assets/')) {
+    normalized = normalized.slice(8); // Remove ".assets/" prefix
+  }
+  
   const fullPath = basePath ? `${basePath}/${normalized}` : normalized;
   return `/api/assets/${fullPath}`;
 }
 
 // 使用示例
-// Markdown: ![](./images/photo.png)
-// basePath: "tech/blog"
-// 转换后: /api/assets/tech/blog/images/photo.png
+// Markdown: ![](./.assets/images/photo.png)
+// basePath: "guides"
+// 转换后: /api/assets/guides/images/photo.png（去除.assets层级）
 ```
 
 ---

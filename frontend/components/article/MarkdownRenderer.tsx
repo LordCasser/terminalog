@@ -32,20 +32,33 @@ interface MarkdownRendererProps {
  * 
  * Rules:
  * 1. External links (http/https): keep as-is
- * 2. Relative paths: convert to /api/assets/{basePath}/{imagePath}
+ * 2. Absolute paths (/...): convert to /api/assets{src}
+ * 3. Relative paths starting with .assets: strip .assets layer for cleaner API path
+ *    e.g., "./.assets/images/photo.png" + basePath="guides" → "/api/assets/guides/images/photo.png"
+ * 4. Other relative paths: convert to /api/assets/{basePath}/{imagePath}
  */
 function transformImagePath(src: string, basePath?: string): string {
+  // External links: keep as-is
   if (src.startsWith('http://') || src.startsWith('https://')) {
     return src;
   }
   
+  // Absolute paths: add /api/assets prefix
   if (src.startsWith('/')) {
     return `/api/assets${src}`;
   }
   
+  // Normalize relative path
   let normalizedPath = src;
   if (normalizedPath.startsWith('./')) {
     normalizedPath = normalizedPath.slice(2);
+  }
+  
+  // Special handling for .assets directory: strip the .assets layer
+  // This simplifies API path from /api/assets/guides/.assets/images/photo.png
+  // to /api/assets/guides/images/photo.png
+  if (normalizedPath.startsWith('.assets/')) {
+    normalizedPath = normalizedPath.slice(8); // Remove ".assets/" prefix
   }
   
   const fullPath = basePath 

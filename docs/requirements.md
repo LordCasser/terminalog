@@ -95,25 +95,31 @@ Terminalog 是一个模拟终端风格的现代化 Blog 系统，采用单文件
 
 #### 3.1.3 图片处理规则
 
-**图片存储位置**：图片可存放在 Git 仓库中，与 Markdown 文件同目录或子目录。
+**图片存储位置**：图片存放在 `.assets` 隐藏目录中（与 Markdown 文件同目录或子目录）。`.assets` 目录在文章索引时被排除，不会出现在文章列表中。
 
 **图片路径处理**：
 
 | 图片类型 | 处理方式 |
 |---------|---------|
-| 相对路径图片（如 `./images/photo.png`） | 前端渲染时，将路径转换为后端 API 访问路径，从 Git 仓库读取图片资源 |
+| 相对路径图片（如 `./.assets/images/photo.png`） | 前端渲染时去除 `.assets` 层级，转换为 `/api/assets/{basePath}/images/photo.png` |
 | 外部链接图片（如 `https://cdn.example.com/img.png`） | 保留原始格式，直接加载外部资源 |
 
 **图片访问流程**：
 ```
-Markdown: ![](./images/photo.png)
-    ↓ 前端渲染时转换
-前端请求: /api/assets/articles/xxx/images/photo.png
+文章路径: guides/image-test.md
+图片引用: ![](./.assets/images/photo.png)
+    ↓ 前端渲染时转换（去除.assets层级）
+前端请求: /api/assets/guides/images/photo.png
     ↓ 后端处理
-后端读取: Git 仓库中对应路径的图片文件
+后端读取: Git 仓库中 guides/.assets/images/photo.png
     ↓ 返回
 返回图片二进制数据
 ```
+
+**`.assets` 目录规则**：
+- 目录名必须为 `.assets`（隐藏目录，以点开头）
+- 可放置在文章根目录或任意子目录下
+- 文章索引时自动排除 `.assets` 目录，不显示在文章列表中
 
 #### 3.1.4 特殊文件处理
 

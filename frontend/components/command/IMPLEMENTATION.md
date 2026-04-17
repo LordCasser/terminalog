@@ -20,10 +20,8 @@ CommandPrompt 是终端风格的命令输入组件，固定在页面底部，提
 - 导航栏搜索icon点击触发 `FOCUS_COMMAND_INPUT` 自定义事件
 - CommandPrompt监听事件并聚焦输入框
 
-### 4. 基本命令解析
-- `help`: 显示可用命令列表
-- `list` / `ls`: 跳转到主页
-- `search <query>`: 搜索功能（待实现）
+### 4. 核心命令解析
+- `search <query>`: 搜索功能（跳转到搜索页面）
 - `open <article>`: 打开指定文章
 - `cd <path>`: 跳转到指定目录
 
@@ -63,13 +61,21 @@ useEffect(() => {
 const executeCommand = useCallback((cmd: string) => {
   const trimmedCmd = cmd.trim().toLowerCase();
   
-  if (trimmedCmd === "help") {
-    console.log("Available commands: help, list, search, open, cd");
+  if (trimmedCmd.startsWith("search ")) {
+    const query = cmd.trim().slice(7);
+    router.push(`/?search=${encodeURIComponent(query)}`);
     return;
   }
   
-  if (trimmedCmd === "list" || trimmedCmd === "ls") {
-    router.push("/");
+  if (trimmedCmd.startsWith("open ")) {
+    const article = cmd.trim().slice(5);
+    router.push(`/article?path=${encodeURIComponent(article)}`);
+    return;
+  }
+  
+  if (trimmedCmd.startsWith("cd ")) {
+    const path = cmd.trim().slice(3);
+    router.push(`/?dir=${encodeURIComponent(path)}`);
     return;
   }
   
@@ -95,7 +101,6 @@ const executeCommand = useCallback((cmd: string) => {
 
 ## 未来扩展
 
-- 搜索功能实现（`search <query>`）
 - 命令历史记录（上下键导航）
 - 自动补全功能
-- 命令帮助系统
+- Tab补全路径和文章名

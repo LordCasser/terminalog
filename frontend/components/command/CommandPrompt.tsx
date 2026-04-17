@@ -7,7 +7,7 @@
  * - Command input with blinking cursor
  * - Global keyboard focus (press any key to focus)
  * - Search icon click focus
- * - Basic command parsing (help, list, search, open, cd)
+ * - Core commands: search, open, cd
  */
 
 "use client";
@@ -61,20 +61,9 @@ export function CommandPrompt() {
     const trimmedCmd = cmd.trim().toLowerCase();
     
     // Parse command
-    if (trimmedCmd === "help") {
-      console.log("Available commands: help, list, search <query>, open <article>, cd <path>");
-      return;
-    }
-    
-    if (trimmedCmd === "list" || trimmedCmd === "ls") {
-      router.push("/");
-      return;
-    }
-    
     if (trimmedCmd.startsWith("search ")) {
       const query = cmd.trim().slice(7);
-      // TODO: Implement search functionality
-      console.log(`Searching for: ${query}`);
+      router.push(`/?search=${encodeURIComponent(query)}`);
       return;
     }
     

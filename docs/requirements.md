@@ -1,8 +1,8 @@
 # Terminalog - 原始需求文档
 
-> 文档版本：v1.2
+> 文档版本：v1.3
 > 创建日期：2026-04-15
-> 最后更新：2026-04-16
+> 最后更新：2026-04-17
 > 项目名称：Terminalog（Terminal + Blog）
 > 状态：✅ 需求 v1.2 对齐完成（Design v1.1 → v1.2 升级）
 
@@ -478,6 +478,10 @@ server {
 # 支持相对路径和绝对路径
 content_dir = "./content"
 
+# Blog 属主名称（显示在导航栏路径中，如 ~/lordcasser）
+# 默认值：lordcasser
+owner = "lordcasser"
+
 [auth]
 # Git 用户认证列表
 # 如果不存在，系统首次启动时会自动生成 admin 用户
@@ -496,6 +500,7 @@ password = "custom-password-123"
 | 配置项 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
 | `blog.content_dir` | string | 是 | Blog 内容目录，也是 Git 仓库根目录 |
+| `blog.owner` | string | 否 | Blog 属主名称，显示在导航栏路径中（如 `~/lordcasser`），默认值 `lordcasser` |
 | `auth.users` | array | 否 | 用户认证列表，为空时自动生成 admin 用户 |
 | `auth.users[].username` | string | 是 | 用户名 |
 | `auth.users[].password` | string | 是 | 密码 |

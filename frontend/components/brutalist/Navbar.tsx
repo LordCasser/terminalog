@@ -3,15 +3,17 @@
  * 
  * Fixed navigation bar integrated in layout.tsx for all pages.
  * Features:
- * - Logo/Path display (~/lordcasser, JetBrains Mono uppercase)
+ * - Logo/Path display (~/owner/currentDir, JetBrains Mono uppercase)
  * - Navigation links (POSTS, ABOUTME)
  * - Search button (triggers focus on CommandPrompt)
+ * - Path sync with CommandPrompt via TerminalConfig context
  */
 
 "use client";
 
 import Link from "next/link";
 import { FOCUS_COMMAND_INPUT } from "@/components/command";
+import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 
 export function Navbar() {
   // Handle search icon click - focus command input
@@ -19,12 +21,15 @@ export function Navbar() {
     window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
   };
 
+  // Get owner and currentDir from context
+  const { owner, currentDir } = useTerminalConfig();
+
   return (
     <header className="fixed top-0 w-full z-50 bg-surface text-primary-container font-mono uppercase tracking-tighter text-sm flex justify-between items-center px-6 py-4">
       <div className="flex items-center gap-6">
-        {/* Path Display - Fixed path ~/lordcasser */}
+        {/* Path Display - Dynamic path ~/{owner}/{currentDir} */}
         <Link href="/" className="text-lg font-bold text-primary hover:text-secondary transition-colors">
-          ~/lordcasser
+          ~/{owner}{currentDir ? `/${currentDir}` : ""}
         </Link>
         
         {/* Navigation Links - All uppercase */}

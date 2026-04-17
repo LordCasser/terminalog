@@ -137,7 +137,8 @@ func main() {
 		Search:  handler.NewSearchHandler(articleSvc),
 		Tree:    handler.NewTreeHandler(articleSvc),
 		Health:  healthHandler,
-		AboutMe: handler.NewAboutMeHandler(fileSvc), // v1.2
+		AboutMe: handler.NewAboutMeHandler(fileSvc),       // v1.2
+		Config:  handler.NewConfigHandler(cfg.GetOwner()), // v1.5
 	}
 
 	// Create HTTP server

@@ -6,12 +6,14 @@
  * - Displays all available commands with descriptions
  * - 3-second auto-close timer
  * - Manual close via right-top 'x' button
+ * - Enter key to close
  * - Dracula Spectrum styling with Glass effect
+ * - Width: max-w-xl (ensures each command description fits in one line)
  */
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 // Custom event for showing help modal
 export const SHOW_HELP_MODAL = "showHelpModal";
@@ -29,6 +31,15 @@ const COMMANDS_INFO = [
 export function HelpModal() {
   const [isVisible, setIsVisible] = useState(false);
   const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
+
+  // Manual close handler (clear timer)
+  const handleClose = useCallback(() => {
+    if (timer) {
+      clearTimeout(timer);
+      setTimer(null);
+    }
+    setIsVisible(false);
+  }, [timer]);
 
   // Listen for custom event to show modal
   useEffect(() => {
@@ -48,14 +59,17 @@ export function HelpModal() {
     return () => window.removeEventListener(SHOW_HELP_MODAL, handleShowModal);
   }, []);
 
-  // Manual close handler (clear timer)
-  const handleClose = () => {
-    if (timer) {
-      clearTimeout(timer);
-      setTimer(null);
-    }
-    setIsVisible(false);
-  };
+  // Enter key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isVisible && e.key === "Enter") {
+        handleClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isVisible, handleClose]);
 
   if (!isVisible) return null;
 
@@ -68,7 +82,7 @@ export function HelpModal() {
       />
       
       {/* Modal Content - Glass Effect */}
-      <div className="relative max-w-md w-full mx-4 bg-surface-container-high/42 backdrop-blur-lg border border-primary/25 shadow-2xl">
+      <div className="relative max-w-xl w-full mx-4 bg-surface-container-high/42 backdrop-blur-lg border border-primary/25 shadow-2xl">
         {/* Header with close button */}
         <div className="flex items-center justify-between p-4 border-b border-surface-container-highest">
           <h2 className="font-mono text-sm uppercase tracking-tighter text-secondary">
@@ -111,7 +125,7 @@ export function HelpModal() {
         {/* Footer hint */}
         <div className="p-4 border-t border-surface-container-highest text-center">
           <span className="font-mono text-xs text-on-surface-variant">
-            Auto-closes in 3 seconds or click × to close
+            Auto-closes in 3 seconds, press Enter or click × to close
           </span>
         </div>
       </div>

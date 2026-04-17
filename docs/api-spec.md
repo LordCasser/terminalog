@@ -1,9 +1,9 @@
 # Terminalog - API 接口文档
 
-> 文档版本：v1.4
+> 文档版本：v1.5
 > 创建日期：2026-04-15
 > 最后更新：2026-04-17
-> 基于需求文档：requirements.md v1.4
+> 基于需求文档：requirements.md v1.3
 > 关联文档：frontend-architecture.md, backend-architecture.md, architecture.md
 
 ---
@@ -461,6 +461,38 @@ Content-Length: 12345
 |--------|------|------|
 | 404 | `"Asset not found"` | 资源不存在 |
 | 403 | `"Access denied"` | 访问被拒绝（路径非法） |
+
+---
+
+### 3.5 配置 API (v1.5新增)
+
+---
+
+#### 3.5.1 获取前端配置
+
+**端点**：`GET /api/config`
+
+**描述**：获取前端可访问的配置信息（如Blog属主名称等）
+
+**认证**：无
+
+**请求示例**：
+
+```bash
+curl http://localhost:8080/api/config
+```
+
+**响应示例（200 OK）**：
+
+```json
+{
+  "owner": "lordcasser"
+}
+```
+
+**说明**：
+- `owner`：Blog属主名称，显示在导航栏路径中（如 `~/lordcasser`）
+- 仅返回前端需要的配置项，敏感配置（如用户认证信息）不返回
 
 ---
 

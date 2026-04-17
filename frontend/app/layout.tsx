@@ -3,6 +3,7 @@ import "./globals.css";
 import { Navbar } from "@/components/brutalist";
 import { CommandPrompt } from "@/components/command";
 import { HelpModal } from "@/components/modal";
+import { ClientLayout } from "@/components/layout/ClientLayout";
 
 export const metadata: Metadata = {
   title: "Terminalog | Terminal Editorial Blog",
@@ -40,19 +41,22 @@ export default function RootLayout({
         {/* Terminal Fog Effect */}
         <div className="fixed inset-0 pointer-events-none opacity-5 bg-[radial-gradient(circle_at_50%_50%,#bd93f9_0%,transparent_50%)]" />
         
-        {/* Top Navigation Bar - Public Component */}
-        <Navbar />
-        
-        {/* Main Content */}
-        <main className="flex-grow pb-24 pt-20">
-          {children}
-        </main>
-        
-        {/* Bottom Command Prompt - Public Component */}
-        <CommandPrompt />
-        
-        {/* Global Help Modal - Public Component */}
-        <HelpModal />
+        {/* Client-side Layout with Config Context */}
+        <ClientLayout>
+          {/* Top Navigation Bar - Public Component */}
+          <Navbar />
+          
+          {/* Main Content */}
+          <main className="flex-grow pb-24 pt-20">
+            {children}
+          </main>
+          
+          {/* Bottom Command Prompt - Public Component */}
+          <CommandPrompt />
+          
+          {/* Global Help Modal - Public Component */}
+          <HelpModal />
+        </ClientLayout>
       </body>
     </html>
   );

@@ -2,13 +2,15 @@
  * CommandPrompt Component
  * 
  * Terminal-style command input bar at bottom of page.
- * Features (v1.4):
+ * Features (v1.5):
  * - WebSocket connection for path completion and search (ws://localhost:18085/ws/terminal)
  * - localStorage command history (terminalog_command_history, max 100)
  * - ArrowUp/ArrowDown for history navigation
  * - Tab key auto-completion via WebSocket
  * - Search command via WebSocket
  * - Pure frontend routing (no HTTP API for commands)
+ * - Path sync with Navbar via TerminalConfig context
+ * - Owner config from /api/config
  */
 
 "use client";
@@ -16,6 +18,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { SHOW_HELP_MODAL } from "@/components/modal/HelpModal";
+import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 
 // Custom event for search icon click
 export const FOCUS_COMMAND_INPUT = "focusCommandInput";
@@ -59,35 +62,30 @@ type WebSocketMessage = CompletionResponse | SearchResponse | ErrorResponse;
 export function CommandPrompt() {
   const [input, setInput] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [currentDir, setCurrentDir] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const router = useRouter();
-  
-  // Get current directory from URL params (client-side only)
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      setCurrentDir(params.get("dir") || "");
-    }
-  }, []);
-
-  // Load history from localStorage on mount
-  useEffect(() => {
+  // Initialize history from localStorage (lazy initialization)
+  const [history, setHistory] = useState<string[]>(() => {
     try {
-      const stored = localStorage.getItem(HISTORY_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          setHistory(parsed);
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(HISTORY_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) {
+            return parsed;
+          }
         }
       }
     } catch (e) {
       console.error("Failed to load command history:", e);
     }
-  }, []);
+    return [];
+  });
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const router = useRouter();
+  
+  // Get currentDir from TerminalConfig context
+  const { currentDir } = useTerminalConfig();
 
   // Save history to localStorage
   const saveHistory = useCallback((newHistory: string[]) => {
@@ -388,7 +386,7 @@ export function CommandPrompt() {
             onKeyDown={handleKeyDown}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            className="w-full bg-transparent text-on-surface outline-none border-none placeholder-on-surface-variant placeholder-opacity-50"
+            className="w-full bg-transparent text-on-surface outline-none border-none placeholder-on-surface-variant placeholder-opacity-30"
             placeholder="type a command..."
             aria-label="Command input"
           />

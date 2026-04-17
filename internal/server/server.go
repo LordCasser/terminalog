@@ -47,6 +47,7 @@ type Handlers struct {
 	Health    *handler.HealthHandler
 	AboutMe   *handler.AboutMeHandler
 	WebSocket *WebSocketHandler
+	Config    *handler.ConfigHandler
 }
 
 // NewServer creates a new Server instance.
@@ -133,6 +134,11 @@ func (s *Server) setupRoutes() {
 		// About Me API (v1.2)
 		if s.Handlers.AboutMe != nil {
 			r.Get("/aboutme", s.Handlers.AboutMe.Get)
+		}
+
+		// Config API (v1.5) - returns frontend configuration
+		if s.Handlers.Config != nil {
+			r.Get("/config", s.Handlers.Config.Get)
 		}
 	})
 

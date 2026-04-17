@@ -1,9 +1,9 @@
 # Terminalog - 前端架构设计文档
 
-> 文档版本：v1.2
+> 文档版本：v1.3
 > 创建日期：2026-04-15
-> 最后更新：2026-04-16
-> 基于需求文档：requirements.md v1.2
+> 最后更新：2026-04-17
+> 基于需求文档：requirements.md v1.3
 > 关联文档：backend-architecture.md, api-spec.md, architecture.md, api-spec.md
 
 ---
@@ -81,16 +81,17 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 **组成组件**：
 - `Layout.tsx`：全局布局容器（Dracula background + Glass 面板）
-- `Navbar.tsx`：顶部导航栏（Logo + 路径显示 + 搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm）
+- `Navbar.tsx`：顶部导航栏（Logo + 动态路径显示 ~/owner + 搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm，路径与底部终端输入栏同步）
 - `ArticleTable.tsx`：文章列表表格（5 列：Created/Updated/Editors/Filename/Latest Commit）
 - `CommandPrompt.tsx`：底部单行命令输入区（`guest@blog: ~/path $ ` 前缀，JetBrains Mono，支持实际输入，Enter执行，键盘输入自动聚焦，Tab键补全）
 - `SortHeader.tsx`：表格可排序表头（点击排序）
-- `HelpModal.tsx`：命令帮助模态框（输入`help`或`?`命令触发，展示可用命令，3秒自动关闭或右上角x手动关闭，Glass效果，遵循Dracula Spectrum设计）
+- `HelpModal.tsx`：命令帮助模态框（输入`help`或`?`命令触发，展示可用命令，3秒自动关闭或右上角x手动关闭或Enter键关闭，Glass效果，遵循Dracula Spectrum设计，宽度max-w-xl确保命令说明一行显示）
 
 **UI视觉统一性约束（v1.3新增）**：
 - 所有页面（主页、文章查看页）的顶部导航栏使用统一字体样式：JetBrains Mono、uppercase、tracking-tight、text-sm
 - 导航栏搜索icon点击交互：自动在底部输入栏键入 `search ` 并聚焦，用户输入关键词后回车执行搜索
 - 页面全局键盘输入监听：任意位置键盘输入自动聚焦到底部命令输入栏
+- **路径同步（v1.3新增）**：导航栏路径与底部终端输入栏路径保持一致，通过全局状态共享`currentDir`和`owner`
 
 #### 2.2.2 Command Parser 模块
 
@@ -108,7 +109,9 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - 搜索icon交互：点击导航栏搜索icon自动填充 `search ` 并聚焦输入栏
 - **Tab键自动补全**：输入命令前缀后按Tab键自动补全完整命令（如`se`→`search `），禁用浏览器默认Tab键焦点切换行为
 - **路径补全（WebSocket）**：Tab键路径补全通过WebSocket实时从后端获取路径信息（避免频繁HTTP请求开销）
-- **Placeholder透明度**：降低placeholder透明度（opacity-50），避免干扰视觉焦点
+- **Placeholder透明度**：降低placeholder透明度（opacity-30），避免干扰视觉焦点
+- **路径同步**：终端输入栏`~/`当前路径与顶部导航栏路径保持一致，通过`currentDir`状态共享
+- **Owner配置**：Blog属主名称从`/api/config` API获取，显示在路径中（如`~/lordcasser`）
 
 **架构约束（v1.4新增 - 架构重大变更）**：
 

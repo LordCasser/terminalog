@@ -28,6 +28,10 @@ type Config struct {
 type BlogConfig struct {
 	// ContentDir is the path to the Git repository containing blog content.
 	ContentDir string `toml:"content_dir"`
+
+	// Owner is the blog owner name displayed in navbar (e.g., ~/lordcasser).
+	// Default value is "lordcasser".
+	Owner string `toml:"owner"`
 }
 
 // ServerConfig contains server-related settings.
@@ -100,6 +104,7 @@ func Default() *Config {
 	return &Config{
 		Blog: BlogConfig{
 			ContentDir: "./content",
+			Owner:      "lordcasser",
 		},
 		Server: ServerConfig{
 			Host:  "0.0.0.0",
@@ -161,6 +166,15 @@ func (c *Config) Validate() error {
 // GetContentDir returns the absolute path to the content directory.
 func (c *Config) GetContentDir() (string, error) {
 	return filepath.Abs(c.Blog.ContentDir)
+}
+
+// GetOwner returns the blog owner name.
+// If not configured, returns default value "lordcasser".
+func (c *Config) GetOwner() string {
+	if c.Blog.Owner == "" {
+		return "lordcasser"
+	}
+	return c.Blog.Owner
 }
 
 // GetAddr returns the server address in host:port format.

@@ -136,6 +136,87 @@
 - ✅ 输入关键词并按Enter后执行搜索命令
 - ✅ 搜索结果显示在页面中
 
+### 2.7 Tab键自动补全测试（v1.3新增）
+
+**测试目标**：验证Tab键命令自动补全功能
+
+**测试步骤**：
+1. 使用chrome-devtools MCP访问主页面
+2. 使用click聚焦底部输入栏
+3. 使用type_text输入命令前缀（如`se`）
+4. 使用press_key按下Tab键
+5. 使用take_snapshot验证输入框value自动补全为完整命令（如`search `）
+6. 验证浏览器默认Tab键焦点切换行为被禁用
+
+**验收标准**：
+- ✅ 输入`se`+Tab键自动补全为`search `
+- ✅ 输入`op`+Tab键自动补全为`open `
+- ✅ 输入`cd`+Tab键自动补全为`cd `
+- ✅ Tab键不触发浏览器默认焦点切换行为
+- ✅ 多匹配命令时console.log提示（可选）
+
+### 2.7.1 路径补全测试（v1.3新增）
+
+**测试目标**：验证Tab键支持补全文章/文件夹路径
+
+**测试步骤**：
+1. 使用chrome-devtools MCP访问主页面
+2. 使用click聚焦底部输入栏
+3. 使用type_text输入命令+路径前缀（如`open RE`）
+4. 使用press_key按下Tab键
+5. 使用take_snapshot验证输入框value自动补全为完整路径（如`open README.md`)
+6. 测试文件夹路径补全（如`cd tec`→`cd tech/`)
+7. 测试多匹配情况（如`open w`有welcome.md和another-welcome.md时）
+
+**验收标准**：
+- ✅ 输入`open RE`+Tab键自动补全为`open README.md`
+- ✅ 输入`cd tec`+Tab键自动补全为`cd tech/`
+- ✅ 路径补全从后端API获取当前目录文章列表和子目录列表
+- ✅ 单匹配时自动补全完整路径
+- ✅ 多匹配时console.log提示匹配列表（可选）
+- ✅ 文件补全不带斜杠，文件夹补全带斜杠
+
+### 2.8 Placeholder透明度测试（v1.3新增）
+
+**测试目标**：验证底部输入栏placeholder透明度降低，避免干扰视觉焦点
+
+**测试步骤**：
+1. 使用chrome-devtools MCP访问主页面
+2. 使用take_snapshot查看底部输入栏结构
+3. 使用evaluate_script提取placeholder样式（opacity）
+4. 验证placeholder透明度为opacity-50（约0.5）
+
+**验收标准**：
+- ✅ 输入栏placeholder透明度为opacity-50
+- ✅ Placeholder颜色为text-on-surface-variant
+- ✅ Placeholder不干扰输入框视觉焦点
+
+### 2.9 命令帮助模态框测试（v1.3新增）
+
+**测试目标**：验证输入`help`或`?`命令弹出模态框展示可用命令
+
+**测试步骤**：
+1. 使用chrome-devtools MCP访问主页面
+2. 使用click聚焦底部输入栏
+3. 使用type_text输入`help`命令
+4. 使用press_key按下Enter执行命令
+5. 使用take_snapshot验证模态框弹出
+6. 验证模态框内容包含所有可用命令说明
+7. 验证模态框右上角存在x关闭按钮
+8. 等待3秒验证模态框自动关闭
+9. 再次输入`?`命令测试相同功能
+10. 使用click点击x按钮手动关闭模态框
+
+**验收标准**：
+- ✅ 输入`help`命令后弹出模态框
+- ✅ 输入`?`命令后弹出模态框（功能相同）
+- ✅ 模态框内容包含所有可用命令：cd, open, search, help
+- ✅ 模态框右上角存在x关闭按钮
+- ✅ 3秒后模态框自动关闭
+- ✅ 点击x按钮可手动关闭模态框
+- ✅ 模态框样式遵循Dracula Spectrum设计系统（Glass效果）
+- ✅ 模态框关闭后不影响后续命令输入
+
 ---
 
 ## 三、后端API测试

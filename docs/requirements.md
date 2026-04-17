@@ -246,6 +246,7 @@ Glass 效果:
 1. **导航栏统一**：主页面和文章查看页面的顶部导航栏使用相同的字体（JetBrains Mono）、样式（uppercase、tracking-tight）、大小（text-sm）
 2. **文章标题优化**：文章查看页面标题使用Space Grotesk，字体大小调整为text-4xl（优化阅读体验）
 3. **Markdown渲染样式**：参考原型设计，使用Inter字体，代码块使用JetBrains Mono，配色遵循Dracula Spectrum
+4. **底部终端输入栏**：placeholder透明度降低（opacity-50），避免干扰视觉焦点
 
 **支持命令**：
 
@@ -254,11 +255,23 @@ Glass 效果:
 | `cd <path>` | 切换文章路径 | `cd tech/blog` |
 | `cd ..` | 返回上级目录 | `cd ..` |
 | `cd .` | 刷新当前目录 | `cd .` |
-| `view <filename>` | 全屏查看文章 | `view my-post.md` |
+| `open <filename>` | 打开文章 | `open my-post.md` |
 | `search <keyword>` | 搜索文章标题 | `search terminal` |
-| `help` | 显示帮助信息 | `help` |
+| `help` 或 `?` | 显示命令帮助模态框 | `help` 或 `?` |
 
-> **注意**：v1.2 移除了 `clear`、`ls`、`exit` 命令。排序功能仅通过表头点击实现，不再通过命令行。
+**命令交互增强（v1.3新增）**：
+1. **Tab键自动补全**：输入命令前缀后按Tab键自动补全完整命令（如`se`→`search `），禁用浏览器默认Tab键焦点切换行为
+2. **路径补全**：Tab键支持补全文章/文件夹路径（如`open RE`→`open README.md`，`cd tec`→`cd tech/`），需要从后端API获取当前目录文章列表和子目录列表
+3. **键盘输入默认聚焦**：页面任意位置键盘输入自动聚焦到底部命令输入栏
+4. **搜索icon交互**：点击顶部导航栏搜索icon，自动在底部输入栏键入`search `并聚焦
+
+**帮助模态框设计**：
+- **触发方式**：输入`help`或`?`命令后弹出模态框
+- **内容**：展示所有可用命令及功能说明
+- **关闭方式**：
+  1. 3秒自动关闭（定时器）
+  2. 右上角x按钮手动关闭
+- **样式**：遵循Dracula Spectrum设计系统，Glass效果
 
 **cd 命令特殊规则**：
 

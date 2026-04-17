@@ -83,8 +83,9 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - `Layout.tsx`：全局布局容器（Dracula background + Glass 面板）
 - `Navbar.tsx`：顶部导航栏（Logo + 路径显示 + 搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm）
 - `ArticleTable.tsx`：文章列表表格（5 列：Created/Updated/Editors/Filename/Latest Commit）
-- `CommandPrompt.tsx`：底部单行命令输入区（`guest@blog: ~/path $ ` 前缀，JetBrains Mono，支持实际输入，Enter执行，键盘输入自动聚焦）
+- `CommandPrompt.tsx`：底部单行命令输入区（`guest@blog: ~/path $ ` 前缀，JetBrains Mono，支持实际输入，Enter执行，键盘输入自动聚焦，Tab键补全）
 - `SortHeader.tsx`：表格可排序表头（点击排序）
+- `HelpModal.tsx`：命令帮助模态框（输入`help`或`?`命令触发，展示可用命令，3秒自动关闭或右上角x手动关闭，Glass效果，遵循Dracula Spectrum设计）
 
 **UI视觉统一性约束（v1.3新增）**：
 - 所有页面（主页、文章查看页）的顶部导航栏使用统一字体样式：JetBrains Mono、uppercase、tracking-tight、text-sm
@@ -105,23 +106,26 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - Enter执行：按下Enter键执行命令，清空输入框，保留命令历史
 - 全局键盘监听：页面任意位置键盘输入自动聚焦到输入栏
 - 搜索icon交互：点击导航栏搜索icon自动填充 `search ` 并聚焦输入栏
+- **Tab键自动补全**：输入命令前缀后按Tab键自动补全完整命令（如`se`→`search `），禁用浏览器默认Tab键焦点切换行为
+- **路径补全**：Tab键支持补全文章/文件夹路径（如`open RE`→`open README.md`，`cd tec`→`cd tech/`），需要从后端API获取当前目录文章列表和子目录列表
+- **Placeholder透明度**：降低placeholder透明度（opacity-50），避免干扰视觉焦点
 
 **边界**：
 - 不负责 UI 渲染
 - 不负责直接 API 调用（通过 API Client）
 
-**支持命令**（v1.2）：
+**支持命令**（v1.3）：
 
 | 命令 | 功能 | 参数/Flags |
 |------|------|-----------|
 | `cd <path>` | 切换目录 | `path`: 目标路径 |
 | `cd ..` | 返回上级目录 | 无 |
 | `cd .` | 刷新当前目录 | 无 |
-| `view <file>` | 查看文章 | `file`: 文件名 |
+| `open <file>` | 打开文章 | `file`: 文件名 |
 | `search <keyword>` | 搜索 | `keyword`: 搜索词 |
-| `help` | 显示帮助 | 无 |
+| `help` 或 `?` | 显示命令帮助模态框 | 无 |
 
-> **v1.2 变更**：移除 `clear`、`ls`、`exit` 命令。排序仅通过表头点击实现。
+> **v1.3 变更**：移除`view`命令，改为`open`命令。新增`help`和`?`命令弹出模态框展示可用命令。移除 `clear`、`ls`、`exit` 命令。排序仅通过表头点击实现。Tab键用于命令自动补全，不再作为焦点切换键。
 
 #### 2.2.3 Sort Manager 模块（v1.2 新增）
 

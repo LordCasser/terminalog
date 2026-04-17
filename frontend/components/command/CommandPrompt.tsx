@@ -15,18 +15,36 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { SHOW_HELP_MODAL } from "@/components/modal/HelpModal";
+import { getArticles } from "@/lib/api/articles";
+import type { Article } from "@/types";
 
 // Custom event for search icon click
 export const FOCUS_COMMAND_INPUT = "focusCommandInput";
 
 // Available commands for auto-completion
-const COMMANDS = ["search", "open", "cd"];
+const COMMANDS = ["search", "open", "cd", "help"];
 
 export function CommandPrompt() {
   const [input, setInput] = useState("");
   const [isFocused, setIsFocused] = useState(false);
+  const [articles, setArticles] = useState<Article[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  
+  // Fetch articles for path completion (default root directory)
+  useEffect(() => {
+    const fetchArticles = async () => {
+      try {
+        const response = await getArticles({});
+        setArticles(response.articles);
+      } catch (error) {
+        console.error("Failed to fetch articles for completion:", error);
+      }
+    };
+    
+    fetchArticles();
+  }, []);
 
   // Focus input on custom event (search icon click)
   useEffect(() => {
@@ -90,7 +108,39 @@ export function CommandPrompt() {
         console.log("Matching commands:", matchingCommands.join(", "));
       }
     }
-  }, [input]);
+    
+    // Auto-complete paths
+    if (parts.length === 2 && parts[1].length > 0) {
+      const cmd = parts[0].toLowerCase();
+      const partialPath = parts[1];
+      
+      // Determine what to complete based on command type
+      let matchingItems: Article[] = [];
+      
+      if (cmd === "open") {
+        // Complete files only (type === 'file')
+        matchingItems = articles.filter(
+          article => article.type === 'file' && article.name.startsWith(partialPath)
+        );
+      } else if (cmd === "cd") {
+        // Complete directories only (type === 'dir')
+        matchingItems = articles.filter(
+          article => article.type === 'dir' && article.name.startsWith(partialPath)
+        );
+      }
+      
+      if (matchingItems.length === 1) {
+        // Complete the path
+        const item = matchingItems[0];
+        const suffix = item.type === 'dir' ? '/' : '';
+        setInput(`${cmd} ${item.name}${suffix}`);
+      } else if (matchingItems.length > 1) {
+        // Show matching items in console (optional)
+        const names = matchingItems.map(item => item.name + (item.type === 'dir' ? '/' : ''));
+        console.log("Matching items:", names.join(", "));
+      }
+    }
+  }, [input, articles]);
 
   // Handle command execution
   const executeCommand = useCallback((cmd: string) => {
@@ -112,6 +162,12 @@ export function CommandPrompt() {
     if (trimmedCmd.startsWith("cd ")) {
       const path = cmd.trim().slice(3);
       router.push(`/?dir=${encodeURIComponent(path)}`);
+      return;
+    }
+    
+    // Help command - show help modal
+    if (trimmedCmd === "help" || trimmedCmd === "?") {
+      window.dispatchEvent(new Event(SHOW_HELP_MODAL));
       return;
     }
     

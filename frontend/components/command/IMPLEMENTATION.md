@@ -25,11 +25,24 @@ CommandPrompt 是终端风格的命令输入组件，固定在页面底部，提
 - `search <query>`: 搜索功能（跳转到搜索页面）
 - `open <article>`: 打开指定文章
 - `cd <path>`: 跳转到指定目录
+- `help` 或 `?`: 弹出命令帮助模态框（展示所有可用命令）
 
 ### 5. Tab键自动补全
 - **命令补全**：输入命令前缀后按Tab键自动补全（如 `se` → `search `）
-- **补全逻辑**：匹配COMMANDS数组中的命令（search, open, cd）
+- **路径补全**：输入命令+路径前缀后按Tab键自动补全完整路径（如 `open RE` → `open README.md`，`cd tec` → `cd tech/`）
+- **补全逻辑**：
+  - 命令补全：匹配COMMANDS数组中的命令（search, open, cd）
+  - 路径补全：从后端API获取当前目录文章列表和子目录列表，匹配路径前缀
 - **禁用默认行为**：阻止浏览器Tab键焦点切换功能
+- **补全规则**：
+  - 文件补全不带斜杠（如 `README.md`）
+  - 文件夹补全带斜杠（如 `tech/`）
+  - 单匹配时自动补全完整路径
+  - 多匹配时console.log提示匹配列表（可选）
+
+### 6. Placeholder透明度
+- **透明度降低**：placeholder-opacity-50（约0.5），避免干扰视觉焦点
+- **颜色**：placeholder-on-surface-variant
 
 ## 技术实现
 

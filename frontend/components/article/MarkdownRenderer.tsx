@@ -175,7 +175,9 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
           // Images - Transform paths
           img: ({ src, alt, ...props }) => {
             if (!src) return null;
-            const transformedSrc = transformImagePath(src, basePath);
+            // Ensure src is string (React img src can be string | Blob)
+            const srcString = typeof src === 'string' ? src : '';
+            const transformedSrc = transformImagePath(srcString, basePath);
             return (
               <img 
                 src={transformedSrc} 

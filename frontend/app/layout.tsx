@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/brutalist";
 import { CommandPrompt } from "@/components/command";
+import { HelpModal } from "@/components/modal";
 
 export const metadata: Metadata = {
   title: "Terminalog | Terminal Editorial Blog",
@@ -49,6 +50,9 @@ export default function RootLayout({
         
         {/* Bottom Command Prompt - Public Component */}
         <CommandPrompt />
+        
+        {/* Global Help Modal - Public Component */}
+        <HelpModal />
       </body>
     </html>
   );

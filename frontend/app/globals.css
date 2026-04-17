@@ -287,11 +287,11 @@ body {
 }
 
 /* ============================================
-   Tag Styles
-   ============================================ */
+    Tag Styles
+    ============================================ */
 .tag {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   padding: 0.125rem 0.5rem;
   background-color: var(--color-surface-container);
 }

@@ -2,6 +2,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -36,6 +37,11 @@ type ServerConfig struct {
 
 	// Port is the server port.
 	Port int `toml:"port"`
+
+	// Debug enables debug mode for development.
+	// When true, frontend static files are not embedded, allowing separate frontend dev server.
+	// CORS is enabled to allow cross-origin requests from frontend dev server.
+	Debug bool `toml:"debug"`
 }
 
 // AuthConfig contains authentication settings.
@@ -78,7 +84,7 @@ func LoadOrCreate(path string) (*Config, bool, error) {
 	}
 
 	// File doesn't exist, create default
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		cfg = Default()
 		if saveErr := cfg.Save(path); saveErr != nil {
 			return nil, false, fmt.Errorf("failed to create default config: %w", saveErr)
@@ -96,8 +102,9 @@ func Default() *Config {
 			ContentDir: "./content",
 		},
 		Server: ServerConfig{
-			Host: "0.0.0.0",
-			Port: 8080,
+			Host:  "0.0.0.0",
+			Port:  8080,
+			Debug: false, // Debug mode disabled by default
 		},
 		Auth: AuthConfig{
 			Users: []UserConfig{},

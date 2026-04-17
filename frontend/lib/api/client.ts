@@ -6,7 +6,8 @@
  */
 
 // Base URL - empty for same-origin requests (embedded in Go binary)
-const API_BASE = '';
+// In debug mode, set NEXT_PUBLIC_API_BASE in .env.local
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || '';
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';

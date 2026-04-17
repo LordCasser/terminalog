@@ -30,6 +30,10 @@ type Server struct {
 
 	// Handlers contains all HTTP handlers.
 	Handlers *Handlers
+
+	// debug enables debug mode.
+	// When true, static files are not embedded and CORS is enabled.
+	debug bool
 }
 
 // Handlers contains all HTTP handlers for the server.
@@ -45,15 +49,18 @@ type Handlers struct {
 }
 
 // NewServer creates a new Server instance.
-func NewServer(addr string, handlers *Handlers, logger *slog.Logger, embedFS embed.FS) *Server {
-	// Initialize static handler with embedded files
-	handlers.Static = handler.NewStaticHandler(embedFS)
+func NewServer(addr string, handlers *Handlers, logger *slog.Logger, embedFS embed.FS, debug bool) *Server {
+	// Initialize static handler with embedded files (if not in debug mode)
+	if !debug {
+		handlers.Static = handler.NewStaticHandler(embedFS)
+	}
 
 	s := &Server{
 		addr:     addr,
 		router:   chi.NewRouter(),
 		logger:   logger,
 		Handlers: handlers,
+		debug:    debug,
 	}
 
 	// Setup routes
@@ -94,6 +101,11 @@ func (s *Server) setupRoutes() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 
+	// Enable CORS in debug mode
+	if s.debug {
+		r.Use(s.corsMiddleware)
+	}
+
 	// Health check routes (no auth required)
 	if s.Handlers.Health != nil {
 		r.Get("/healthz", s.Handlers.Health.Healthz)
@@ -129,7 +141,10 @@ func (s *Server) setupRoutes() {
 	r.Post("/git-receive-pack", s.Handlers.Git.ReceivePack)
 
 	// Static files (frontend) - catch-all at the end
-	r.Handle("/*", s.Handlers.Static)
+	// In debug mode, frontend runs separately, so we don't serve static files
+	if !s.debug && s.Handlers.Static != nil {
+		r.Handle("/*", s.Handlers.Static)
+	}
 }
 
 // loggingMiddleware logs HTTP requests.
@@ -151,5 +166,25 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 			"duration", time.Since(start).Milliseconds(),
 			"remote", r.RemoteAddr,
 		)
+	})
+}
+
+// corsMiddleware enables CORS for development mode.
+// This allows frontend dev server (e.g., Next.js on port 3000) to access backend API.
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*") // Allow all origins in debug mode
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization")
+
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// Process request
+		next.ServeHTTP(w, r)
 	})
 }

@@ -64,21 +64,16 @@ func main() {
 		cfg.Blog.ContentDir = flags.contentDir
 		logger.Info("Overriding content directory from command line", "contentDir", flags.contentDir)
 	}
-
-	// Ensure Git repository exists
-	gitInitSvc := service.NewGitInitService()
-	if err := gitInitSvc.EnsureGitRepo(cfg.Blog.ContentDir, flags.autoInit); err != nil {
-		if flags.autoInit {
-			logger.Error("Failed to initialize Git repository", "error", err)
-		} else {
-			logger.Error("Content directory is not a Git repository", "error", err)
-			logger.Info("Use --init flag to auto-initialize a Git repository")
-		}
-		os.Exit(1)
+	if flags.debug {
+		cfg.Server.Debug = true
+		logger.Info("Enabling debug mode from command line")
 	}
 
-	if flags.autoInit {
-		logger.Info("Git repository initialized", "path", cfg.Blog.ContentDir)
+	// Ensure Git repository exists (auto-initialize if needed)
+	gitInitSvc := service.NewGitInitService()
+	if err := gitInitSvc.EnsureGitRepo(cfg.Blog.ContentDir, true); err != nil {
+		logger.Error("Failed to initialize Git repository", "error", err)
+		os.Exit(1)
 	}
 
 	// Get repository status
@@ -146,7 +141,7 @@ func main() {
 	}
 
 	// Create HTTP server
-	srv := server.NewServer(cfg.GetAddr(), handlers, logger, embed.StaticFS)
+	srv := server.NewServer(cfg.GetAddr(), handlers, logger, embed.StaticFS, cfg.Server.Debug)
 
 	// Mark server as ready
 	healthHandler.SetReady()
@@ -194,8 +189,8 @@ type Flags struct {
 	configPath  string
 	logLevel    string
 	contentDir  string
-	autoInit    bool
 	showVersion bool
+	debug       bool
 }
 
 // parseFlags parses command-line flags.
@@ -207,8 +202,8 @@ func parseFlags() *Flags {
 	flag.StringVar(&f.configPath, "config", "config.toml", "Configuration file path")
 	flag.StringVar(&f.logLevel, "log", "info", "Log level (debug, info, warn, error)")
 	flag.StringVar(&f.contentDir, "content", "", "Content directory path (overrides config)")
-	flag.BoolVar(&f.autoInit, "init", false, "Auto-initialize Git repository if not exists")
 	flag.BoolVar(&f.showVersion, "version", false, "Show version information")
+	flag.BoolVar(&f.debug, "debug", false, "Enable debug mode (frontend dev server, CORS enabled)")
 
 	flag.Parse()
 
@@ -260,11 +255,11 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Example:")
 	fmt.Println("  terminalog --config config.toml --log debug")
-	fmt.Println("  terminalog --port 3000 --init --content ./my-blog")
+	fmt.Println("  terminalog --port 3000 --content ./my-blog")
 	fmt.Println()
 	fmt.Println("First run:")
 	fmt.Println("  1. terminalog will create a default config.toml")
-	fmt.Println("  2. Edit config.toml to set your content directory (Git repository)")
-	fmt.Println("  3. Or use --init --content ./my-blog to auto-initialize")
+	fmt.Println("  2. Edit config.toml to set your content directory")
+	fmt.Println("  3. Git repository will be auto-initialized if not exists")
 	fmt.Println("  4. Restart terminalog")
 }

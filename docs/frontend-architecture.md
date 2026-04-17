@@ -81,10 +81,15 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 **组成组件**：
 - `Layout.tsx`：全局布局容器（Dracula background + Glass 面板）
-- `Navbar.tsx`：顶部导航栏（Logo + 路径显示 + 搜索框）
+- `Navbar.tsx`：顶部导航栏（Logo + 路径显示 + 搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm）
 - `ArticleTable.tsx`：文章列表表格（5 列：Created/Updated/Editors/Filename/Latest Commit）
-- `CommandPrompt.tsx`：底部单行命令输入区（`>` 前缀，JetBrains Mono）
+- `CommandPrompt.tsx`：底部单行命令输入区（`guest@blog: ~/path $ ` 前缀，JetBrains Mono，支持实际输入，Enter执行，键盘输入自动聚焦）
 - `SortHeader.tsx`：表格可排序表头（点击排序）
+
+**UI视觉统一性约束（v1.3新增）**：
+- 所有页面（主页、文章查看页）的顶部导航栏使用统一字体样式：JetBrains Mono、uppercase、tracking-tight、text-sm
+- 导航栏搜索icon点击交互：自动在底部输入栏键入 `search ` 并聚焦，用户输入关键词后回车执行搜索
+- 页面全局键盘输入监听：任意位置键盘输入自动聚焦到底部命令输入栏
 
 #### 2.2.2 Command Parser 模块
 
@@ -93,6 +98,13 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - 提取命令名、参数、flags
 - 执行对应命令逻辑
 - 管理命令历史（**保留完整历史，无 clear 清屏**）
+
+**底部输入栏功能（v1.3新增）**：
+- 输入栏显示格式：`guest@blog: ~/path $ ` + 闪烁光标 + 实际输入框
+- 支持实际输入功能：用户可在输入框中键入命令
+- Enter执行：按下Enter键执行命令，清空输入框，保留命令历史
+- 全局键盘监听：页面任意位置键盘输入自动聚焦到输入栏
+- 搜索icon交互：点击导航栏搜索icon自动填充 `search ` 并聚焦输入栏
 
 **边界**：
 - 不负责 UI 渲染
@@ -131,6 +143,14 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - Mermaid 流程图渲染
 - 图片路径转换
 
+**Markdown渲染样式约束（v1.3新增）**：
+- 正文文本使用Inter字体，text-lg大小，text-on-surface-variant颜色
+- 标题使用Space Grotesk字体，text-3xl大小（h2），text-secondary-fixed-dim颜色
+- 代码块使用JetBrains Mono字体，text-sm大小，bg-surface-container-lowest背景
+- 引用块（blockquote）使用JetBrains Mono字体，text-lg大小，border-l-4 border-primary，bg-surface-container-low背景
+- 列表使用JetBrains Mono字体，text-base大小，带tertiary颜色的箭头符号（➜）
+- 遵循Dracula Spectrum配色系统
+
 **边界**：
 - 不负责获取 Markdown 内容（由 Article Viewer 负责）
 - 不负责 Git 历史展示
@@ -142,6 +162,12 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - 版本号自动生成逻辑（基于行数变化：`<10行`→补丁版本，`10~50%`→子版本，`>50%`→主版本）
 - 折叠式历史展示（初始显示 "v2.0.48 History ▼"，展开后显示 commit 列表带行数变化提示）
 - 集成 Markdown Renderer
+
+**文章标题样式约束（v1.3新增）**：
+- 文章标题使用Space Grotesk字体
+- 字体大小调整为text-4xl（优化阅读体验，参考原型设计）
+- 颜色使用text-on-surface，leading-none，tracking-tighter
+- 标题下方带渐变下划线装饰
 
 **边界**：
 - 不负责命令解析

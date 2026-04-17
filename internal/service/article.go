@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -285,16 +286,158 @@ func (s *ArticleService) GetTree(ctx context.Context, dir string) (*model.TreeNo
 		return cached, nil
 	}
 
-	// Get tree
-	tree, err := s.fileSvc.GetDirectoryTree(ctx, dir)
+	// Get list of committed articles first
+	articles, err := s.ListArticles(ctx, ListOptions{
+		Dir:      dir,
+		Sort:     model.SortEdited,
+		Order:    model.OrderDesc,
+		UseCache: true,
+	})
 	if err != nil {
 		return nil, err
 	}
+
+	// Build tree from committed articles only
+	tree := buildTreeFromArticles(articles, dir)
 
 	// Cache tree
 	s.cache.SetTree(dir, tree)
 
 	return tree, nil
+}
+
+// buildTreeFromArticles builds a tree structure from a list of committed articles.
+func buildTreeFromArticles(articles []model.Article, rootDir string) *model.TreeNode {
+	rootDir = utils.NormalizePath(rootDir)
+	rootName := filepath.Base(rootDir)
+	if rootDir == "" || rootDir == "/" {
+		rootName = "root"
+		rootDir = ""
+	}
+
+	root := &model.TreeNode{
+		Name:     rootName,
+		Path:     rootDir,
+		Type:     model.NodeTypeDir,
+		Children: make([]*model.TreeNode, 0),
+	}
+
+	// Map to track directory nodes
+	dirNodes := make(map[string]*model.TreeNode)
+	dirNodes[rootDir] = root
+
+	// Sort articles by path for consistent ordering
+	sort.Slice(articles, func(i, j int) bool {
+		return articles[i].Path < articles[j].Path
+	})
+
+	// Add each article to the tree
+	for _, article := range articles {
+		// Normalize the article path
+		articlePath := utils.NormalizePath(article.Path)
+
+		// Get the directory part of the path
+		articleDir := filepath.Dir(articlePath)
+		articleDir = utils.NormalizePath(articleDir)
+
+		// Handle root directory case
+		if articleDir == "." || articleDir == "" {
+			articleDir = ""
+		}
+
+		// Ensure parent directories exist
+		ensureParentDirs(dirNodes, articleDir, rootDir)
+
+		// Get the parent node (should exist now)
+		parent, ok := dirNodes[articleDir]
+		if !ok {
+			// Skip if parent doesn't exist (shouldn't happen)
+			continue
+		}
+
+		// Add file node
+		fileName := filepath.Base(articlePath)
+		parent.Children = append(parent.Children, &model.TreeNode{
+			Name: fileName,
+			Path: articlePath,
+			Type: model.NodeTypeFile,
+		})
+	}
+
+	// Sort children in each directory (directories first, then files, alphabetically)
+	sortTreeChildren(dirNodes)
+
+	return root
+}
+
+// ensureParentDirs ensures all parent directories exist in the tree.
+func ensureParentDirs(dirNodes map[string]*model.TreeNode, targetDir, rootDir string) {
+	// Already exists
+	if _, ok := dirNodes[targetDir]; ok {
+		return
+	}
+
+	// Handle root directory case
+	if targetDir == "" || targetDir == rootDir {
+		return
+	}
+
+	// Split the path into components
+	parts := strings.Split(strings.Trim(targetDir, "/"), "/")
+	if len(parts) == 0 {
+		return
+	}
+
+	// Build path from root to target
+	currentPath := rootDir
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+
+		// Build child path
+		var childPath string
+		if currentPath == "" {
+			childPath = part
+		} else {
+			childPath = currentPath + "/" + part
+		}
+		childPath = utils.NormalizePath(childPath)
+
+		// Create directory node if it doesn't exist
+		if _, ok := dirNodes[childPath]; !ok {
+			dirNodes[childPath] = &model.TreeNode{
+				Name:     part,
+				Path:     childPath,
+				Type:     model.NodeTypeDir,
+				Children: make([]*model.TreeNode, 0),
+			}
+
+			// Add to parent
+			parent, ok := dirNodes[currentPath]
+			if ok {
+				parent.Children = append(parent.Children, dirNodes[childPath])
+			}
+		}
+
+		currentPath = childPath
+	}
+}
+
+// sortTreeChildren sorts children in each directory node.
+func sortTreeChildren(dirNodes map[string]*model.TreeNode) {
+	for _, node := range dirNodes {
+		if node.Type == model.NodeTypeDir && len(node.Children) > 0 {
+			sort.Slice(node.Children, func(i, j int) bool {
+				// Directories first
+				if node.Children[i].Type != node.Children[j].Type {
+					return node.Children[i].Type == model.NodeTypeDir
+				}
+				// Alphabetically
+				return node.Children[i].Name < node.Children[j].Name
+			})
+		}
+	}
 }
 
 // Search searches articles by title.

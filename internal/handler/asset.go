@@ -23,12 +23,12 @@ func NewAssetHandler(svc *service.AssetService) *AssetHandler {
 	return &AssetHandler{svc: svc}
 }
 
-// Get handles GET /api/assets/{path}.
+// Get handles GET /api/assets/*.
 func (h *AssetHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Get path from URL
-	path := chi.URLParam(r, "path")
+	// Get path from URL (using wildcard pattern)
+	path := chi.URLParam(r, "*")
 
 	// Get asset
 	asset, err := h.svc.GetAsset(ctx, path)

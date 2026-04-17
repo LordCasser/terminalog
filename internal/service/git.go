@@ -42,6 +42,7 @@ func NewGitService(repoPath string) (*GitService, error) {
 }
 
 // GetFileHistory returns the complete Git history of a file.
+// Only commits where the file was actually modified are included.
 func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*model.FileHistory, error) {
 	if s.repo == nil {
 		return nil, model.ErrRepoNotFound
@@ -56,38 +57,71 @@ func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*mode
 		return nil, err
 	}
 
-	// Filter commits that involve this file
+	// Collect all commits (newest first from Log)
+	commits := make([]*object.Commit, 0)
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		commits = append(commits, c)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Reverse to get oldest first
+	for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
+		commits[i], commits[j] = commits[j], commits[i]
+	}
+
+	// Process commits to find actual file modifications
 	fileCommits := make([]model.CommitInfo, 0)
 	contributors := make(map[string]bool)
 
-	err = commitIter.ForEach(func(c *object.Commit) error {
+	// Track the file hash to detect changes
+	prevFileHash := plumbing.ZeroHash
+	fileExists := false
+
+	// Iterate in chronological order (oldest first)
+	for _, c := range commits {
 		// Check if file exists in this commit
 		file, err := c.File(filePath)
 		if err != nil {
-			// File doesn't exist in this commit, skip
+			// File doesn't exist in this commit
 			if errors.Is(err, object.ErrFileNotFound) {
-				return nil
+				// If file existed before, this is a deletion
+				if fileExists {
+					commitInfo := model.CommitInfo{
+						Hash:      shortHash(c.Hash.String()),
+						Author:    c.Author.Name,
+						Timestamp: c.Author.When,
+						Message:   strings.Split(c.Message, "\n")[0],
+					}
+					fileCommits = append(fileCommits, commitInfo)
+					contributors[c.Author.Name] = true
+				}
+				prevFileHash = plumbing.ZeroHash
+				fileExists = false
+				continue
 			}
-			return err
-		}
-		_ = file // We just need to know it exists
-
-		// Record commit info
-		commitInfo := model.CommitInfo{
-			Hash:      shortHash(c.Hash.String()),
-			Author:    c.Author.Name,
-			Timestamp: c.Author.When,
-			Message:   strings.Split(c.Message, "\n")[0], // First line only
+			return nil, err
 		}
 
-		fileCommits = append(fileCommits, commitInfo)
-		contributors[c.Author.Name] = true
+		// File exists in this commit
+		currentFileHash := file.Hash
 
-		return nil
-	})
+		// First appearance (creation) or hash changed (modification)
+		if !fileExists || currentFileHash != prevFileHash {
+			commitInfo := model.CommitInfo{
+				Hash:      shortHash(c.Hash.String()),
+				Author:    c.Author.Name,
+				Timestamp: c.Author.When,
+				Message:   strings.Split(c.Message, "\n")[0],
+			}
+			fileCommits = append(fileCommits, commitInfo)
+			contributors[c.Author.Name] = true
+		}
 
-	if err != nil {
-		return nil, err
+		prevFileHash = currentFileHash
+		fileExists = true
 	}
 
 	// Check if we have any history

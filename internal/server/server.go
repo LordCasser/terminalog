@@ -103,10 +103,9 @@ func (s *Server) setupRoutes() {
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
-		// Articles API
+		// Articles API (use wildcard to match nested paths)
 		r.Get("/articles", s.Handlers.Article.List)
-		r.Get("/articles/{path}", s.Handlers.Article.Get)
-		r.Get("/articles/{path}/timeline", s.Handlers.Article.Timeline)
+		r.Get("/articles/*", s.Handlers.Article.HandleArticleRequest)
 
 		// Tree API
 		r.Get("/tree", s.Handlers.Tree.Get)
@@ -114,8 +113,8 @@ func (s *Server) setupRoutes() {
 		// Search API
 		r.Get("/search", s.Handlers.Search.Search)
 
-		// Assets API
-		r.Get("/assets/{path}", s.Handlers.Asset.Get)
+		// Assets API (use wildcard to match nested paths)
+		r.Get("/assets/*", s.Handlers.Asset.Get)
 	})
 
 	// Git Smart HTTP routes

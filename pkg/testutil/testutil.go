@@ -60,6 +60,7 @@ func (r *TestRepo) CreateFile(path, content string) error {
 }
 
 // Commit creates a commit with the given message and author.
+// It adds all files in the working directory.
 func (r *TestRepo) Commit(message, authorName, authorEmail string) error {
 	wt, err := r.Repo.Worktree()
 	if err != nil {
@@ -84,6 +85,7 @@ func (r *TestRepo) Commit(message, authorName, authorEmail string) error {
 }
 
 // CommitWithTime creates a commit with a specific time.
+// It adds all files in the working directory.
 func (r *TestRepo) CommitWithTime(message, authorName, authorEmail string, when time.Time) error {
 	wt, err := r.Repo.Worktree()
 	if err != nil {
@@ -107,26 +109,95 @@ func (r *TestRepo) CommitWithTime(message, authorName, authorEmail string, when 
 	return err
 }
 
-// CreateMarkdownFile creates a Markdown file and commits it.
+// AddFile adds a specific file to the staging area.
+func (r *TestRepo) AddFile(path string) error {
+	wt, err := r.Repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	_, err = wt.Add(path)
+	return err
+}
+
+// CommitFile commits only a specific file.
+func (r *TestRepo) CommitFile(path, message, authorName, authorEmail string) error {
+	// Add only this file
+	if err := r.AddFile(path); err != nil {
+		return err
+	}
+
+	wt, err := r.Repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	// Commit
+	_, err = wt.Commit(message, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  authorName,
+			Email: authorEmail,
+			When:  time.Now(),
+		},
+	})
+	return err
+}
+
+// CommitFileWithTime commits only a specific file with a specific time.
+func (r *TestRepo) CommitFileWithTime(path, message, authorName, authorEmail string, when time.Time) error {
+	// Add only this file
+	if err := r.AddFile(path); err != nil {
+		return err
+	}
+
+	wt, err := r.Repo.Worktree()
+	if err != nil {
+		return err
+	}
+
+	// Commit
+	_, err = wt.Commit(message, &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  authorName,
+			Email: authorEmail,
+			When:  when,
+		},
+	})
+	return err
+}
+
+// CreateMarkdownFile creates a Markdown file and commits it (adds all files).
 func (r *TestRepo) CreateMarkdownFile(path, content, message, author string) error {
 	// Create file
 	if err := r.CreateFile(path, content); err != nil {
 		return err
 	}
 
-	// Commit
+	// Commit (adds all files)
 	return r.Commit(message, author, author+"@example.com")
 }
 
+// CreateMarkdownFileOnly creates a Markdown file and commits only that file.
+func (r *TestRepo) CreateMarkdownFileOnly(path, content, message, author string) error {
+	// Create file
+	if err := r.CreateFile(path, content); err != nil {
+		return err
+	}
+
+	// Commit only this file
+	return r.CommitFile(path, message, author, author+"@example.com")
+}
+
 // CreateMarkdownFileWithTime creates a Markdown file with a specific commit time.
+// Only the created file is added to this commit.
 func (r *TestRepo) CreateMarkdownFileWithTime(path, content, message, author string, when time.Time) error {
 	// Create file
 	if err := r.CreateFile(path, content); err != nil {
 		return err
 	}
 
-	// Commit
-	return r.CommitWithTime(message, author, author+"@example.com", when)
+	// Commit only this file with specific time
+	return r.CommitFileWithTime(path, message, author, author+"@example.com", when)
 }
 
 // CreateImageFile creates an image file.
@@ -144,17 +215,25 @@ func (r *TestRepo) CreateImageFile(path string, data []byte) error {
 }
 
 // CreateImageFileAndCommit creates an image file and commits it.
+// Only the created file is added to this commit.
 func (r *TestRepo) CreateImageFileAndCommit(path string, data []byte, message, author string) error {
 	if err := r.CreateImageFile(path, data); err != nil {
 		return err
 	}
-	return r.Commit(message, author, author+"@example.com")
+
+	// Commit only this file
+	return r.CommitFile(path, message, author, author+"@example.com")
 }
 
 // SetupMultiAuthorArticle creates an article with multiple commits from different authors.
 func (r *TestRepo) SetupMultiAuthorArticle(path, content string) error {
 	// Create initial file
 	if err := r.CreateFile(path, content); err != nil {
+		return err
+	}
+
+	// Add only this file
+	if err := r.AddFile(path); err != nil {
 		return err
 	}
 
@@ -168,6 +247,11 @@ func (r *TestRepo) SetupMultiAuthorArticle(path, content string) error {
 		return err
 	}
 
+	// Add only this file
+	if err := r.AddFile(path); err != nil {
+		return err
+	}
+
 	// Second commit (editor1)
 	if err := r.CommitWithTime("Update by editor1", "editor1", "editor1@example.com", time.Now().Add(-24*time.Hour)); err != nil {
 		return err
@@ -175,6 +259,11 @@ func (r *TestRepo) SetupMultiAuthorArticle(path, content string) error {
 
 	// Update file again
 	if err := r.CreateFile(path, content+"\n\n## Update 1\nAdded by editor1.\n\n## Update 2\nAdded by editor2."); err != nil {
+		return err
+	}
+
+	// Add only this file
+	if err := r.AddFile(path); err != nil {
 		return err
 	}
 
@@ -202,6 +291,7 @@ func (r *TestRepo) SetupNestedDirectory() error {
 		return err
 	}
 
+	// Add all files and commit
 	return r.Commit("Initial commit", "admin", "admin@example.com")
 }
 

@@ -70,11 +70,10 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 	// Create router
 	router := chi.NewRouter()
 	router.Get("/api/articles", articleHandler.List)
-	router.Get("/api/articles/{path}", articleHandler.Get)
-	router.Get("/api/articles/{path}/timeline", articleHandler.Timeline)
+	router.Get("/api/articles/*", articleHandler.HandleArticleRequest)
 	router.Get("/api/tree", treeHandler.Get)
 	router.Get("/api/search", searchHandler.Search)
-	router.Get("/api/assets/{path}", assetHandler.Get)
+	router.Get("/api/assets/*", assetHandler.Get)
 
 	server := httptest.NewServer(router)
 

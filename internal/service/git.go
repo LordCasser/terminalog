@@ -165,13 +165,13 @@ func (s *GitService) GetUploadPackRefs(ctx context.Context) ([]byte, error) {
 	pktLine(&buf, "# service=git-upload-pack\n")
 	pktFlush(&buf)
 
-	// Add capabilities string
-	capabilities := "multi_ack side-band-64k thin-pack ofs-delta shallow no-progress include-tag"
-	pktLine(&buf, capabilities+"\n")
+	// Add capabilities string (only on first ref, with null byte separator)
+	capabilities := "multi_ack_detailed side-band-64k thin-pack ofs-delta shallow no-progress include-tag"
 
 	// Get HEAD reference
 	head, err := s.repo.Head()
 	if err == nil {
+		// HEAD with capabilities (first ref must have capabilities after null byte)
 		pktLine(&buf, fmt.Sprintf("%s HEAD\x00%s\n", head.Hash().String(), capabilities))
 	} else {
 		// No HEAD, write empty capabilities
@@ -184,7 +184,7 @@ func (s *GitService) GetUploadPackRefs(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 
-	// Add branch references
+	// Add branch references (without capabilities)
 	err = refs.ForEach(func(ref *plumbing.Reference) error {
 		if ref.Name().IsBranch() {
 			pktLine(&buf, fmt.Sprintf("%s %s\n", ref.Hash().String(), ref.Name().String()))

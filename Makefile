@@ -18,7 +18,7 @@ BINARY_DARWIN=$(BINARY_NAME)_darwin
 
 # Directories
 BIN_DIR=bin
-FRONTEND_DIR=frontend
+WEB_DIR=frontend
 STATIC_DIR=pkg/embed/static
 
 # Version info
@@ -26,31 +26,45 @@ VERSION?=dev
 BUILD_DATE=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 
 # Build flags
-LDFLAGS=-ldflags "-X main.version=$(VERSION) -X main.buildDate=$(BUILD_DATE)"
+LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION) -X main.buildDate=$(BUILD_DATE)"
 
-.PHONY: all build clean run test help frontend backend
+.PHONY: all build clean run test help frontend backend web-embed
 
 all: build
 
 ## build: Build the complete application (frontend + backend)
-build: backend
+build: web-embed backend
 
-## backend: Build the Go backend binary
-backend:
-	@echo "Building backend..."
-	$(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME) cmd/terminalog/main.go
-	@echo "Backend built: $(BIN_DIR)/$(BINARY_NAME)"
+## web-embed: Build frontend and copy to embed directory
+web-embed: frontend
+	@echo "Copying frontend build to embed directory..."
+	@rm -rf $(STATIC_DIR)/*
+	@mkdir -p $(STATIC_DIR)
+	@if [ -d "$(WEB_DIR)/out" ]; then \
+		cp -r $(WEB_DIR)/out/* $(STATIC_DIR)/; \
+		echo "Frontend copied to $(STATIC_DIR)"; \
+	else \
+		echo "Warning: Frontend build output not found at $(WEB_DIR)/out"; \
+		touch $(STATIC_DIR)/index.html; \
+		echo '<html><body><h1>Frontend not built</h1></body></html>' > $(STATIC_DIR)/index.html; \
+	fi
 
-## frontend: Build the Next.js frontend (copy to embed directory)
+## frontend: Build the Next.js frontend (static export)
 frontend:
 	@echo "Building frontend..."
-	@if [ -d "$(FRONTEND_DIR)" ]; then \
-		cd $(FRONTEND_DIR) && npm run build && \
-		cp -r out/* ../$(STATIC_DIR)/; \
-		echo "Frontend built and copied to $(STATIC_DIR)"; \
+	@if [ -d "$(WEB_DIR)" ]; then \
+		cd $(WEB_DIR) && npm install && npm run build; \
+		echo "Frontend build complete"; \
 	else \
-		echo "Frontend directory not found. Skipping."; \
+		echo "Error: Frontend directory not found at $(WEB_DIR)"; \
+		exit 1; \
 	fi
+
+## backend: Build the Go backend binary (with embedded frontend)
+backend:
+	@echo "Building backend with embedded frontend..."
+	$(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME) cmd/terminalog/main.go
+	@echo "Backend built: $(BIN_DIR)/$(BINARY_NAME)"
 
 ## run: Run the application
 run:
@@ -72,8 +86,9 @@ clean:
 	@echo "Cleaning..."
 	$(GOCLEAN)
 	rm -rf $(BIN_DIR)
-	rm -rf $(FRONTEND_DIR)/.next
-	rm -rf $(FRONTEND_DIR)/out
+	rm -rf $(WEB_DIR)/.next
+	rm -rf $(WEB_DIR)/out
+	rm -rf $(STATIC_DIR)
 
 ## tidy: Tidy Go modules
 tidy:
@@ -84,16 +99,27 @@ tidy:
 deps:
 	@echo "Installing Go dependencies..."
 	$(GOMOD) download
-	@if [ -d "$(FRONTEND_DIR)" ]; then \
-		cd $(FRONTEND_DIR) && npm install; \
+	@if [ -d "$(WEB_DIR)" ]; then \
+		cd $(WEB_DIR) && npm install; \
 	fi
 
-## release: Build release binaries for multiple platforms
+## release: Build release binaries for multiple platforms (using goreleaser)
 release:
-	@echo "Building release binaries..."
+	@echo "Building release with goreleaser..."
+	@if command -v goreleaser >/dev/null 2>&1; then \
+		goreleaser release --clean; \
+	else \
+		echo "goreleaser not found. Install it first."; \
+		echo "Alternative: use 'make release-manual'"; \
+	fi
+
+## release-manual: Build release binaries manually (without goreleaser)
+release-manual: web-embed
+	@echo "Building release binaries manually..."
 	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_LINUX) cmd/terminalog/main.go
 	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_WINDOWS) cmd/terminalog/main.go
 	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_DARWIN) cmd/terminalog/main.go
+	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME)_darwin_arm64 cmd/terminalog/main.go
 	@echo "Release binaries built in $(BIN_DIR)/"
 
 ## install: Install the binary to system

@@ -297,11 +297,11 @@ Glass 效果:
    - 路径补全消息：`{"type":"completion_request","dir":"/","prefix":"RE"}`
    - 响应格式：`{"type":"completion_response","items":["README.md","tech/"]}`
 
-**导航栏选中状态（v1.6新增）**：
-1. **POSTS选中样式**：在首页（`/`）时，POSTS显示下划线强调和颜色变化
-2. **ABOUTME选中样式**：在About Me页面（`/aboutme`）时，ABOUTME显示下划线强调和颜色变化，同时POSTS取消选中状态
-3. **下划线样式**：使用 `border-bottom` 实现，不影响文字对齐（span字体保持对齐）
-4. **未选中链接**：默认颜色为 outline，hover 时背景色变化
+**导航栏选中状态（v1.6新增，v1.6.1优化）**：
+1. **POSTS选中样式**：在首页（`/` 或 `/?dir=`）时，POSTS文字颜色变为强调色（primary-container），并显示下划线
+2. **ABOUTME选中样式**：在About Me页面（`/aboutme`）时，ABOUTME文字颜色变为强调色（primary-container），并显示下划线；同时POSTS文字颜色变为非强调色（outline），无下划线
+3. **下划线样式**：使用CSS伪元素（after）实现独立下划线，下划线位于文字下方额外位置，**不影响span字体对齐**——POSTS和ABOUTME的span文字始终保持同一基线对齐
+4. **未选中链接**：文字颜色为 outline（暗灰色），hover 时背景色变化，无下划线
 
 **搜索结果模态框（v1.6新增）**：
 1. **单结果处理**：搜索返回单个结果时，直接跳转到对应文章页面

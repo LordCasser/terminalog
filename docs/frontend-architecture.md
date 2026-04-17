@@ -81,7 +81,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 **组成组件**：
 - `Layout.tsx`：全局布局容器（Dracula background + Glass 面板）
-- `Navbar.tsx`：顶部导航栏（左侧Logo/路径显示，右侧POSTS和ABOUTME导航链接+搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm，路径与底部终端输入栏同步，flex布局左-右对齐）
+- `Navbar.tsx`：顶部导航栏（左侧Logo/路径显示，右侧POSTS和ABOUTME导航链接+搜索icon，JetBrains Mono字体，uppercase，tracking-tight，text-sm，路径与底部终端输入栏同步，flex布局左-右对齐，**NavLink下划线使用after伪元素独立定位不影响字体基线对齐，选中态颜色primary-container，未选中态颜色outline**）
 - `ArticleTable.tsx`：文章列表表格（5 列：Created/Updated/Editors/Filename/Latest Commit）
 - `CommandPrompt.tsx`：底部单行命令输入区（`guest@blog: ~/path $ ` 前缀，JetBrains Mono，支持实际输入，Enter执行，键盘输入自动聚焦，Tab键补全）
 - `SortHeader.tsx`：表格可排序表头（点击排序）

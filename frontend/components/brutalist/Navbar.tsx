@@ -2,10 +2,10 @@
  * Navbar Component - TopAppBar (Public Component)
  * 
  * Fixed navigation bar integrated in layout.tsx for all pages.
- * Features (v1.6):
+ * Features (v1.6.1):
  * - Left: Logo/Path display (~/{owner}/{currentDir}, JetBrains Mono uppercase)
  * - Right: POSTS and ABOUTME navigation links + Search icon (right-aligned)
- * - Selected state: Underline emphasis + color change for active link
+ * - Selected state: after pseudo-element underline + color change (doesn't affect text baseline)
  * - Search button (triggers focus on CommandPrompt)
  * - Path sync with CommandPrompt via TerminalConfig context
  */
@@ -18,6 +18,7 @@ import { FOCUS_COMMAND_INPUT } from "@/components/command";
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 
 // Navigation link component with selected state
+// Uses after pseudo-element for underline so it doesn't affect text baseline alignment
 function NavLink({ 
   href, 
   label, 
@@ -31,9 +32,10 @@ function NavLink({
     <Link 
       href={href} 
       className={`
-        font-bold pb-1 transition-colors duration-150
+        font-bold transition-colors duration-150 relative
+        after:absolute after:left-0 after:right-0 after:-bottom-1.5 after:h-0.5
         ${isSelected 
-          ? "text-primary-container border-b-2 border-primary-container" 
+          ? "text-primary-container after:content-[''] after:bg-primary-container" 
           : "text-outline hover:bg-surface-container-highest hover:text-primary px-2 py-1"
         }
       `}

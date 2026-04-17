@@ -221,4 +221,7 @@ type AboutMeResponse struct {
 
 	// Content is the raw Markdown content.
 	Content string `json:"content"`
+
+	// Exists indicates whether the _ABOUTME.md file exists.
+	Exists bool `json:"exists"`
 }

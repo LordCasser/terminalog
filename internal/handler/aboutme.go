@@ -48,5 +48,6 @@ func (h *AboutMeHandler) Get(w http.ResponseWriter, r *http.Request) {
 		Path:    AboutMeFilename,
 		Title:   title,
 		Content: string(content),
+		Exists:  true,
 	})
 }

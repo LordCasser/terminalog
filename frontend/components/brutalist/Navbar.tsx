@@ -19,6 +19,7 @@ import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 
 // Navigation link component with selected state
 // Uses after pseudo-element for underline so it doesn't affect text baseline alignment
+// Selected/unselected states differ ONLY in color and underline — text position stays fixed
 function NavLink({ 
   href, 
   label, 
@@ -32,11 +33,12 @@ function NavLink({
     <Link 
       href={href} 
       className={`
-        font-bold transition-colors duration-150 relative
+        font-bold transition-colors duration-150 relative px-2 py-1
         after:absolute after:left-0 after:right-0 after:-bottom-1.5 after:h-0.5
+        hover:bg-surface-container-highest hover:text-primary
         ${isSelected 
           ? "text-primary-container after:content-[''] after:bg-primary-container" 
-          : "text-outline hover:bg-surface-container-highest hover:text-primary px-2 py-1"
+          : "text-outline"
         }
       `}
     >

@@ -1,26 +1,309 @@
+/* Google Fonts Import - Must be at top */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================
+   Dracula Spectrum Design System
+   Terminal Editorial - The Brutalist Compiler
+   ============================================ */
 
+/* Theme Configuration - Tailwind CSS 4 Syntax */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Surface Hierarchy */
+  --color-surface-lowest: #0b0e18;
+  --color-surface: #11131e;
+  --color-surface-container-low: #191b26;
+  --color-surface-container: #1d1f2b;
+  --color-surface-container-high: #272935;
+  --color-surface-container-highest: #323440;
+  --color-surface-bright: #373845;
+  --color-surface-dim: #11131e;
+  --color-surface-variant: #323440;
+  --color-surface-tint: #d7baff;
+  
+  /* Primary Colors */
+  --color-primary: #d7baff;
+  --color-primary-container: #bd93f9;
+  --color-primary-fixed: #eddcff;
+  --color-primary-fixed-dim: #d7baff;
+  --color-on-primary: #411478;
+  --color-on-primary-container: #4e2484;
+  --color-on-primary-fixed: #290055;
+  --color-on-primary-fixed-variant: #593090;
+  --color-inverse-primary: #714aaa;
+  
+  /* Secondary Colors */
+  --color-secondary: #ffafd7;
+  --color-secondary-container: #860f60;
+  --color-secondary-fixed: #ffd8e9;
+  --color-secondary-fixed-dim: #ffafd7;
+  --color-on-secondary: #620044;
+  --color-on-secondary-container: #ff92cd;
+  --color-on-secondary-fixed: #3c0029;
+  --color-on-secondary-fixed-variant: #860f60;
+  
+  /* Tertiary Colors (Success/Green) */
+  --color-tertiary: #31e368;
+  --color-tertiary-container: #00c151;
+  --color-tertiary-fixed: #69ff88;
+  --color-tertiary-fixed-dim: #31e368;
+  --color-on-tertiary: #003912;
+  --color-on-tertiary-container: #004719;
+  --color-on-tertiary-fixed: #002108;
+  --color-on-tertiary-fixed-variant: #00531e;
+  
+  /* Error Colors */
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  --color-on-error: #690005;
+  --color-on-error-container: #ffdad6;
+  
+  /* Neutral/Outline Colors */
+  --color-outline: #968e9c;
+  --color-outline-variant: #4a4451;
+  
+  /* Background & Foreground */
+  --color-background: #11131e;
+  --color-on-background: #e1e1f1;
+  --color-foreground: #e1e1f1;
+  --color-on-surface: #e1e1f1;
+  --color-on-surface-variant: #ccc3d3;
+  
+  /* Inverse Colors */
+  --color-inverse-surface: #e1e1f1;
+  --color-inverse-on-surface: #2e303c;
+  
+  /* Font Families */
+  --font-headline: "Space Grotesk", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --font-label: "Space Grotesk", sans-serif;
+  
+  /* Border Radius - Brutalist 0px */
+  --radius-DEFAULT: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-full: 9999px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ============================================
+   Global Styles
+   ============================================ */
+
+/* Base Styles */
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-surface-lowest);
+  color: var(--color-on-surface);
+  font-family: var(--font-body);
+  min-height: 100vh;
+}
+
+/* Selection */
+::selection {
+  background-color: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-container);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-surface-container-highest);
+}
+
+/* ============================================
+   Cursor Blink Animation
+   ============================================ */
+.cursor-blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  from, to { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ============================================
+   Glass Effect (Terminal Fog)
+   ============================================ */
+.glass-panel {
+  background: rgba(29, 31, 43, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(74, 68, 81, 0.25);
+}
+
+/* ============================================
+   Terminal Fog Gradient
+   ============================================ */
+.terminal-fog {
+  background: radial-gradient(circle at 50% 50%, var(--color-primary-container) 0%, transparent 50%);
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+/* ============================================
+   Material Icons
+   ============================================ */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}
+
+/* ============================================
+   Markdown Body Styles
+   ============================================ */
+.markdown-body {
+  font-family: var(--font-body);
+  line-height: 1.75;
+  color: var(--color-on-surface-variant);
+}
+
+.markdown-body h1 {
+  font-family: var(--font-headline);
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--color-on-surface);
+  letter-spacing: -0.02em;
+}
+
+.markdown-body h2 {
+  font-family: var(--font-headline);
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--color-secondary-fixed-dim);
+}
+
+.markdown-body h3 {
+  font-family: var(--font-headline);
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--color-on-surface);
+}
+
+.markdown-body p {
+  margin-bottom: 1.5rem;
+}
+
+.markdown-body a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body a:hover {
+  color: var(--color-secondary);
+}
+
+.markdown-body code {
+  font-family: var(--font-mono);
+  background-color: var(--color-surface-container-low);
+  padding: 0.125rem 0.25rem;
+  color: var(--color-tertiary);
+}
+
+.markdown-body pre {
+  font-family: var(--font-mono);
+  background-color: var(--color-surface-lowest);
+  padding: 2rem;
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+.markdown-body pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdown-body blockquote {
+  border-left: 4px solid var(--color-primary);
+  padding-left: 1.5rem;
+  margin-left: 0;
+  margin-bottom: 1.5rem;
+  background-color: var(--color-surface-container-low);
+  color: var(--color-primary);
+  font-style: italic;
+}
+
+.markdown-body ul, .markdown-body ol {
+  margin-left: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.markdown-body li {
+  margin-bottom: 0.5rem;
+}
+
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ============================================
+   Table Styles
+   ============================================ */
+.article-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.article-table th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--color-outline);
+  padding: 0.75rem 1.5rem;
+  background-color: var(--color-surface-container);
+}
+
+.article-table td {
+  padding: 1.25rem 1.5rem;
+  border-bottom: none;
+}
+
+.article-table tr:hover {
+  background-color: var(--color-surface-container-high);
+}
+
+/* ============================================
+   Tag Styles
+   ============================================ */
+.tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0.125rem 0.5rem;
+  background-color: var(--color-surface-container);
+}
+
+.tag-primary {
+  color: var(--color-primary);
+}
+
+.tag-secondary {
+  color: var(--color-tertiary);
+}
+
+.tag-outline {
+  color: var(--color-outline);
 }

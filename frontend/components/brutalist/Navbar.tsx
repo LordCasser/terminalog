@@ -2,9 +2,10 @@
  * Navbar Component - TopAppBar (Public Component)
  * 
  * Fixed navigation bar integrated in layout.tsx for all pages.
- * Features:
+ * Features (v1.6):
  * - Left: Logo/Path display (~/{owner}/{currentDir}, JetBrains Mono uppercase)
  * - Right: POSTS and ABOUTME navigation links + Search icon (right-aligned)
+ * - Selected state: Underline emphasis + color change for active link
  * - Search button (triggers focus on CommandPrompt)
  * - Path sync with CommandPrompt via TerminalConfig context
  */
@@ -12,8 +13,35 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { FOCUS_COMMAND_INPUT } from "@/components/command";
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
+
+// Navigation link component with selected state
+function NavLink({ 
+  href, 
+  label, 
+  isSelected 
+}: { 
+  href: string; 
+  label: string; 
+  isSelected: boolean;
+}) {
+  return (
+    <Link 
+      href={href} 
+      className={`
+        font-bold pb-1 transition-colors duration-150
+        ${isSelected 
+          ? "text-primary-container border-b-2 border-primary-container" 
+          : "text-outline hover:bg-surface-container-highest hover:text-primary px-2 py-1"
+        }
+      `}
+    >
+      {label}
+    </Link>
+  );
+}
 
 export function Navbar() {
   // Handle search icon click - focus command input
@@ -23,6 +51,11 @@ export function Navbar() {
 
   // Get owner and currentDir from context
   const { owner, currentDir } = useTerminalConfig();
+  
+  // Get current pathname for selected state
+  const pathname = usePathname();
+  const isPostsSelected = pathname === "/" || pathname.startsWith("/?dir=");
+  const isAboutMeSelected = pathname === "/aboutme";
 
   return (
     <header className="fixed top-0 w-full z-50 bg-surface text-primary-container font-mono uppercase tracking-tighter text-sm flex justify-between items-center px-6 py-4">
@@ -35,18 +68,8 @@ export function Navbar() {
       <div className="flex items-center gap-6">
         {/* Navigation Links - All uppercase, right-aligned */}
         <nav className="hidden md:flex gap-6">
-          <Link 
-            href="/" 
-            className="text-primary-container font-bold border-b-2 border-primary-container pb-1 transition-colors duration-150"
-          >
-            POSTS
-          </Link>
-          <Link 
-            href="/aboutme" 
-            className="text-outline hover:bg-surface-container-highest hover:text-primary transition-colors duration-150 px-2 py-1"
-          >
-            ABOUTME
-          </Link>
+          <NavLink href="/" label="POSTS" isSelected={isPostsSelected} />
+          <NavLink href="/aboutme" label="ABOUTME" isSelected={isAboutMeSelected} />
         </nav>
         
         {/* Search Button - Click to focus command input */}

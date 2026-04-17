@@ -17,7 +17,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { SHOW_HELP_MODAL } from "@/components/modal/HelpModal";
+import { SHOW_HELP_MODAL, SHOW_SEARCH_RESULTS_MODAL, SearchResultsEventDetail } from "@/components/modal";
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 
 // Custom event for search icon click
@@ -315,8 +315,29 @@ export function CommandPrompt() {
         });
 
         if (response.type === "search_response" && response.results.length > 0) {
-          // Jump to first result
-          router.push(`/article?path=${encodeURIComponent(response.results[0].path)}`);
+          // Single result: directly navigate
+          if (response.results.length === 1) {
+            router.push(`/article?path=${encodeURIComponent(response.results[0].path)}`);
+          } 
+          // Multiple results: show modal
+          else {
+            const event = new CustomEvent<SearchResultsEventDetail>(
+              SHOW_SEARCH_RESULTS_MODAL,
+              {
+                detail: {
+                  results: response.results.map(r => ({
+                    path: r.path,
+                    title: r.title,
+                    lastModified: undefined, // TODO: get from backend
+                  })),
+                  onSelect: (path: string) => {
+                    router.push(`/article?path=${encodeURIComponent(path)}`);
+                  },
+                },
+              }
+            );
+            window.dispatchEvent(event);
+          }
         }
       } catch (error) {
         console.error("WebSocket search error:", error);

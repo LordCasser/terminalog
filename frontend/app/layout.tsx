@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/brutalist";
 import { CommandPrompt } from "@/components/command";
-import { HelpModal } from "@/components/modal";
 import { ClientLayout } from "@/components/layout/ClientLayout";
 
 export const metadata: Metadata = {
@@ -53,9 +52,6 @@ export default function RootLayout({
           
           {/* Bottom Command Prompt - Public Component */}
           <CommandPrompt />
-          
-          {/* Global Help Modal - Public Component */}
-          <HelpModal />
         </ClientLayout>
       </body>
     </html>

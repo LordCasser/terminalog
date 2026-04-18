@@ -4,7 +4,8 @@
  * Renders article table for both root (/) and directory (/dir/xxx) views.
  * RESTful routing: directories use /dir/{path}, articles use /article/{path}
  * 
- * API call: GET /api/v1/articles/{dir} (path parameter, not query parameter)
+ * API call: GET /api/v1/articles/{dir}?sort=xxx&order=xxx
+ * Column header click triggers sort via query parameters.
  * In static export mode, the directory path is extracted from the browser URL.
  */
 
@@ -12,7 +13,7 @@
 
 import { useState, useEffect } from "react";
 import { ArticleTable } from "@/components/brutalist/ArticleTable";
-import { getArticles } from "@/lib/api/articles";
+import { getArticles, SortField, SortOrder } from "@/lib/api/articles";
 import type { Article } from "@/types";
 
 interface ArticleListPageProps {
@@ -38,6 +39,8 @@ function extractDirPathFromURL(): string {
 export function ArticleListPage({ currentDir }: ArticleListPageProps) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortField, setSortField] = useState<SortField | undefined>(undefined);
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
   useEffect(() => {
     // Use provided currentDir or extract from URL (client-side only)
@@ -45,7 +48,7 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
 
     const fetchArticles = async () => {
       try {
-        const response = await getArticles(effectiveDir);
+        const response = await getArticles(effectiveDir, sortField, sortOrder);
         setArticles(response.articles);
       } catch (error) {
         console.error("Failed to fetch articles:", error);
@@ -55,7 +58,18 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
     };
 
     fetchArticles();
-  }, [currentDir]);
+  }, [currentDir, sortField, sortOrder]);
+
+  /** Handle column header click for sorting */
+  const handleSort = (field: SortField) => {
+    // If same field, toggle order; otherwise set new field with desc default
+    if (sortField === field) {
+      setSortOrder(sortOrder === "desc" ? "asc" : "desc");
+    } else {
+      setSortField(field);
+      setSortOrder("desc");
+    }
+  };
 
   return (
     <div className="min-h-screen">
@@ -65,7 +79,12 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
             <span className="text-outline font-mono">Loading...</span>
           </div>
         ) : (
-          <ArticleTable articles={articles} />
+          <ArticleTable 
+            articles={articles} 
+            sortField={sortField}
+            sortOrder={sortOrder}
+            onSort={handleSort}
+          />
         )}
       </main>
     </div>

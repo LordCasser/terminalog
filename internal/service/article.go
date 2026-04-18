@@ -99,7 +99,8 @@ func (s *ArticleService) ListArticles(ctx context.Context, opts ListOptions) ([]
 // This implements hierarchical browsing: directories are shown as navigable items,
 // files are shown as viewable items. Subdirectories are only included if they
 // contain at least one markdown file recursively.
-func (s *ArticleService) ListDirectory(ctx context.Context, dir string) ([]model.Article, error) {
+// Sort controls the order of items within each group (dirs and files separately).
+func (s *ArticleService) ListDirectory(ctx context.Context, dir string, sortField model.SortField, sortOrder model.SortOrder) ([]model.Article, error) {
 	// Scan the directory for direct children
 	entries, err := s.fileSvc.ScanDirectory(ctx, dir)
 	if err != nil {
@@ -110,11 +111,8 @@ func (s *ArticleService) ListDirectory(ctx context.Context, dir string) ([]model
 
 	for _, entry := range entries {
 		if entry.Type == model.NodeTypeDir {
-			// For directories, we create an Article entry with type "dir"
-			// We get metadata from the most recently edited file in the directory
 			dirArticle, err := s.getDirectoryArticle(ctx, entry.Path)
 			if err != nil {
-				// Still include the directory even if metadata fetch fails
 				dirArticle = model.Article{
 					Path:  entry.Path,
 					Name:  entry.Name,
@@ -124,7 +122,6 @@ func (s *ArticleService) ListDirectory(ctx context.Context, dir string) ([]model
 			}
 			articles = append(articles, dirArticle)
 		} else {
-			// For files, process like normal
 			article, err := s.processFile(ctx, entry.Path)
 			if err != nil {
 				continue
@@ -132,6 +129,9 @@ func (s *ArticleService) ListDirectory(ctx context.Context, dir string) ([]model
 			articles = append(articles, article)
 		}
 	}
+
+	// Sort: directories first, then files; within each group, apply sort criteria
+	sortDirectoryListing(articles, sortField, sortOrder)
 
 	return articles, nil
 }
@@ -591,6 +591,35 @@ func (s *ArticleService) ClearCache() {
 // GetCacheStats returns cache statistics.
 func (s *ArticleService) GetCacheStats() CacheStats {
 	return s.cache.Stats()
+}
+
+// sortDirectoryListing sorts articles in a directory listing.
+// Directories always come first, then files. Within each group,
+// items are sorted by the specified field and order.
+func sortDirectoryListing(articles []model.Article, sortField model.SortField, sortOrder model.SortOrder) {
+	sort.Slice(articles, func(i, j int) bool {
+		// Directories always first
+		if articles[i].Type != articles[j].Type {
+			return articles[i].Type == model.NodeTypeDir
+		}
+
+		// Within same type group, sort by field
+		var less bool
+		switch sortField {
+		case model.SortCreated:
+			less = articles[i].CreatedAt.Before(articles[j].CreatedAt)
+		case model.SortEdited:
+			less = articles[i].EditedAt.Before(articles[j].EditedAt)
+		default:
+			// Default: alphabetical by name
+			less = articles[i].Name < articles[j].Name
+		}
+
+		if sortOrder == model.OrderDesc {
+			return !less
+		}
+		return less
+	})
 }
 
 // Helper function: sortArticles sorts articles by the given field and order.

@@ -26,6 +26,79 @@ import {
   PathCompletionEventDetail,
 } from "@/components/modal";
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
+import { getArticles } from "@/lib/api/articles";
+
+/**
+ * Encode a path for URL path segments.
+ * Preserves "/" separators but encodes special characters in each segment.
+ */
+function encodePathForUrl(path: string): string {
+  return path.split("/").map(segment => encodeURIComponent(segment)).join("/");
+}
+
+/**
+ * Resolve path relative to current directory.
+ * Used by `open` command for file paths.
+ * Same logic as resolveCdPath but simpler - just resolve the path.
+ */
+function resolvePath(currentDir: string, target: string): string {
+  const normalizedTarget = target.trim();
+  
+  const segments = normalizedTarget.split("/");
+  let currentSegments = currentDir ? currentDir.split("/") : [];
+  
+  for (const seg of segments) {
+    if (seg === "..") {
+      if (currentSegments.length > 0) {
+        currentSegments = currentSegments.slice(0, -1);
+      }
+    } else if (seg === "." || seg === "") {
+      continue;
+    } else {
+      currentSegments.push(seg);
+    }
+  }
+  
+  return currentSegments.join("/");
+}
+
+/**
+ * Resolve cd path relative to current directory.
+ * - ".." → go up one level
+ * - "subdir" → append to currentDir
+ * - "/abs/path" → absolute path (strip leading /)
+ * - "." → stay in current directory (no-op)
+ */
+function resolveCdPath(currentDir: string, target: string): string {
+  const normalizedTarget = target.trim();
+  
+  // Special: "." means stay here
+  if (normalizedTarget === "." || normalizedTarget === "") {
+    return currentDir;
+  }
+  
+  // Handle multiple ".." segments (e.g., "../../..")
+  // Also handles mixed paths like "../sibling"
+  const segments = normalizedTarget.split("/");
+  let currentSegments = currentDir ? currentDir.split("/") : [];
+  
+  for (const seg of segments) {
+    if (seg === "..") {
+      // Go up one level
+      if (currentSegments.length > 0) {
+        currentSegments = currentSegments.slice(0, -1);
+      }
+    } else if (seg === "." || seg === "") {
+      // Skip current directory markers and empty segments
+      continue;
+    } else {
+      // Append subdirectory
+      currentSegments.push(seg);
+    }
+  }
+  
+  return currentSegments.join("/");
+}
 
 // Custom event for search icon click
 export const FOCUS_COMMAND_INPUT = "focusCommandInput";
@@ -452,15 +525,35 @@ export function CommandPrompt() {
     }
     
     if (trimmedCmd.startsWith("open ")) {
-      const article = cmd.trim().slice(5);
-      // RESTful routing: /article/{path} (path parameter)
-      router.push(`/article/${article}`);
+      const target = cmd.trim().slice(5);
+      // Resolve path relative to current directory
+      const resolvedPath = resolvePath(currentDir, target);
+      // Navigate to article (no validation - article page handles 404)
+      router.push(`/article/${encodePathForUrl(resolvedPath)}`);
       return;
     }
     
     if (trimmedCmd.startsWith("cd ")) {
-      const path = cmd.trim().slice(3);
-      router.push(`/dir/${encodeURIComponent(path)}`);
+      const target = cmd.trim().slice(3);
+      
+      // Resolve path: handle relative paths (.., subdir) and absolute paths
+      const resolvedPath = resolveCdPath(currentDir, target);
+      
+      // Validate directory exists by trying to fetch its listing
+      try {
+        const response = await getArticles(resolvedPath);
+        // Directory exists - navigate to it
+        if (resolvedPath) {
+          router.push(`/dir/${encodePathForUrl(resolvedPath)}`);
+        } else {
+          router.push("/");
+        }
+      } catch (error) {
+        // Directory doesn't exist or error - show no match hint
+        setNoMatchHintType("completion");
+        setShowNoMatchHint(true);
+        setTimeout(() => setShowNoMatchHint(false), 1000);
+      }
       return;
     }
     
@@ -474,7 +567,7 @@ export function CommandPrompt() {
     if (trimmedCmd !== "") {
       console.log(`Unknown command: ${cmd}`);
     }
-  }, [router, sendWebSocketMessage]);
+  }, [router, sendWebSocketMessage, currentDir]);
 
   // Handle form submit
   const handleSubmit = (e: React.FormEvent) => {

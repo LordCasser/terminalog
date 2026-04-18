@@ -519,6 +519,38 @@ func TestScenario07_DirectoryListingOrder(t *testing.T) {
 	for _, a := range dirResult.Articles {
 		assert.Equal(t, model.NodeTypeFile, a.Type, "tech/golang.md should be a file")
 	}
+
+	// Test: Sort by edited time, descending (most recently edited first)
+	resp3, err := http.Get(env.Server.URL + "/api/v1/articles?sort=edited&order=desc")
+	require.NoError(t, err)
+	defer resp3.Body.Close()
+
+	var editedDescResult model.ArticleListResponse
+	err = json.NewDecoder(resp3.Body).Decode(&editedDescResult)
+	require.NoError(t, err)
+
+	// Verify: Dirs still come first, files sorted by edited time desc
+	assert.Len(t, editedDescResult.Articles, 3)
+	assert.Equal(t, model.NodeTypeDir, editedDescResult.Articles[0].Type)
+	// Files after dirs: beta.md edited later than alpha.md (desc order)
+	assert.Equal(t, "beta.md", editedDescResult.Articles[1].Path)
+	assert.Equal(t, "alpha.md", editedDescResult.Articles[2].Path)
+
+	// Test: Sort by created time, ascending (oldest first)
+	resp4, err := http.Get(env.Server.URL + "/api/v1/articles?sort=created&order=asc")
+	require.NoError(t, err)
+	defer resp4.Body.Close()
+
+	var createdAscResult model.ArticleListResponse
+	err = json.NewDecoder(resp4.Body).Decode(&createdAscResult)
+	require.NoError(t, err)
+
+	// Verify: Dirs still come first, files sorted by created time asc
+	assert.Len(t, createdAscResult.Articles, 3)
+	assert.Equal(t, model.NodeTypeDir, createdAscResult.Articles[0].Type)
+	// alpha.md created first (asc order)
+	assert.Equal(t, "alpha.md", createdAscResult.Articles[1].Path)
+	assert.Equal(t, "beta.md", createdAscResult.Articles[2].Path)
 }
 
 // =============================================================================

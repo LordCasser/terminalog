@@ -7,15 +7,20 @@
  * Features:
  * - File type icons (folder for dirs, description for files)
  * - RESTful routing: /dir/{path} for directories, /article/{path} for files
+ * - Clickable column headers for sorting (Created, Updated, Filename)
  */
 
 "use client";
 
 import type { Article } from "@/types";
+import type { SortField, SortOrder } from "@/lib/api/articles";
 import Link from "next/link";
 
 interface ArticleTableProps {
   articles: Article[];
+  sortField?: SortField;
+  sortOrder?: SortOrder;
+  onSort?: (field: SortField) => void;
 }
 
 /**
@@ -25,14 +30,7 @@ function getFileIcon(article: Article): string {
   if (article.type === "dir") {
     return "folder";
   }
-  
-  const ext = article.name.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "md":
-      return "description";
-    default:
-      return "description";
-  }
+  return "description";
 }
 
 /**
@@ -73,24 +71,47 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(",", "");
 }
 
-export function ArticleTable({ articles }: ArticleTableProps) {
+/**
+ * Sortable column header component
+ */
+function SortableHeader({ 
+  label, 
+  field, 
+  currentSort, 
+  currentOrder, 
+  onSort 
+}: { 
+  label: string; 
+  field: SortField; 
+  currentSort?: SortField; 
+  currentOrder?: SortOrder; 
+  onSort?: (field: SortField) => void;
+}) {
+  const isActive = currentSort === field;
+  const arrow = isActive ? (currentOrder === "desc" ? "↓" : "↑") : "";
+  
+  return (
+    <th 
+      className={`px-6 py-3 font-medium cursor-pointer select-none hover:text-secondary transition-colors ${isActive ? "text-secondary" : ""}`}
+      onClick={() => onSort?.(field)}
+    >
+      {label} {arrow}
+    </th>
+  );
+}
+
+export function ArticleTable({ articles, sortField, sortOrder, onSort }: ArticleTableProps) {
   return (
     <div className="w-full overflow-x-auto">
       <table className="w-full text-left border-collapse min-w-[1000px]">
         <thead>
           <tr className="bg-surface-container border-none text-outline uppercase text-[10px] tracking-[0.2em] font-bold">
-            <th className="px-6 py-3 font-medium">
-              Created
-            </th>
-            <th className="px-6 py-3 font-medium">
-              Updated
-            </th>
+            <SortableHeader label="Created" field="created" currentSort={sortField} currentOrder={sortOrder} onSort={onSort} />
+            <SortableHeader label="Updated" field="edited" currentSort={sortField} currentOrder={sortOrder} onSort={onSort} />
             <th className="px-6 py-3 font-medium">
               Editors
             </th>
-            <th className="px-6 py-3 font-medium">
-              Filename
-            </th>
+            <SortableHeader label="Filename" field="name" currentSort={sortField} currentOrder={sortOrder} onSort={onSort} />
             <th className="px-6 py-3 font-medium">
               Latest Commit
             </th>

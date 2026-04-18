@@ -130,6 +130,9 @@ const (
 
 	// SortEdited sorts by last edit time (last commit).
 	SortEdited SortField = "edited"
+
+	// SortName sorts alphabetically by file/directory name.
+	SortName SortField = "name"
 )
 
 // SortOrder represents the sort direction.
@@ -150,6 +153,8 @@ func ParseSortField(s string) SortField {
 		return SortCreated
 	case "edited":
 		return SortEdited
+	case "name":
+		return SortName
 	default:
 		return SortEdited
 	}

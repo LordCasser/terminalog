@@ -27,11 +27,26 @@ func NewArticleHandler(svc *service.ArticleService, versionSvc *service.VersionS
 	return &ArticleHandler{svc: svc, versionSvc: versionSvc, fileSvc: fileSvc}
 }
 
+// parseSortParams extracts sort and order from query parameters.
+// Default: sort=name (alphabetical), order=asc. Dirs first, then files.
+func parseSortParams(r *http.Request) (model.SortField, model.SortOrder) {
+	sortParam := r.URL.Query().Get("sort")
+	orderParam := r.URL.Query().Get("order")
+
+	// Default: alphabetical ascending for directory listing
+	if sortParam == "" {
+		return model.SortName, model.OrderAsc
+	}
+
+	return model.ParseSortField(sortParam), model.ParseSortOrder(orderParam)
+}
+
 // ListRoot handles GET /api/v1/articles - returns root directory listing.
 func (h *ArticleHandler) ListRoot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	sortField, sortOrder := parseSortParams(r)
 
-	articles, err := h.svc.ListDirectory(ctx, "")
+	articles, err := h.svc.ListDirectory(ctx, "", sortField, sortOrder)
 	if err != nil {
 		utils.RespondInternalServerError(w, err.Error())
 		return
@@ -105,8 +120,9 @@ func (h *ArticleHandler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 // handleDirectoryListing returns the listing of a directory.
 func (h *ArticleHandler) handleDirectoryListing(w http.ResponseWriter, r *http.Request, dirPath string) {
 	ctx := r.Context()
+	sortField, sortOrder := parseSortParams(r)
 
-	articles, err := h.svc.ListDirectory(ctx, dirPath)
+	articles, err := h.svc.ListDirectory(ctx, dirPath, sortField, sortOrder)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			utils.RespondNotFound(w, "Directory not found")

@@ -247,7 +247,7 @@ func TestAPI_DirectoryListingOrder(t *testing.T) {
 	})
 	defer env.Cleanup()
 
-	// Test: Root listing returns dirs first alphabetically, then files alphabetically
+	// Test: Root listing returns dirs first alphabetically, then files alphabetically (default sort=name asc)
 	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -268,6 +268,36 @@ func TestAPI_DirectoryListingOrder(t *testing.T) {
 
 	assert.Equal(t, model.NodeTypeFile, result.Articles[2].Type)
 	assert.Equal(t, "beta.md", result.Articles[2].Path)
+
+	// Test: Sort by edited time descending (most recently edited first)
+	resp2, err := http.Get(env.Server.URL + "/api/v1/articles?sort=edited&order=desc")
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+
+	var editedDescResult model.ArticleListResponse
+	err = json.NewDecoder(resp2.Body).Decode(&editedDescResult)
+	require.NoError(t, err)
+
+	assert.Len(t, editedDescResult.Articles, 3)
+	assert.Equal(t, model.NodeTypeDir, editedDescResult.Articles[0].Type)
+	// beta.md committed after alpha.md (edited desc: beta first)
+	assert.Equal(t, "beta.md", editedDescResult.Articles[1].Path)
+	assert.Equal(t, "alpha.md", editedDescResult.Articles[2].Path)
+
+	// Test: Sort by created time ascending (oldest first)
+	resp3, err := http.Get(env.Server.URL + "/api/v1/articles?sort=created&order=asc")
+	require.NoError(t, err)
+	defer resp3.Body.Close()
+
+	var createdAscResult model.ArticleListResponse
+	err = json.NewDecoder(resp3.Body).Decode(&createdAscResult)
+	require.NoError(t, err)
+
+	assert.Len(t, createdAscResult.Articles, 3)
+	assert.Equal(t, model.NodeTypeDir, createdAscResult.Articles[0].Type)
+	// alpha.md created first (asc: alpha before beta)
+	assert.Equal(t, "alpha.md", createdAscResult.Articles[1].Path)
+	assert.Equal(t, "beta.md", createdAscResult.Articles[2].Path)
 }
 
 func TestAPI_ErrorResponses(t *testing.T) {

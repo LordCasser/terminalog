@@ -237,8 +237,14 @@ func (s *FileService) directoryHasMarkdown(ctx context.Context, dir string) (boo
 		absDir = s.baseDir
 	}
 
+	return s.directoryHasMarkdownAbsPath(absDir)
+}
+
+// directoryHasMarkdownAbsPath checks if a directory contains markdown files.
+// It accepts an absolute path directly, skipping the ValidatePath normalization.
+func (s *FileService) directoryHasMarkdownAbsPath(absDir string) (bool, error) {
 	found := false
-	err = filepath.WalkDir(absDir, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(absDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}

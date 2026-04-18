@@ -90,11 +90,14 @@ type SearchResult struct {
 	// Path is the file path relative to the repository root.
 	Path string `json:"path"`
 
-	// Title is the article title.
+	// Title is the article title (for files) or directory name (for directories).
 	Title string `json:"title"`
 
 	// MatchedTitle is the title with matched portion highlighted (for future use).
 	MatchedTitle string `json:"matchedTitle"`
+
+	// Type is the result type: "file" for articles, "dir" for directories.
+	Type NodeType `json:"type"`
 }
 
 // FileHistory represents the complete Git history of a file.

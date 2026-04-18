@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -543,13 +544,22 @@ func sortTreeChildren(dirNodes map[string]*model.TreeNode) {
 	}
 }
 
-// Search searches articles by title.
+// Search searches articles by title, file name, and directory name.
+// It returns both matching articles (files) and matching directories.
+// Directory results have Type=NodeTypeDir; article results have Type=NodeTypeFile.
 func (s *ArticleService) Search(ctx context.Context, query string, dir string) ([]model.SearchResult, error) {
 	// Normalize inputs
 	query = strings.ToLower(query)
 	dir = utils.NormalizePath(dir)
 
-	// Get article list (use cache)
+	results := make([]model.SearchResult, 0)
+
+	// 1. Search directories by name - walk all directories recursively
+	if err := s.searchDirectories(ctx, query, dir, &results); err != nil {
+		return nil, err
+	}
+
+	// 2. Search articles by title and file name
 	articles, err := s.ListArticles(ctx, ListOptions{
 		Dir:      dir,
 		Sort:     model.SortEdited,
@@ -561,21 +571,76 @@ func (s *ArticleService) Search(ctx context.Context, query string, dir string) (
 		return nil, err
 	}
 
-	// Search titles
-	results := make([]model.SearchResult, 0)
-
 	for _, article := range articles {
 		titleLower := strings.ToLower(article.Title)
-		if strings.Contains(titleLower, query) {
+		fileNameLower := strings.ToLower(filepath.Base(article.Path))
+
+		// Match by title or file name
+		if strings.Contains(titleLower, query) || strings.Contains(fileNameLower, query) {
 			results = append(results, model.SearchResult{
 				Path:         article.Path,
 				Title:        article.Title,
 				MatchedTitle: article.Title,
+				Type:         model.NodeTypeFile,
 			})
 		}
 	}
 
 	return results, nil
+}
+
+// searchDirectories recursively walks directories and matches directory names against query.
+func (s *ArticleService) searchDirectories(ctx context.Context, query string, baseDir string, results *[]model.SearchResult) error {
+	absDir, err := utils.ValidatePath(s.fileSvc.baseDir, baseDir)
+	if err != nil {
+		return err
+	}
+
+	if baseDir == "" || baseDir == "/" {
+		absDir = s.fileSvc.baseDir
+	}
+
+	return filepath.WalkDir(absDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // Skip errors
+		}
+
+		name := d.Name()
+
+		// Skip .git, .assets, and special directories
+		if name == ".git" || name == ".assets" || strings.HasPrefix(name, "_") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if d.IsDir() {
+			// Check if directory name matches query
+			nameLower := strings.ToLower(name)
+			if strings.Contains(nameLower, query) {
+				// Convert absolute path to relative path for the result
+				relPath, err := filepath.Rel(s.fileSvc.baseDir, path)
+				if err != nil {
+					return nil
+				}
+				relPath = utils.NormalizePath(relPath)
+
+				// Check if directory contains markdown files (pass absolute path directly)
+				hasMD, err := s.fileSvc.directoryHasMarkdownAbsPath(path)
+				if err == nil && hasMD {
+					*results = append(*results, model.SearchResult{
+						Path:         relPath,
+						Title:        name,
+						MatchedTitle: name,
+						Type:         model.NodeTypeDir,
+					})
+				}
+			}
+		}
+
+		return nil
+	})
 }
 
 // InvalidateCache invalidates the article cache.

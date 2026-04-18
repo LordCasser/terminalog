@@ -51,11 +51,14 @@ type SearchResponse struct {
 
 // WebSocketSearchResult represents a search result for WebSocket.
 type WebSocketSearchResult struct {
-	// Path is the article path (e.g., "README.md").
+	// Path is the result path (e.g., "tech/golang" for dirs, "tech/golang/go-guide.md" for files).
 	Path string `json:"path"`
 
-	// Title is the article title (without .md extension).
+	// Title is the display title (article title for files, directory name for dirs).
 	Title string `json:"title"`
+
+	// Type is the result type: "file" for articles, "dir" for directories.
+	Type string `json:"type"`
 }
 
 // CompletionService provides path completion and search functionality.
@@ -200,6 +203,7 @@ func (s *CompletionService) HandleSearch(ctx context.Context, req SearchRequest)
 		wsResults = append(wsResults, WebSocketSearchResult{
 			Path:  results[i].Path,
 			Title: results[i].Title,
+			Type:  string(results[i].Type),
 		})
 	}
 

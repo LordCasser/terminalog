@@ -27,6 +27,7 @@ import {
 } from "@/components/modal";
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 import { getArticles } from "@/lib/api/articles";
+import { searchArticles } from "@/lib/api/search";
 
 /**
  * Navigate to a path based on its type.
@@ -526,44 +527,44 @@ export function CommandPrompt() {
         return;
       }
       
-      // Keyword search via WebSocket
+      // Keyword search via REST API (more reliable than WebSocket)
       try {
-        const response = await sendWebSocketMessage<SearchResponse>({
-          type: "search_request",
-          keyword: query,
-        });
+        const searchResponse = await searchArticles({ q: query });
 
-        if (response.type === "search_response") {
-          if (response.results.length > 0) {
-            // Single result: directly navigate (smart: .md → article, otherwise → directory)
-            if (response.results.length === 1) {
-              navigateToPath(router, response.results[0].path);
-            } 
-            // Multiple results: show modal
-            else {
-              const event = new CustomEvent<SearchResultsEventDetail>(
-                SHOW_SEARCH_RESULTS_MODAL,
-                {
-                  detail: {
-                    results: response.results.map(r => ({
-                      path: r.path,
-                      title: r.title,
-                      lastModified: undefined,
-                    })),
-                  },
-                }
-              );
-              window.dispatchEvent(event);
-            }
-          } else {
-            // No search results: show hint
-            setNoMatchHintType("search");
-            setShowNoMatchHint(true);
-            setTimeout(() => setShowNoMatchHint(false), 1000);
+        if (searchResponse.results.length > 0) {
+          // Single result: directly navigate
+          if (searchResponse.results.length === 1) {
+            navigateToPath(router, searchResponse.results[0].path);
+          } 
+          // Multiple results: show modal
+          else {
+            const event = new CustomEvent<SearchResultsEventDetail>(
+              SHOW_SEARCH_RESULTS_MODAL,
+              {
+                detail: {
+                  results: searchResponse.results.map(r => ({
+                    path: r.path,
+                    title: r.title,
+                    type: r.type,
+                    lastModified: undefined,
+                  })),
+                },
+              }
+            );
+            window.dispatchEvent(event);
           }
+        } else {
+          // No search results: show hint
+          setNoMatchHintType("search");
+          setShowNoMatchHint(true);
+          setTimeout(() => setShowNoMatchHint(false), 1000);
         }
       } catch (error) {
-        console.error("WebSocket search error:", error);
+        console.error("Search API error:", error);
+        // Show no match hint on error
+        setNoMatchHintType("search");
+        setShowNoMatchHint(true);
+        setTimeout(() => setShowNoMatchHint(false), 1000);
       }
       return;
     }

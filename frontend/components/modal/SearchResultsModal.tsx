@@ -26,6 +26,7 @@ export const SEARCH_RESULT_SELECTED = "searchResultSelected";
 export interface SearchResultItem {
   path: string;
   title: string;
+  type: "file" | "dir"; // "file" for articles, "dir" for directories
   lastModified?: string; // Date string (optional)
 }
 
@@ -54,9 +55,13 @@ export function SearchResultsModal() {
     window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
   }, [timer]);
 
-  // Handle result selection (Enter key or click)
+  // Handle result selection (Enter key or click) - smart navigation
   const handleSelect = useCallback((result: SearchResultItem) => {
-    window.dispatchEvent(new CustomEvent(SEARCH_RESULT_SELECTED, { detail: result.path }));
+    if (result.type === "dir") {
+      window.dispatchEvent(new CustomEvent(SEARCH_RESULT_SELECTED, { detail: result.path }));
+    } else {
+      window.dispatchEvent(new CustomEvent(SEARCH_RESULT_SELECTED, { detail: result.path }));
+    }
     handleClose();
   }, [handleClose]);
 
@@ -179,11 +184,23 @@ export function SearchResultsModal() {
                 }
               `}
             >
-              <span className="text-left truncate max-w-[60%]">
-                {result.title}
+              <span className="text-left truncate max-w-[70%] flex items-center gap-2">
+                {/* Type icon: folder for dir, description for file */}
+                <span className="material-symbols-outlined text-xs">
+                  {result.type === "dir" ? "folder" : "description"}
+                </span>
+                {/* Display: title with hierarchical path */}
+                <span className="truncate">
+                  {result.title}
+                  {result.path !== result.title && (
+                    <span className="text-outline ml-1 text-xs">
+                      ({result.type === "dir" ? result.path : result.path.replace(/\.md$/, "")})
+                    </span>
+                  )}
+                </span>
               </span>
               <span className="text-right text-xs text-outline">
-                {result.lastModified || "N/A"}
+                {result.type === "dir" ? "DIR" : (result.lastModified || "N/A")}
               </span>
             </div>
           ))}

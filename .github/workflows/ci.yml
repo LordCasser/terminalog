@@ -96,11 +96,7 @@ jobs:
           - goos: linux
             goarch: arm64
           - goos: darwin
-            goarch: amd64
-          - goos: darwin
             goarch: arm64
-          - goos: windows
-            goarch: amd64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -125,16 +121,16 @@ jobs:
         run: |
           mkdir -p bin
           go build -ldflags="-s -w" \
-            -o bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }} \
+            -o bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }} \
             cmd/terminalog/main.go
 
       - name: Verify binary
         run: |
-          if [ ! -f "bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}" ]; then
+          if [ ! -f "bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }}" ]; then
             echo "Error: Binary not found"
             exit 1
           fi
-          ls -lh bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
+          ls -lh bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }}
 
   build-summary:
     name: Build Summary

@@ -59,14 +59,8 @@ jobs:
             goarch: arm64
             archive: tar.gz
           - goos: darwin
-            goarch: amd64
-            archive: tar.gz
-          - goos: darwin
             goarch: arm64
             archive: tar.gz
-          - goos: windows
-            goarch: amd64
-            archive: zip
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,11 +84,6 @@ jobs:
         run: |
           echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           echo "date=$(date -u '+%Y-%m-%d_%H:%M:%S')" >> $GITHUB_OUTPUT
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            echo "ext=.exe" >> $GITHUB_OUTPUT
-          else
-            echo "ext=" >> $GITHUB_OUTPUT
-          fi
 
       - name: Build binary
         env:
@@ -103,7 +92,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p bin
-          BINARY="terminalog-${{ steps.version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ steps.version.outputs.ext }}"
+          BINARY="terminalog-${{ steps.version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}"
           go build -ldflags="-s -w \
             -X main.version=${{ steps.version.outputs.version }} \
             -X main.buildDate=${{ steps.version.outputs.date }}" \
@@ -114,14 +103,9 @@ jobs:
         run: |
           cd bin
           ARCHIVE="terminalog-${{ steps.version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          BINARY="${ARCHIVE}${{ steps.version.outputs.ext }}"
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            zip "${ARCHIVE}.zip" "${BINARY}"
-            sha256sum "${ARCHIVE}.zip" > "${ARCHIVE}.zip.sha256"
-          else
-            tar -czf "${ARCHIVE}.tar.gz" "${BINARY}"
-            sha256sum "${ARCHIVE}.tar.gz" > "${ARCHIVE}.tar.gz.sha256"
-          fi
+          BINARY="${ARCHIVE}"
+          tar -czf "${ARCHIVE}.tar.gz" "${BINARY}"
+          sha256sum "${ARCHIVE}.tar.gz" > "${ARCHIVE}.tar.gz.sha256"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -130,8 +114,6 @@ jobs:
           path: |
             bin/*.tar.gz
             bin/*.tar.gz.sha256
-            bin/*.zip
-            bin/*.zip.sha256
           retention-days: 7
 
   release:

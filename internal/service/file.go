@@ -36,9 +36,10 @@ func NewFileService(baseDir string) (*FileService, error) {
 	return &FileService{baseDir: absPath}, nil
 }
 
-// ScanMarkdownFiles scans the directory for all Markdown files.
+// ScanMarkdownFiles scans the directory for all Markdown files recursively.
 // It returns a list of relative paths to Markdown files.
 // Files starting with "_" (SpecialFilePrefix) are excluded.
+// Deprecated: Use ScanDirectory for hierarchical listing.
 func (s *FileService) ScanMarkdownFiles(ctx context.Context, dir string) ([]string, error) {
 	// Validate and get absolute path
 	absDir, err := utils.ValidatePath(s.baseDir, dir)
@@ -112,6 +113,174 @@ func (s *FileService) ScanMarkdownFiles(ctx context.Context, dir string) ([]stri
 	sort.Strings(files)
 
 	return files, nil
+}
+
+// DirEntry represents a direct child of a directory (file or subdirectory).
+type DirEntry struct {
+	// Name is the entry name (e.g., "tech" or "welcome.md").
+	Name string
+
+	// Path is the relative path from the content root (e.g., "tech" or "welcome.md").
+	Path string
+
+	// Type is the entry type: "dir" or "file".
+	Type model.NodeType
+
+	// HasMarkdown indicates whether a directory contains at least one markdown file
+	// (recursively). Used to decide whether to show the directory in the listing.
+	HasMarkdown bool
+}
+
+// ScanDirectory scans a single directory level and returns direct children only.
+// It returns subdirectories and markdown files that are direct children of the given dir.
+// Subdirectories are only included if they contain at least one markdown file recursively.
+func (s *FileService) ScanDirectory(ctx context.Context, dir string) ([]DirEntry, error) {
+	// Validate and get absolute path
+	absDir, err := utils.ValidatePath(s.baseDir, dir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle root dir
+	if dir == "" || dir == "/" {
+		absDir = s.baseDir
+	}
+
+	// Check if directory exists
+	info, err := os.Stat(absDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+
+	if !info.IsDir() {
+		return nil, model.ErrNotFound
+	}
+
+	// Read directory entries
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]DirEntry, 0)
+
+	for _, entry := range entries {
+		name := entry.Name()
+
+		// Skip .git directory
+		if name == ".git" {
+			continue
+		}
+
+		// Skip .assets directory (hidden assets storage)
+		if name == AssetsDirName {
+			continue
+		}
+
+		// Skip special files/dirs (starting with "_")
+		if strings.HasPrefix(name, SpecialFilePrefix) {
+			continue
+		}
+
+		childPath := utils.NormalizePath(dir + "/" + name)
+
+		if entry.IsDir() {
+			// Only include subdirectories that contain at least one markdown file
+			hasMD, err := s.directoryHasMarkdown(ctx, childPath)
+			if err != nil || !hasMD {
+				continue
+			}
+
+			result = append(result, DirEntry{
+				Name:        name,
+				Path:        childPath,
+				Type:        model.NodeTypeDir,
+				HasMarkdown: true,
+			})
+		} else {
+			// Only include markdown files
+			if !utils.IsMarkdownFile(name) {
+				continue
+			}
+
+			result = append(result, DirEntry{
+				Name:        name,
+				Path:        childPath,
+				Type:        model.NodeTypeFile,
+				HasMarkdown: false,
+			})
+		}
+	}
+
+	// Sort: directories first, then files, alphabetically within each group
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Type != result[j].Type {
+			return result[i].Type == model.NodeTypeDir
+		}
+		return result[i].Name < result[j].Name
+	})
+
+	return result, nil
+}
+
+// directoryHasMarkdown checks if a directory (recursively) contains any markdown files.
+func (s *FileService) directoryHasMarkdown(ctx context.Context, dir string) (bool, error) {
+	absDir, err := utils.ValidatePath(s.baseDir, dir)
+	if err != nil {
+		return false, err
+	}
+
+	if dir == "" || dir == "/" {
+		absDir = s.baseDir
+	}
+
+	found := false
+	err = filepath.WalkDir(absDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Stop early if already found
+		if found {
+			return filepath.SkipDir
+		}
+
+		// Skip .git
+		if d.Name() == ".git" {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Skip .assets
+		if d.Name() == AssetsDirName {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Skip special files
+		if strings.HasPrefix(d.Name(), SpecialFilePrefix) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Check for markdown file
+		if !d.IsDir() && utils.IsMarkdownFile(path) {
+			found = true
+		}
+
+		return nil
+	})
+
+	return found, err
 }
 
 // ReadSpecialFile reads a special file (e.g., _ABOUTME.md).

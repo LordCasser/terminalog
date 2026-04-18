@@ -1,14 +1,12 @@
 /**
  * ArticleTable Component
  * 
- * 5-column table for articles:
+ * 5-column table for articles and directories:
  * - Created | Updated | Editors | Filename | Latest Commit
  * 
  * Features:
- * - Sortable headers (click to sort)
- * - Hover highlight
- * - File type icons
- * - RESTful routing: /article/{path} (path parameter, not query parameter)
+ * - File type icons (folder for dirs, description for files)
+ * - RESTful routing: /dir/{path} for directories, /article/{path} for files
  */
 
 "use client";
@@ -18,9 +16,6 @@ import Link from "next/link";
 
 interface ArticleTableProps {
   articles: Article[];
-  onSort?: (field: string) => void;
-  sortField?: string;
-  sortOrder?: "asc" | "desc";
 }
 
 /**
@@ -31,25 +26,10 @@ function getFileIcon(article: Article): string {
     return "folder";
   }
   
-  // Check file extension
   const ext = article.name.split(".").pop()?.toLowerCase();
   switch (ext) {
     case "md":
       return "description";
-    case "yml":
-    case "yaml":
-    case "json":
-    case "toml":
-      return "settings";
-    case "js":
-    case "ts":
-    case "go":
-    case "py":
-      return "code";
-    case "png":
-    case "jpg":
-    case "svg":
-      return "image";
     default:
       return "description";
   }
@@ -62,18 +42,7 @@ function getIconColor(article: Article): string {
   if (article.type === "dir") {
     return "text-primary";
   }
-  const ext = article.name.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "md":
-      return "text-tertiary";
-    case "yml":
-    case "yaml":
-    case "json":
-    case "toml":
-      return "text-secondary";
-    default:
-      return "text-primary";
-  }
+  return "text-tertiary";
 }
 
 /**
@@ -104,37 +73,23 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString("en-US", { year: "numeric", month: "2-digit", day: "2-digit" }).replace(",", "");
 }
 
-export function ArticleTable({ 
-  articles, 
-  onSort, 
-  sortField = "edited", 
-  sortOrder = "desc" 
-}: ArticleTableProps) {
+export function ArticleTable({ articles }: ArticleTableProps) {
   return (
     <div className="w-full overflow-x-auto">
       <table className="w-full text-left border-collapse min-w-[1000px]">
         <thead>
           <tr className="bg-surface-container border-none text-outline uppercase text-[10px] tracking-[0.2em] font-bold">
-            <th 
-              className="px-6 py-3 font-medium cursor-pointer hover:text-tertiary transition-colors"
-              onClick={() => onSort?.("created")}
-            >
-              Created {sortField === "created" && (sortOrder === "asc" ? "↑" : "↓")}
+            <th className="px-6 py-3 font-medium">
+              Created
             </th>
-            <th 
-              className="px-6 py-3 font-medium cursor-pointer hover:text-tertiary transition-colors"
-              onClick={() => onSort?.("edited")}
-            >
-              Updated {sortField === "edited" && (sortOrder === "asc" ? "↑" : "↓")}
+            <th className="px-6 py-3 font-medium">
+              Updated
             </th>
             <th className="px-6 py-3 font-medium">
               Editors
             </th>
-            <th 
-              className="px-6 py-3 font-medium cursor-pointer hover:text-tertiary transition-colors"
-              onClick={() => onSort?.("name")}
-            >
-              Filename {sortField === "name" && (sortOrder === "asc" ? "↑" : "↓")}
+            <th className="px-6 py-3 font-medium">
+              Filename
             </th>
             <th className="px-6 py-3 font-medium">
               Latest Commit
@@ -146,24 +101,24 @@ export function ArticleTable({
             <tr key={index} className="hover:bg-surface-container-high transition-colors group cursor-pointer">
               {/* Created */}
               <td className="px-6 py-5 text-on-surface-variant text-sm whitespace-nowrap">
-                {formatDate(article.createdAt)}
+                {article.createdAt ? formatDate(article.createdAt) : "—"}
               </td>
               
               {/* Updated */}
               <td className="px-6 py-5 text-on-surface-variant text-sm whitespace-nowrap">
-                {formatRelativeTime(article.editedAt)}
+                {article.editedAt ? formatRelativeTime(article.editedAt) : "—"}
               </td>
               
               {/* Editors */}
               <td className="px-6 py-5 whitespace-nowrap">
-                {article.contributors.map((contributor, i) => (
+                {article.contributors?.map((contributor, i) => (
                   <span 
                     key={i} 
                     className={`tag ${i === 0 ? 'tag-primary' : 'tag-secondary'} mr-1`}
                   >
                     {contributor}
                   </span>
-                ))}
+                )) || "—"}
               </td>
               
               {/* Filename */}
@@ -183,7 +138,7 @@ export function ArticleTable({
               
               {/* Latest Commit */}
               <td className="px-6 py-5 text-outline text-sm italic whitespace-nowrap">
-                {article.latestCommit}
+                {article.latestCommit || "—"}
               </td>
             </tr>
           ))}

@@ -81,19 +81,19 @@ func SetupScenario(t *testing.T, setup func(repo *testutil.TestRepo) error) *Sce
 	authSvc := service.NewAuthService(cfg)
 
 	// Create handlers
-	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc)
+	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc, fileSvc)
 	assetHandler := handler.NewAssetHandler(assetSvc)
 	searchHandler := handler.NewSearchHandler(articleSvc)
-	treeHandler := handler.NewTreeHandler(articleSvc)
 	gitHandler := handler.NewGitHandler(gitSvc, authSvc)
+	treeHandler := handler.NewTreeHandler(articleSvc)
 
 	// Create router with all endpoints (RESTful v1)
 	router := chi.NewRouter()
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Get("/articles", articleHandler.List)
-		r.Get("/articles/*", articleHandler.HandleArticleRequest)
+		r.Get("/articles", articleHandler.ListRoot)
+		r.Get("/articles/*", articleHandler.HandleRequest)
 		r.Get("/tree", treeHandler.Get)
-		r.Get("/articles/search", searchHandler.Search)
+		r.Get("/search", searchHandler.Search)
 		r.Get("/assets/*", assetHandler.Get)
 		r.Get("/git/info/refs", gitHandler.InfoRefs)
 		r.Post("/git/git-upload-pack", gitHandler.UploadPack)
@@ -171,9 +171,11 @@ func TestScenario01_ArticleList(t *testing.T) {
 		assert.NotEmpty(t, article.Contributors)
 	}
 
-	// Verify: Newest edited first (edited desc)
-	// Note: created and edited times are the same since each file has only one commit
-	assert.Equal(t, "new.md", result.Articles[0].Path, "Newest article should be first")
+	// Verify: Alphabetical order (dirs first, then files alphabetically)
+	// With no directories, files are sorted alphabetically: middle.md, new.md, old.md
+	assert.Equal(t, "middle.md", result.Articles[0].Path, "First file alphabetically")
+	assert.Equal(t, "new.md", result.Articles[1].Path, "Second file alphabetically")
+	assert.Equal(t, "old.md", result.Articles[2].Path, "Third file alphabetically")
 }
 
 // =============================================================================
@@ -324,7 +326,7 @@ func TestScenario05_TitleSearch(t *testing.T) {
 	defer env.Cleanup()
 
 	// Test: Search for "golang"
-	resp, err := http.Get(env.Server.URL + "/api/v1/articles/search?q=golang")
+	resp, err := http.Get(env.Server.URL + "/api/v1/search?q=golang")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -346,7 +348,7 @@ func TestScenario05_TitleSearch(t *testing.T) {
 	}
 
 	// Test: Search for non-existent keyword
-	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/search?q=nonexistent")
+	resp2, err := http.Get(env.Server.URL + "/api/v1/search?q=nonexistent")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
@@ -359,7 +361,7 @@ func TestScenario05_TitleSearch(t *testing.T) {
 	assert.Len(t, result2.Results, 0)
 
 	// Test: Search without query parameter
-	resp3, err := http.Get(env.Server.URL + "/api/v1/articles/search")
+	resp3, err := http.Get(env.Server.URL + "/api/v1/search")
 	require.NoError(t, err)
 	defer resp3.Body.Close()
 
@@ -438,7 +440,7 @@ func TestScenario06_UncommittedFilesNotVisible(t *testing.T) {
 	assert.Equal(t, 1, fileCount)
 
 	// Test: Search should not find uncommitted files
-	resp5, err := http.Get(env.Server.URL + "/api/v1/articles/search?q=Uncommitted")
+	resp5, err := http.Get(env.Server.URL + "/api/v1/search?q=Uncommitted")
 	require.NoError(t, err)
 	defer resp5.Body.Close()
 
@@ -451,78 +453,71 @@ func TestScenario06_UncommittedFilesNotVisible(t *testing.T) {
 }
 
 // =============================================================================
-// Scenario 7: 排序选项
-// Requirements: 3.3.2, 3.3.3
+// Scenario 7: 目录列表顺序（alphabetical: dirs first, then files）
+// Requirements: 3.1.1
 // =============================================================================
 
-func TestScenario07_SortOptions(t *testing.T) {
+func TestScenario07_DirectoryListingOrder(t *testing.T) {
 	env := SetupScenario(t, func(repo *testutil.TestRepo) error {
-		now := time.Now()
-
-		// Article 1: Created oldest, edited recently
-		if err := repo.CreateMarkdownFileWithTime("alpha.md", "# Alpha", "Create alpha", "author1", now.Add(-72*time.Hour)); err != nil {
+		// Create a directory with markdown files
+		if err := repo.CreateFile("tech/golang.md", "# Golang"); err != nil {
 			return err
 		}
 
-		// Article 2: Created middle
-		if err := repo.CreateMarkdownFileWithTime("beta.md", "# Beta", "Create beta", "author2", now.Add(-48*time.Hour)); err != nil {
+		// Create root-level files
+		if err := repo.CreateMarkdownFile("alpha.md", "# Alpha", "Create alpha", "author1"); err != nil {
 			return err
 		}
-
-		// Article 3: Created newest
-		return repo.CreateMarkdownFileWithTime("gamma.md", "# Gamma", "Create gamma", "author3", now.Add(-24*time.Hour))
+		if err := repo.CreateMarkdownFile("beta.md", "# Beta", "Create beta", "author2"); err != nil {
+			return err
+		}
+		return nil
 	})
 	defer env.Cleanup()
 
-	tests := []struct {
-		name     string
-		params   string
-		expected []string // Expected order of paths
-	}{
-		{
-			name:     "Default sort (edited desc)",
-			params:   "",
-			expected: []string{"gamma.md", "beta.md", "alpha.md"}, // Newest edited first
-		},
-		{
-			name:     "Sort by created asc",
-			params:   "?sort=created&order=asc",
-			expected: []string{"alpha.md", "beta.md", "gamma.md"}, // Oldest created first
-		},
-		{
-			name:     "Sort by created desc",
-			params:   "?sort=created&order=desc",
-			expected: []string{"gamma.md", "beta.md", "alpha.md"}, // Newest created first
-		},
-		{
-			name:     "Sort by edited asc",
-			params:   "?sort=edited&order=asc",
-			expected: []string{"alpha.md", "beta.md", "gamma.md"}, // Oldest edited first
-		},
-		{
-			name:     "Sort by edited desc",
-			params:   "?sort=edited&order=desc",
-			expected: []string{"gamma.md", "beta.md", "alpha.md"}, // Newest edited first
-		},
+	// Test: Root listing returns dirs first alphabetically, then files alphabetically
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var result model.ArticleListResponse
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
+
+	paths := make([]string, len(result.Articles))
+	types := make([]model.NodeType, len(result.Articles))
+	for i, a := range result.Articles {
+		paths[i] = a.Path
+		types[i] = a.Type
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resp, err := http.Get(env.Server.URL + "/api/v1/articles" + tt.params)
-			require.NoError(t, err)
-			defer resp.Body.Close()
+	// Verify: 3 items - tech dir, then alpha.md and beta.md files
+	assert.Len(t, result.Articles, 3)
 
-			var result model.ArticleListResponse
-			err = json.NewDecoder(resp.Body).Decode(&result)
-			require.NoError(t, err)
+	// Verify: Directories come first
+	assert.Equal(t, model.NodeTypeDir, result.Articles[0].Type, "First item should be directory")
+	assert.Equal(t, "tech", result.Articles[0].Path)
 
-			paths := make([]string, len(result.Articles))
-			for i, a := range result.Articles {
-				paths[i] = a.Path
-			}
+	// Verify: Files come after directories, sorted alphabetically
+	assert.Equal(t, model.NodeTypeFile, result.Articles[1].Type, "Second item should be file")
+	assert.Equal(t, "alpha.md", result.Articles[1].Path)
 
-			assert.Equal(t, tt.expected, paths, "Sort order mismatch for %s", tt.name)
-		})
+	assert.Equal(t, model.NodeTypeFile, result.Articles[2].Type, "Third item should be file")
+	assert.Equal(t, "beta.md", result.Articles[2].Path)
+
+	// Test: Subdirectory listing
+	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/tech")
+	require.NoError(t, err)
+	defer resp2.Body.Close()
+
+	var dirResult model.ArticleListResponse
+	err = json.NewDecoder(resp2.Body).Decode(&dirResult)
+	require.NoError(t, err)
+
+	// Verify: tech directory contains its direct children
+	assert.True(t, dirResult.Total >= 1)
+	for _, a := range dirResult.Articles {
+		assert.Equal(t, model.NodeTypeFile, a.Type, "tech/golang.md should be a file")
 	}
 }
 
@@ -744,8 +739,8 @@ func TestScenario11_SecurityTests(t *testing.T) {
 		{
 			name:        "Absolute path attempt",
 			path:        "/api/v1/articles/etc/passwd",
-			wantStatus:  http.StatusBadRequest, // Invalid path (not in repo)
-			description: "Absolute path access should return error",
+			wantStatus:  http.StatusNotFound, // Nonexistent path in repo returns 404
+			description: "Absolute path access should return 404",
 		},
 	}
 
@@ -861,7 +856,7 @@ func TestScenario12_ImageAssets(t *testing.T) {
 }
 
 // =============================================================================
-// Scenario 13: 嵌套目录文章
+// Scenario 13: 嵌套目录文章（层级浏览）
 // Requirements: 3.1.1
 // =============================================================================
 
@@ -884,7 +879,7 @@ func TestScenario13_NestedDirectoryArticles(t *testing.T) {
 	})
 	defer env.Cleanup()
 
-	// Test: Get root articles list
+	// Test: Get root listing - should only show direct children (life dir, tech dir)
 	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -893,40 +888,68 @@ func TestScenario13_NestedDirectoryArticles(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	require.NoError(t, err)
 
-	// Verify: All nested articles are visible
-	assert.Equal(t, 4, result.Total)
+	// Verify: Root shows only 2 directories (life, tech) - NOT recursive
+	assert.Equal(t, 2, result.Total)
+	assert.Len(t, result.Articles, 2)
 
-	// Verify: Paths include nested directories
-	paths := make([]string, len(result.Articles))
-	for i, a := range result.Articles {
-		paths[i] = a.Path
+	// Verify: Both are directory type entries
+	dirPaths := make([]string, 0)
+	for _, a := range result.Articles {
+		assert.Equal(t, model.NodeTypeDir, a.Type, "Root children should be directories")
+		dirPaths = append(dirPaths, a.Path)
 	}
-	assert.Contains(t, paths, "tech/golang/intro.md")
-	assert.Contains(t, paths, "tech/golang/advanced.md")
-	assert.Contains(t, paths, "tech/rust/basics.md")
-	assert.Contains(t, paths, "life/travel/japan.md")
+	assert.Contains(t, dirPaths, "life")
+	assert.Contains(t, dirPaths, "tech")
 
-	// Test: Get specific nested article
-	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/tech/golang/intro.md")
+	// Test: Navigate into tech directory
+	resp2, err := http.Get(env.Server.URL + "/api/v1/articles/tech")
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
-	assert.Equal(t, http.StatusOK, resp2.StatusCode)
+	var techResult model.ArticleListResponse
+	err = json.NewDecoder(resp2.Body).Decode(&techResult)
+	require.NoError(t, err)
 
-	// Test: Get directory-specific articles
-	resp3, err := http.Get(env.Server.URL + "/api/v1/articles?dir=tech/golang")
+	// Verify: tech shows its direct children (golang dir, rust dir)
+	assert.True(t, techResult.Total >= 2)
+	techPaths := make([]string, len(techResult.Articles))
+	for i, a := range techResult.Articles {
+		techPaths[i] = a.Path
+	}
+	assert.Contains(t, techPaths, "tech/golang")
+	assert.Contains(t, techPaths, "tech/rust")
+
+	// Test: Get specific nested article
+	resp3, err := http.Get(env.Server.URL + "/api/v1/articles/tech/golang/intro.md")
 	require.NoError(t, err)
 	defer resp3.Body.Close()
 
-	var dirResult model.ArticleListResponse
-	err = json.NewDecoder(resp3.Body).Decode(&dirResult)
+	assert.Equal(t, http.StatusOK, resp3.StatusCode)
+
+	var article model.ArticleResponse
+	err = json.NewDecoder(resp3.Body).Decode(&article)
 	require.NoError(t, err)
 
-	// Verify: Only articles in tech/golang directory
-	assert.Equal(t, 2, dirResult.Total)
-	for _, a := range dirResult.Articles {
-		assert.Contains(t, a.Path, "tech/golang/")
+	assert.Equal(t, "tech/golang/intro.md", article.Path)
+
+	// Test: Navigate into tech/golang directory
+	resp4, err := http.Get(env.Server.URL + "/api/v1/articles/tech/golang")
+	require.NoError(t, err)
+	defer resp4.Body.Close()
+
+	var golangResult model.ArticleListResponse
+	err = json.NewDecoder(resp4.Body).Decode(&golangResult)
+	require.NoError(t, err)
+
+	// Verify: tech/golang shows its direct children (advanced.md, intro.md)
+	assert.Equal(t, 2, golangResult.Total)
+	golangPaths := make([]string, len(golangResult.Articles))
+	for i, a := range golangResult.Articles {
+		assert.Equal(t, model.NodeTypeFile, a.Type, "tech/golang children should be files")
+		golangPaths[i] = a.Path
 	}
+	assert.Contains(t, golangPaths, "tech/golang/advanced.md")
+	assert.Contains(t, golangPaths, "tech/golang/intro.md")
 }
 
 // =============================================================================
@@ -1039,7 +1062,7 @@ func TestScenario15_ErrorHandling(t *testing.T) {
 		{
 			name:       "Article not found",
 			endpoint:   "/api/v1/articles/not-exist.md",
-			wantStatus: http.StatusBadRequest,
+			wantStatus: http.StatusNotFound,
 			wantError:  "",
 		},
 		{
@@ -1050,14 +1073,14 @@ func TestScenario15_ErrorHandling(t *testing.T) {
 		},
 		{
 			name:       "Search without query",
-			endpoint:   "/api/v1/articles/search",
+			endpoint:   "/api/v1/search",
 			wantStatus: http.StatusBadRequest,
 			wantError:  "",
 		},
 		{
-			name:       "Invalid sort parameter",
-			endpoint:   "/api/v1/articles?sort=invalid",
-			wantStatus: http.StatusOK, // Invalid sort params are ignored, returns default
+			name:       "Directory not found",
+			endpoint:   "/api/v1/articles/nonexistent",
+			wantStatus: http.StatusNotFound,
 			wantError:  "",
 		},
 		{

@@ -1,31 +1,25 @@
 /**
  * Articles API
  * 
- * Handles fetching article list, article content, and timeline.
- * RESTful v1 API paths (see docs/api-spec.md)
+ * RESTful path-based routing:
+ * - GET /api/v1/articles           → root directory listing
+ * - GET /api/v1/articles/tech      → directory listing for tech/
+ * - GET /api/v1/articles/tech/go.md → article content
+ * - GET /api/v1/articles/tech/go.md/timeline → timeline
+ * - GET /api/v1/articles/tech/go.md/version  → version
  */
 
 import { apiClient } from './client';
 import type { Article, ArticleListResponse, ArticleResponse, CommitInfo, VersionInfo, VersionHistoryEntry } from '@/types';
 
-interface GetArticlesParams {
-  dir?: string;
-  sort?: 'created' | 'edited';
-  order?: 'asc' | 'desc';
-}
-
 /**
- * Get list of articles in a directory
- * GET /api/v1/articles
+ * Get directory listing (root or subdirectory)
+ * GET /api/v1/articles or GET /api/v1/articles/{dirPath}
+ * Returns both directories and files in the given path.
  */
-export async function getArticles(params: GetArticlesParams = {}): Promise<ArticleListResponse> {
-  const query = new URLSearchParams();
-  
-  if (params.dir) query.set('dir', params.dir);
-  if (params.sort) query.set('sort', params.sort);
-  if (params.order) query.set('order', params.order);
-  
-  return apiClient.get<ArticleListResponse>(`/api/v1/articles?${query}`);
+export async function getArticles(dir?: string): Promise<ArticleListResponse> {
+  const path = dir ? `/api/v1/articles/${encodeURIComponent(dir)}` : '/api/v1/articles';
+  return apiClient.get<ArticleListResponse>(path);
 }
 
 /**

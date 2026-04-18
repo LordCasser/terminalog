@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"terminalog/internal/model"
 	"terminalog/pkg/utils"
@@ -56,8 +57,9 @@ type ListOptions struct {
 	Parallel bool
 }
 
-// ListArticles returns a list of articles in the given directory.
+// ListArticles returns a list of articles in the given directory (recursive).
 // Only committed Markdown files are included.
+// Deprecated: Use ListDirectory for hierarchical browsing.
 func (s *ArticleService) ListArticles(ctx context.Context, opts ListOptions) ([]model.Article, error) {
 	// Check cache first
 	cacheKey := opts.Dir + ":" + string(opts.Sort) + ":" + string(opts.Order)
@@ -93,7 +95,102 @@ func (s *ArticleService) ListArticles(ctx context.Context, opts ListOptions) ([]
 	return articles, nil
 }
 
-// listArticlesSequential processes files sequentially.
+// ListDirectory returns the direct children (subdirectories and files) of a directory.
+// This implements hierarchical browsing: directories are shown as navigable items,
+// files are shown as viewable items. Subdirectories are only included if they
+// contain at least one markdown file recursively.
+func (s *ArticleService) ListDirectory(ctx context.Context, dir string) ([]model.Article, error) {
+	// Scan the directory for direct children
+	entries, err := s.fileSvc.ScanDirectory(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+
+	articles := make([]model.Article, 0, len(entries))
+
+	for _, entry := range entries {
+		if entry.Type == model.NodeTypeDir {
+			// For directories, we create an Article entry with type "dir"
+			// We get metadata from the most recently edited file in the directory
+			dirArticle, err := s.getDirectoryArticle(ctx, entry.Path)
+			if err != nil {
+				// Still include the directory even if metadata fetch fails
+				dirArticle = model.Article{
+					Path:  entry.Path,
+					Name:  entry.Name,
+					Title: entry.Name,
+					Type:  model.NodeTypeDir,
+				}
+			}
+			articles = append(articles, dirArticle)
+		} else {
+			// For files, process like normal
+			article, err := s.processFile(ctx, entry.Path)
+			if err != nil {
+				continue
+			}
+			articles = append(articles, article)
+		}
+	}
+
+	return articles, nil
+}
+
+// getDirectoryArticle creates an Article entry for a directory.
+// It uses metadata from the most recently edited file in the directory as the
+// directory's metadata, providing useful information without requiring git
+// operations on the directory itself.
+func (s *ArticleService) getDirectoryArticle(ctx context.Context, dirPath string) (model.Article, error) {
+	// Find the most recently edited file in this directory (recursive)
+	files, err := s.fileSvc.ScanMarkdownFiles(ctx, dirPath)
+	if err != nil {
+		return model.Article{}, err
+	}
+
+	if len(files) == 0 {
+		return model.Article{
+			Path:  dirPath,
+			Name:  filepath.Base(dirPath),
+			Title: filepath.Base(dirPath),
+			Type:  model.NodeTypeDir,
+		}, nil
+	}
+
+	// Process each file and find the one with the latest edit time
+	var latestArticle *model.Article
+	var latestTime time.Time
+
+	for _, file := range files {
+		article, err := s.processFile(ctx, file)
+		if err != nil {
+			continue
+		}
+		if article.EditedAt.After(latestTime) {
+			latestTime = article.EditedAt
+			latestArticle = &article
+		}
+	}
+
+	dirName := filepath.Base(dirPath)
+	result := model.Article{
+		Path:  dirPath,
+		Name:  dirName,
+		Title: dirName,
+		Type:  model.NodeTypeDir,
+	}
+
+	// Use metadata from the most recently edited file for the directory
+	if latestArticle != nil {
+		result.CreatedAt = latestArticle.CreatedAt
+		result.CreatedBy = latestArticle.CreatedBy
+		result.EditedAt = latestArticle.EditedAt
+		result.EditedBy = latestArticle.EditedBy
+		result.LatestCommit = latestArticle.LatestCommit
+		result.Contributors = latestArticle.Contributors
+	}
+
+	return result, nil
+}
 func (s *ArticleService) listArticlesSequential(ctx context.Context, files []string) []model.Article {
 	articles := make([]model.Article, 0, len(files))
 

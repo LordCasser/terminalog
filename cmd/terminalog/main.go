@@ -132,7 +132,7 @@ func main() {
 
 	// Create handlers
 	handlers := &server.Handlers{
-		Article:   handler.NewArticleHandler(articleSvc, versionSvc),
+		Article:   handler.NewArticleHandler(articleSvc, versionSvc, fileSvc),
 		Asset:     handler.NewAssetHandler(assetSvc),
 		Git:       handler.NewGitHandler(gitSvc, authSvc),
 		Search:    handler.NewSearchHandler(articleSvc),

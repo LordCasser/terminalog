@@ -120,15 +120,18 @@ func (s *Server) setupRoutes() {
 			r.Get("/status", s.Handlers.Health.Status)
 		}
 
-		// Articles API
-		// GET /api/v1/articles - list articles
-		// GET /api/v1/articles/search - search articles (merged from /api/search)
-		// GET /api/v1/articles/{path} - get article content
-		// GET /api/v1/articles/{path}/timeline - get article timeline
-		// GET /api/v1/articles/{path}/version - get article version
-		r.Get("/articles", s.Handlers.Article.List)
-		r.Get("/articles/search", s.Handlers.Search.Search)
-		r.Get("/articles/*", s.Handlers.Article.HandleArticleRequest)
+		// Articles API (RESTful path-based routing)
+		// GET /api/v1/articles           - root directory listing (dirs + files)
+		// GET /api/v1/articles/tech      - directory listing for tech/
+		// GET /api/v1/articles/tech/go.md - article content
+		// GET /api/v1/articles/tech/go.md/timeline - article timeline
+		// GET /api/v1/articles/tech/go.md/version  - article version
+		r.Get("/articles", s.Handlers.Article.ListRoot)
+		r.Get("/articles/*", s.Handlers.Article.HandleRequest)
+
+		// Search API (independent resource, not nested under articles)
+		// GET /api/v1/search?q=xxx - search articles
+		r.Get("/search", s.Handlers.Search.Search)
 
 		// Tree API
 		r.Get("/tree", s.Handlers.Tree.Get)

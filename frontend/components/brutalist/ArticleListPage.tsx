@@ -4,9 +4,8 @@
  * Renders article table for both root (/) and directory (/dir/xxx) views.
  * RESTful routing: directories use /dir/{path}, articles use /article/{path}
  * 
- * In static export mode, the directory path is extracted from the browser URL
- * rather than Next.js params, because the fallback page always has
- * slug=["_fallback"] regardless of the actual URL path.
+ * API call: GET /api/v1/articles/{dir} (path parameter, not query parameter)
+ * In static export mode, the directory path is extracted from the browser URL.
  */
 
 "use client";
@@ -38,8 +37,6 @@ function extractDirPathFromURL(): string {
 
 export function ArticleListPage({ currentDir }: ArticleListPageProps) {
   const [articles, setArticles] = useState<Article[]>([]);
-  const [sortField, setSortField] = useState<string>("edited");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,11 +45,7 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
 
     const fetchArticles = async () => {
       try {
-        const response = await getArticles({
-          dir: effectiveDir,
-          sort: sortField as "created" | "edited",
-          order: sortOrder,
-        });
+        const response = await getArticles(effectiveDir);
         setArticles(response.articles);
       } catch (error) {
         console.error("Failed to fetch articles:", error);
@@ -62,16 +55,7 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
     };
 
     fetchArticles();
-  }, [currentDir, sortField, sortOrder]);
-
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortOrder("desc");
-    }
-  };
+  }, [currentDir]);
 
   return (
     <div className="min-h-screen">
@@ -81,12 +65,7 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
             <span className="text-outline font-mono">Loading...</span>
           </div>
         ) : (
-          <ArticleTable
-            articles={articles}
-            onSort={handleSort}
-            sortField={sortField}
-            sortOrder={sortOrder}
-          />
+          <ArticleTable articles={articles} />
         )}
       </main>
     </div>

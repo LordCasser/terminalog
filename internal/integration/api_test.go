@@ -63,7 +63,7 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 	_ = authSvc // unused for now
 
 	// Create handlers
-	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc)
+	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc, fileSvc)
 	assetHandler := handler.NewAssetHandler(assetSvc)
 	searchHandler := handler.NewSearchHandler(articleSvc)
 	treeHandler := handler.NewTreeHandler(articleSvc)
@@ -71,10 +71,10 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 	// Create router (RESTful v1)
 	router := chi.NewRouter()
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Get("/articles", articleHandler.List)
-		r.Get("/articles/*", articleHandler.HandleArticleRequest)
+		r.Get("/articles", articleHandler.ListRoot)
+		r.Get("/articles/*", articleHandler.HandleRequest)
 		r.Get("/tree", treeHandler.Get)
-		r.Get("/articles/search", searchHandler.Search)
+		r.Get("/search", searchHandler.Search)
 		r.Get("/assets/*", assetHandler.Get)
 	})
 
@@ -101,7 +101,7 @@ func TestAPI_Articles_List(t *testing.T) {
 	})
 	defer env.Cleanup()
 
-	// Test default sort (edited desc)
+	// Test root directory listing (alphabetical order: dirs first, then files)
 	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -113,7 +113,9 @@ func TestAPI_Articles_List(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, result.Articles, 2)
-	assert.Equal(t, "second.md", result.Articles[0].Path) // Most recent edited first
+	// Files are sorted alphabetically: first.md before second.md
+	assert.Equal(t, "first.md", result.Articles[0].Path)
+	assert.Equal(t, "second.md", result.Articles[1].Path)
 }
 
 func TestAPI_Articles_Get(t *testing.T) {
@@ -166,7 +168,7 @@ func TestAPI_Search(t *testing.T) {
 	})
 	defer env.Cleanup()
 
-	resp, err := http.Get(env.Server.URL + "/api/v1/articles/search?q=golang")
+	resp, err := http.Get(env.Server.URL + "/api/v1/search?q=golang")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -229,57 +231,43 @@ func TestAPI_Articles_UncommittedNotVisible(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
 }
 
-func TestAPI_SortOptions(t *testing.T) {
+func TestAPI_DirectoryListingOrder(t *testing.T) {
 	env := SetupIntegrationTest(t, func(repo *testutil.TestRepo) error {
-		now := time.Now()
-		if err := repo.CreateMarkdownFileWithTime("first.md", "# First", "Add", "author", now.Add(-2*time.Hour)); err != nil {
+		// Create a directory with markdown files and subdirectories
+		if err := repo.CreateMarkdownFile("alpha.md", "# Alpha", "Add alpha", "author"); err != nil {
 			return err
 		}
-		return repo.CreateMarkdownFileWithTime("second.md", "# Second", "Add", "author", now.Add(-1*time.Hour))
+		if err := repo.CreateMarkdownFile("beta.md", "# Beta", "Add beta", "author"); err != nil {
+			return err
+		}
+		if err := repo.CreateFile("tech/golang.md", "# Golang"); err != nil {
+			return err
+		}
+		return repo.Commit("Add all", "author", "author@example.com")
 	})
 	defer env.Cleanup()
 
-	tests := []struct {
-		name   string
-		params string
-		check  func(t *testing.T, articles []model.Article)
-	}{
-		{
-			name:   "sort by created asc",
-			params: "?sort=created&order=asc",
-			check: func(t *testing.T, articles []model.Article) {
-				assert.Equal(t, "first.md", articles[0].Path) // Oldest first
-			},
-		},
-		{
-			name:   "sort by edited desc (default)",
-			params: "",
-			check: func(t *testing.T, articles []model.Article) {
-				assert.Equal(t, "second.md", articles[0].Path) // Newest first
-			},
-		},
-		{
-			name:   "sort by created desc",
-			params: "?sort=created&order=desc",
-			check: func(t *testing.T, articles []model.Article) {
-				assert.Equal(t, "second.md", articles[0].Path) // Newest first
-			},
-		},
-	}
+	// Test: Root listing returns dirs first alphabetically, then files alphabetically
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
+	require.NoError(t, err)
+	defer resp.Body.Close()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			resp, err := http.Get(env.Server.URL + "/api/v1/articles" + tt.params)
-			require.NoError(t, err)
-			defer resp.Body.Close()
+	var result model.ArticleListResponse
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
 
-			var result model.ArticleListResponse
-			err = json.NewDecoder(resp.Body).Decode(&result)
-			require.NoError(t, err)
+	// Verify: 3 items (tech dir, alpha.md file, beta.md file)
+	assert.Len(t, result.Articles, 3)
 
-			tt.check(t, result.Articles)
-		})
-	}
+	// Verify: Directories come first, then files, both sorted alphabetically
+	assert.Equal(t, model.NodeTypeDir, result.Articles[0].Type)
+	assert.Equal(t, "tech", result.Articles[0].Path)
+
+	assert.Equal(t, model.NodeTypeFile, result.Articles[1].Type)
+	assert.Equal(t, "alpha.md", result.Articles[1].Path)
+
+	assert.Equal(t, model.NodeTypeFile, result.Articles[2].Type)
+	assert.Equal(t, "beta.md", result.Articles[2].Path)
 }
 
 func TestAPI_ErrorResponses(t *testing.T) {
@@ -297,7 +285,7 @@ func TestAPI_ErrorResponses(t *testing.T) {
 		{
 			name:       "article not found",
 			path:       "/api/v1/articles/not-exist.md",
-			wantStatus: http.StatusBadRequest, // Returns 400 for ErrNotCommitted
+			wantStatus: http.StatusNotFound, // Nonexistent path returns 404
 		},
 		{
 			name:       "asset not found",
@@ -306,7 +294,7 @@ func TestAPI_ErrorResponses(t *testing.T) {
 		},
 		{
 			name:       "search without query",
-			path:       "/api/v1/articles/search",
+			path:       "/api/v1/search",
 			wantStatus: http.StatusBadRequest,
 		},
 	}

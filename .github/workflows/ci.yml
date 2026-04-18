@@ -1,7 +1,3 @@
-# GitHub Actions CI Workflow for Terminalog
-# Runs on push to main and pull requests to verify build integrity
-# Tests Linux (amd64/arm64) builds
-
 name: CI
 
 on:
@@ -18,21 +14,67 @@ permissions:
   contents: read
 
 jobs:
-  # ============================================
-  # Test Go Code
-  # ============================================
-  test:
-    name: Test Go Code
+  build-frontend:
+    name: Build Frontend Export
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify frontend export
+        run: |
+          if [ ! -d "frontend/out" ]; then
+            echo "Error: frontend/out not found"
+            exit 1
+          fi
+          if [ ! -f "frontend/out/index.html" ]; then
+            echo "Error: frontend/out/index.html not found"
+            exit 1
+          fi
+          mkdir -p pkg/embed/static
+          cp -a frontend/out/. pkg/embed/static/
+
+      - name: Upload embedded static files
+        uses: actions/upload-artifact@v4
+        with:
+          name: embedded-static
+          path: pkg/embed/static
+          retention-days: 1
+
+  test:
+    name: Test Go Code
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache: true
+
+      - name: Download embedded static files
+        uses: actions/download-artifact@v4
+        with:
+          name: embedded-static
+          path: pkg/embed/static
 
       - name: Run tests
         run: go test -v -race ./...
@@ -42,123 +84,69 @@ jobs:
           go mod tidy
           git diff --exit-code go.mod go.sum
 
-  # ============================================
-  # Build Frontend
-  # ============================================
-  build-frontend:
-    name: Build Frontend
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
-
-      - name: Verify frontend build output
-        run: |
-          if [ ! -d "frontend/out" ]; then
-            echo "Error: Frontend build output not found"
-            exit 1
-          fi
-          if [ ! -f "frontend/out/index.html" ]; then
-            echo "Error: index.html not found in frontend output"
-            exit 1
-          fi
-          echo "Frontend build successful"
-
-  # ============================================
-  # Build Linux Binaries
-  # ============================================
-  build-linux:
-    name: Build Linux (${{ matrix.arch }})
-    needs: [test, build-frontend]
+  build:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: [build-frontend, test]
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - arch: amd64
+          - goos: linux
             goarch: amd64
-          - arch: arm64
+          - goos: linux
             goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
           cache: true
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Download embedded static files
+        uses: actions/download-artifact@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
-
-      - name: Prepare static files for embedding
-        run: |
-          rm -rf pkg/embed/static
-          mkdir -p pkg/embed/static
-          cp -r frontend/out/* pkg/embed/static/
+          name: embedded-static
+          path: pkg/embed/static
 
       - name: Build binary
         env:
           CGO_ENABLED: 0
-          GOOS: linux
+          GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p bin
           go build -ldflags="-s -w" \
-            -o bin/terminalog-linux-${{ matrix.arch }} \
+            -o bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }} \
             cmd/terminalog/main.go
 
       - name: Verify binary
         run: |
-          if [ ! -f "bin/terminalog-linux-${{ matrix.arch }}" ]; then
+          if [ ! -f "bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}" ]; then
             echo "Error: Binary not found"
             exit 1
           fi
-          ls -lh bin/terminalog-linux-${{ matrix.arch }}
+          ls -lh bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
 
-  # ============================================
-  # Build Summary
-  # ============================================
   build-summary:
     name: Build Summary
-    needs: build-linux
+    needs: build
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check build status
         run: |
-          if [ "${{ needs.build-linux.result }}" == "success" ]; then
-            echo "✅ All Linux builds completed successfully"
-            echo "- Linux amd64: OK"
-            echo "- Linux arm64: OK"
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "All cross-platform builds completed successfully"
           else
-            echo "❌ Build failed"
+            echo "Build failed"
             exit 1
           fi

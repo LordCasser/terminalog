@@ -77,8 +77,16 @@ function resolveCdPath(currentDir: string, target: string): string {
     return currentDir;
   }
   
-  // Handle multiple ".." segments (e.g., "../../..")
-  // Also handles mixed paths like "../sibling"
+  // Absolute path: "/" or "/tech/frontend" → reset to that path
+  if (normalizedTarget.startsWith("/")) {
+    const absolutePath = normalizedTarget.slice(1); // Remove leading "/"
+    if (!absolutePath) {
+      return ""; // cd / → root directory
+    }
+    return absolutePath;
+  }
+  
+  // Handle relative paths: "..", "subdir", "../sibling"
   const segments = normalizedTarget.split("/");
   let currentSegments = currentDir ? currentDir.split("/") : [];
   

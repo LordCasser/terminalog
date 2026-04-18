@@ -29,6 +29,19 @@ import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 import { getArticles } from "@/lib/api/articles";
 
 /**
+ * Navigate to a path based on its type.
+ * If path ends with .md → navigate to article page.
+ * Otherwise → navigate to directory page.
+ */
+function navigateToPath(router: ReturnType<typeof useRouter>, path: string) {
+  if (path.endsWith(".md")) {
+    router.push(`/article/${encodePathForUrl(path)}`);
+  } else {
+    router.push(`/dir/${encodePathForUrl(path)}`);
+  }
+}
+
+/**
  * Encode a path for URL path segments.
  * Preserves "/" separators but encodes special characters in each segment.
  */
@@ -270,12 +283,12 @@ export function CommandPrompt() {
     return () => window.removeEventListener(SEARCH_MODAL_VISIBLE, handleModalVisible as EventListener);
   }, []);
 
-  // Listen for search result selection from SearchResultsModal
+// Listen for search result selection from SearchResultsModal
   useEffect(() => {
     const handleResultSelected = (e: CustomEvent<string>) => {
       const path = e.detail;
-      // RESTful routing: /article/{path} (path parameter)
-      router.push(`/article/${path}`);
+      // Smart navigation: .md → article, otherwise → directory
+      navigateToPath(router, path);
     };
 
     window.addEventListener(SEARCH_RESULT_SELECTED, handleResultSelected as EventListener);
@@ -489,7 +502,31 @@ export function CommandPrompt() {
       const query = cmd.trim().slice(7);
       if (!query) return;
       
-      // Search via WebSocket
+      // If query looks like a path (contains / or ends with .md), treat as direct navigation
+      // Path-style queries are absolute from root, not relative to currentDir
+      if (query.includes("/") || query.endsWith(".md")) {
+        // Use the query as-is (it's an absolute path from root)
+        // Only resolve relative paths if query doesn't start with /
+        const resolvedPath = query.startsWith("/") ? query.slice(1) : query;
+        
+        // Determine if it's a directory or article by checking if it ends with .md
+        if (query.endsWith(".md")) {
+          // Looks like an article - navigate directly
+          router.push(`/article/${encodePathForUrl(resolvedPath)}`);
+        } else {
+          // Could be a directory - validate by fetching listing
+          try {
+            await getArticles(resolvedPath);
+            router.push(`/dir/${encodePathForUrl(resolvedPath)}`);
+          } catch (error) {
+            // Not a directory - might be an article without .md extension
+            router.push(`/article/${encodePathForUrl(resolvedPath)}`);
+          }
+        }
+        return;
+      }
+      
+      // Keyword search via WebSocket
       try {
         const response = await sendWebSocketMessage<SearchResponse>({
           type: "search_request",
@@ -498,10 +535,9 @@ export function CommandPrompt() {
 
         if (response.type === "search_response") {
           if (response.results.length > 0) {
-            // Single result: directly navigate
+            // Single result: directly navigate (smart: .md → article, otherwise → directory)
             if (response.results.length === 1) {
-              // RESTful routing: /article/{path} (path parameter)
-              router.push(`/article/${response.results[0].path}`);
+              navigateToPath(router, response.results[0].path);
             } 
             // Multiple results: show modal
             else {
@@ -538,6 +574,12 @@ export function CommandPrompt() {
       const resolvedPath = resolvePath(currentDir, target);
       // Navigate to article (no validation - article page handles 404)
       router.push(`/article/${encodePathForUrl(resolvedPath)}`);
+      return;
+    }
+    
+    // cd without arguments → go to root (same as cd /)
+    if (trimmedCmd === "cd") {
+      router.push("/");
       return;
     }
     

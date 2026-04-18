@@ -68,7 +68,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24"
-          cache: true
+          cache: false
 
       - name: Download embedded static files
         uses: actions/download-artifact@v4
@@ -105,7 +105,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: "1.24"
-          cache: true
+          cache: false
 
       - name: Download embedded static files
         uses: actions/download-artifact@v4
@@ -131,6 +131,23 @@ jobs:
             exit 1
           fi
           ls -lh bin/terminalog-${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Package binary
+        run: |
+          cd bin
+          ARCHIVE="terminalog-ci-${{ github.sha }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          BINARY="terminalog-${{ matrix.goos }}-${{ matrix.goarch }}"
+          tar -czf "${ARCHIVE}.tar.gz" "${BINARY}"
+          sha256sum "${ARCHIVE}.tar.gz" > "${ARCHIVE}.tar.gz.sha256"
+
+      - name: Upload CI artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminalog-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            bin/terminalog-ci-${{ github.sha }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+            bin/terminalog-ci-${{ github.sha }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
+          retention-days: 7
 
   build-summary:
     name: Build Summary

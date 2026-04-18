@@ -14,6 +14,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { apiClient } from "@/lib/api/client";
 
 // Frontend config response from /api/v1/settings
@@ -32,6 +33,27 @@ interface TerminalConfigValue {
 // Default values
 const DEFAULT_OWNER = "lordcasser";
 
+/**
+ * Extract current directory from URL pathname.
+ * - /dir/{path} → path (e.g., /dir/tech → "tech")
+ * - /article/{path} → directory part (e.g., /article/tech/frontend/react-guide.md → "tech/frontend")
+ * - /article/welcome.md → "" (root-level article)
+ * - / or /aboutme → "" (root)
+ */
+function extractDirFromPathname(pathname: string): string {
+  if (pathname.startsWith("/dir/")) {
+    return decodeURIComponent(pathname.slice(5));
+  } else if (pathname.startsWith("/article/")) {
+    const articlePath = decodeURIComponent(pathname.slice(9));
+    const lastSlashIndex = articlePath.lastIndexOf("/");
+    if (lastSlashIndex > 0) {
+      return articlePath.slice(0, lastSlashIndex);
+    }
+    return ""; // Root-level article
+  }
+  return ""; // Root or other pages
+}
+
 // Create context with default values
 const TerminalConfigContext = createContext<TerminalConfigValue>({
   owner: DEFAULT_OWNER,
@@ -45,6 +67,7 @@ export function TerminalConfigProvider({ children }: { children: ReactNode }) {
   const [owner, setOwner] = useState(DEFAULT_OWNER);
   const [currentDir, setCurrentDir] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const pathname = usePathname();
 
   // Fetch config from API on mount
   useEffect(() => {
@@ -63,27 +86,10 @@ export function TerminalConfigProvider({ children }: { children: ReactNode }) {
     fetchConfig();
   }, []);
 
-  // Get current directory from URL path on mount and URL changes
-  // RESTful routing: /dir/{path} (path parameter, not query parameter)
+  // Sync currentDir with URL pathname (works with both client-side and server-side navigation)
   useEffect(() => {
-    const updateCurrentDir = () => {
-      if (typeof window !== "undefined") {
-        const pathname = window.location.pathname;
-        // Extract dir path from /dir/{path} or /dir/{path1}/{path2} routes
-        if (pathname.startsWith("/dir/")) {
-          setCurrentDir(decodeURIComponent(pathname.slice(5))); // Remove "/dir/" prefix
-        } else {
-          setCurrentDir(""); // Root directory
-        }
-      }
-    };
-
-    updateCurrentDir();
-
-    // Listen for URL changes (popstate for navigation)
-    window.addEventListener("popstate", updateCurrentDir);
-    return () => window.removeEventListener("popstate", updateCurrentDir);
-  }, []);
+    setCurrentDir(extractDirFromPathname(pathname));
+  }, [pathname]);
 
   // Memoized setCurrentDir
   const handleSetCurrentDir = useCallback((dir: string) => {

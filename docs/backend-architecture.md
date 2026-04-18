@@ -424,11 +424,14 @@ type CompletionItem struct {
 ```
 
 **补全规则**：
-- 文件补全不带斜杠（如 `README.md`）
-- 文件夹补全带斜杠（如 `tech/`）
+- 文件补全不带斜杠（如 `README.md` 或完整路径 `tech/golang/go-guide.md`）
+- 文件夹补全带斜杠（如 `tech/` 或完整路径 `tech/golang/`）
 - 仅返回已提交的Markdown文件（过滤未提交文件）
 - **过滤以 `_` 开头的特殊文件**（如 `_ABOUTME.md`）
-- 支持当前目录补全（dir参数指定当前目录）
+- **全局搜索模式**（dir为空）：匹配所有级别的路径名和目录名，返回完整路径
+  - 例如：`prefix="go"` 返回 `tech/golang/` 和 `tech/golang/go-guide.md`
+- **当前目录模式**（dir指定）：只匹配当前目录下的直接子项，返回basename
+  - 例如：dir="/tech"，prefix="go" 返回 `golang/` 和 `golang/go-guide.md`（相对于tech）
 
 **搜索规则**：
 - 搜索文章标题（去除.md扩展名后的文件名）

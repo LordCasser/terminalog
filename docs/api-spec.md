@@ -556,18 +556,29 @@ curl "http://localhost:8080/api/v1/settings"
 ```json
 {
   "type": "completion_request",
-  "dir": "/",
-  "prefix": "RE"
+  "dir": "",
+  "prefix": "go"
 }
 ```
+
+**参数说明**：
+- `dir`: 搜索范围目录
+  - 空字符串 `""`：全局搜索（`search`命令使用），匹配所有级别的路径名
+  - 具体路径如 `"tech"`：当前目录搜索（`open`/`cd`命令使用），只匹配直接子项
+- `prefix`: 路径前缀匹配
 
 **响应格式**：
 ```json
 {
   "type": "completion_response",
-  "items": ["README.md", "tech/"]
+  "items": ["tech/golang/", "tech/golang/go-guide.md"]
 }
 ```
+
+**返回格式**：
+- 全局搜索（dir为空）：返回完整路径（如 `tech/golang/`、`tech/golang/go-guide.md`）
+- 当前目录搜索（dir指定）：返回basename（如 `golang/`、`go-guide.md`）
+- 文件不带斜杠，文件夹带斜杠
 
 ### 9.2 搜索文章
 

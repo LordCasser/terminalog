@@ -300,8 +300,10 @@ Glass 效果:
 4. **WebSocket路径补全**：
    - Tab键路径补全通过WebSocket实时从后端获取路径信息
    - WebSocket端点：`ws://localhost:18085/ws/terminal`
-   - 路径补全消息：`{"type":"completion_request","dir":"/","prefix":"RE"}`
-   - 响应格式：`{"type":"completion_response","items":["README.md","tech/"]}`
+   - 路径补全消息：`{"type":"completion_request","dir":"","prefix":"go"}`
+   - 响应格式：`{"type":"completion_response","items":["tech/golang/","tech/golang/go-guide.md"]}`
+   - **全局搜索**：`search`命令使用空字符串作为dir，匹配所有级别的路径名和目录名
+   - **当前目录搜索**：`open`/`cd`命令使用currentDir，只匹配当前目录下的直接子项
 
 **导航栏选中状态（v1.6新增，v1.6.1优化）**：
 1. **POSTS选中样式**：在首页（`/` 或 `/?dir=`）时，POSTS文字颜色变为强调色（primary-container），并显示下划线
@@ -323,7 +325,7 @@ Glass 效果:
 
 **Tab键路径补全模态框（v1.6新增）**：
 1. **指令补全**：Tab键自动补全指令名称（如`se`→`search `），单匹配直接填充
-2. **路径补全模态框**：当`open`或`cd`命令后路径有多个匹配时：
+2. **路径补全模态框**：当`open`、`cd`或`search`命令后路径有多个匹配时：
    - 弹出模态框显示所有匹配路径
    - 左侧显示文件类型图标（📄文件/📁文件夹）
    - 文件夹路径带斜杠结尾
@@ -332,9 +334,10 @@ Glass 效果:
    - Enter确认并填充到输入框
    - Tab或ESC取消关闭
    - 10秒自动关闭计时器
-4. **命令类型过滤**：
-   - `open`命令仅显示文件（过滤文件夹）
-   - `cd`命令仅显示文件夹（过滤文件）
+4. **命令类型过滤与搜索范围**：
+   - `open`命令仅显示文件（过滤文件夹），搜索范围：当前目录
+   - `cd`命令仅显示文件夹（过滤文件），搜索范围：当前目录
+   - `search`命令显示文件和文件夹，搜索范围：全局（所有级别的路径名）
 
 **无匹配提示（v1.6新增）**：
 1. **搜索无结果**：搜索返回空结果时，在光标上方显示1秒提示"没有搜索结果"

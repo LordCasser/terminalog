@@ -146,8 +146,10 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 4. **WebSocket路径补全**：
    - Tab键路径补全通过WebSocket实时从后端获取路径信息
    - WebSocket端点：`ws://localhost:18085/ws/terminal`
-   - 路径补全消息：`{"type":"completion_request","dir":"/","prefix":"RE"}`
-   - 响应格式：`{"type":"completion_response","items":["README.md","tech/"]}`
+   - **全局搜索**：`search`命令使用空字符串作为dir，匹配所有级别路径
+   - **当前目录搜索**：`open`/`cd`命令使用currentDir，只匹配直接子项
+   - 路径补全消息：`{"type":"completion_request","dir":"","prefix":"go"}`
+   - 响应格式：`{"type":"completion_response","items":["tech/golang/","tech/golang/go-guide.md"]}`
    - WebSocket连接管理：在CommandPrompt组件初始化时建立连接，组件卸载时关闭连接
 
 **支持命令**（v1.3）：

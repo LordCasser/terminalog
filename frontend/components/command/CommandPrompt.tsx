@@ -400,10 +400,14 @@ export function CommandPrompt() {
       const cmd = parts[0].toLowerCase();
       const partialPath = parts[1];
       
+      // search command: global search (empty dir)
+      // open/cd commands: search within current directory
+      const dir = cmd === "search" ? "" : currentDir || "/";
+      
       try {
         const response = await sendWebSocketMessage<CompletionResponse>({
           type: "completion_request",
-          dir: currentDir || "/",
+          dir: dir,
           prefix: partialPath,
         });
 

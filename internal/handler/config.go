@@ -25,7 +25,7 @@ type FrontendConfig struct {
 	Owner string `json:"owner"`
 }
 
-// Get handles GET /api/config - returns frontend configuration.
+// Get handles GET /api/v1/settings - returns frontend configuration.
 func (h *ConfigHandler) Get(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

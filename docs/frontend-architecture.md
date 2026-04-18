@@ -43,7 +43,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         后端服务（Go）                                │
-│  REST API: /api/articles, /api/assets, /api/search, /api/tree       │
+│  REST API: /api/v1/articles, /api/v1/assets, /api/v1/search, /api/v1/tree │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -116,26 +116,24 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - **无匹配提示（v1.6新增）**：搜索/补全无结果时在光标上方显示1秒提示SPAN，不遮挡输入
 - **Placeholder透明度**：降低placeholder透明度（opacity-30），避免干扰视觉焦点
 - **路径同步**：终端输入栏`~/`当前路径与顶部导航栏路径保持一致，通过`currentDir`状态共享
-- **Owner配置**：Blog属主名称从`/api/config` API获取，显示在路径中（如`~/lordcasser`）
+- **Owner配置**：Blog属主名称从`/api/v1/settings` API获取，显示在路径中（如`~/lordcasser`）
 
 **架构约束（v1.4新增 - 架构重大变更）**：
 
-> **变更原因**：底部终端输入框是纯前端UI组件，命令执行不应依赖后端HTTP API，仅路径补全和搜索需要后端支持（WebSocket实时通信）。
+> **变更原因**：底部终端输入框是纯前端UI组件，命令执行不应依赖后端HTTP API。当前实现中，搜索使用 REST API，路径补全使用 WebSocket。
 
 1. **前端命令处理**：
    - 大部分命令纯前端处理（纯前端路由跳转）
-   - `open <filename>` → 前端路由跳转到文章页面 `/article?path=filename`
-   - `cd <path>` → 前端路由跳转到目录页面 `/?dir=path`
+   - `open <filename>` → 前端路由跳转到文章页面 `/article/{path}`
+   - `cd <path>` → 前端路由跳转到目录页面 `/dir/{path}` 或 `/`
    - `help` / `?` → 触发前端模态框组件显示
    - 不需要HTTP API `/api/command` 端点
 
-2. **WebSocket搜索命令**：
-   - `search <keyword>` → WebSocket实时搜索（避免HTTP请求延迟）
-   - 后端检索匹配文章标题，返回最匹配的文章路径列表
+2. **搜索命令**：
+   - `search <keyword>` → 当前实现使用 REST API `GET /api/v1/search?q=...`
+   - 后端检索匹配文章标题，返回匹配的文章或目录路径列表
    - **过滤约束**：不搜索以 `_` 开头的隐藏文件（如 `_ABOUTME.md`）
-   - 前端接收结果后直接跳转到第一个匹配结果（或显示列表）
-   - WebSocket消息格式：`{"type":"search_request","keyword":"terminal"}`
-   - 响应格式：`{"type":"search_response","results":[{"path":"README.md","title":"Terminalog"}]}`
+   - 前端对单结果直接跳转，多结果显示结果模态框
 
 3. **历史记录前端存储**：
    - 命令历史记录存储在localStorage（key: `terminalog_command_history`）
@@ -146,8 +144,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 4. **WebSocket路径补全**：
    - Tab键路径补全通过WebSocket实时从后端获取路径信息
    - WebSocket端点：`ws://localhost:18085/ws/terminal`
-   - **全局搜索**：`search`命令使用空字符串作为dir，匹配所有级别路径
-   - **当前目录搜索**：`open`/`cd`命令使用currentDir，只匹配直接子项
+   - `open`/`cd` 命令使用 `currentDir`，只匹配直接子项
    - 路径补全消息：`{"type":"completion_request","dir":"","prefix":"go"}`
    - 响应格式：`{"type":"completion_response","items":["tech/golang/","tech/golang/go-guide.md"]}`
    - WebSocket连接管理：在CommandPrompt组件初始化时建立连接，组件卸载时关闭连接
@@ -191,6 +188,8 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - 代码块使用JetBrains Mono字体，text-sm大小，bg-surface-container-lowest背景，使用`<section>`包裹+右上角语言标签
 - 引用块（blockquote）使用JetBrains Mono字体，text-lg大小，border-l-4 border-primary，bg-surface-container-low背景
 - 列表使用JetBrains Mono字体，text-base大小，space-y-4间距，带tertiary颜色的箭头符号（➜）
+- GFM表格使用Brutalist数据面板风格：外层横向滚动容器、粗边框、强分隔线、斑马纹行背景，配色遵循Dracula Spectrum
+- 表格不显示额外标题条或 `DATA TABLE` 标签，避免干扰正文阅读节奏
 - 遵循Dracula Spectrum配色系统
 
 **边界**：
@@ -219,7 +218,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 **职责**：
 - 从 `_ABOUTME.md` 读取内容并渲染
-- 通过顶部导航栏 "ABOUTME" 链接或 API `/api/aboutme` 访问
+- 通过顶部导航栏 "ABOUTME" 链接或 API `/api/v1/special/aboutme` 访问
 - 使用 Markdown Renderer 渲染内容
 
 **边界**：
@@ -284,7 +283,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 | 工具 | 用途 |
 |------|------|
-| **pnpm** | 包管理（更快、更节省空间） |
+| **npm** | 包管理 |
 | **ESLint** | 代码检查 |
 | **Prettier** | 代码格式化 |
 
@@ -329,13 +328,11 @@ frontend/
 │   │   └── PathTransformer.tsx    # 图片路径转换
 │   │
 │   ├── command/                   # 命令处理
-│   │   ├── CommandParser.ts       # 命令解析（纯逻辑）
-│   │   └── commands/              # 各命令实现
-│   │       ├── cd.ts              # 切换目录（支持 cd .., cd ., cd 空）
-│   │       ├── view.ts
-│   │       ├── search.ts
-│   │       └── help.ts
-│   │       # clear.ts、ls.ts、exit.ts 已移除（v1.2）
+│   │   ├── CommandPrompt.tsx      # 命令输入、执行、历史、补全
+│   │   ├── HelpModal.tsx          # help / ? 结果模态框
+│   │   ├── SearchResultsModal.tsx # search 多结果模态框
+│   │   ├── PathCompletionModal.tsx# 路径补全模态框
+│   │   └── utils.ts               # 命令常量、路径解析与导航辅助
 │   │
 │   ├── sort/                      # 排序管理器（v1.2 新增）
 │   │   ├── SortManager.ts         # 统一排序逻辑（表头/命令行共用）
@@ -389,7 +386,7 @@ frontend/
 ├── components.json                # shadcn/ui 配置
 ├── tsconfig.json                  # TypeScript 配置
 ├── package.json
-└── pnpm-lock.yaml
+└── package-lock.json
 ```
 
 ---
@@ -405,16 +402,12 @@ frontend/
 │  ●  ●  ●    terminalog ~ ~/articles                 │  ← TerminalHeader
 ├─────────────────────────────────────────────────────┤
 │                                                      │  ← TerminalContent
-│  $ ls                                                │     (输出区域)
-│  drwxr-xr-x  tech/           2024-01-15 10:30       │
-│  -rw-r--r--  welcome.md       2024-01-10 09:00       │
-│  -rw-r--r--  about.md         2024-01-08 15:20       │
+│  POSTS / ABOUTME / article table                     │     (主内容区)
 │                                                      │
 │  $ cd tech                                           │
 │                                                      │
-│  ~/articles/tech $ ls                                │
-│  -rw-r--r--  golang.md      2024-01-12 14:00        │
-│  -rw-r--r--  rust.md        2024-01-11 12:30        │
+│  ~/articles/tech $ open golang.md                    │
+│  router.push("/article/tech/golang.md")             │
 │                                                      │
 ├─────────────────────────────────────────────────────┤
 │  $ _                                                │  ← CommandInput + Cursor
@@ -428,12 +421,9 @@ frontend/
 // types/command.ts
 
 interface TerminalState {
-  currentPath: string;           // 当前路径，如 "tech"
+  currentDir: string;            // 当前目录，如 "tech"
   history: string[];             // 命令历史记录
-  output: OutputLine[];          // 输出内容列表
-  mode: 'list' | 'view';         // 当前模式：列表或查看文章
-  viewingArticle?: Article;      // 正在查看的文章（view 模式）
-  isLoading: boolean;            // 加载状态
+  isLoading: boolean;            // 搜索或补全请求进行中
   error?: string;                // 错误信息
 }
 
@@ -445,7 +435,7 @@ interface OutputLine {
 }
 
 interface Command {
-  name: string;                  // 命令名：cd, ls, view, etc.
+  name: string;                  // 命令名：cd, open, search, help
   args: string[];                // 参数列表
   flags: Record<string, string | boolean>; // flags
   raw: string;                   // 原始输入字符串
@@ -464,10 +454,8 @@ import { executeCommand } from '@/components/command/commands';
 
 export function useTerminalState() {
   const [state, setState] = useState<TerminalState>({
-    currentPath: '',
+    currentDir: '',
     history: [],
-    output: [],
-    mode: 'list',
     isLoading: false,
   });
 
@@ -475,45 +463,26 @@ export function useTerminalState() {
   const execute = useCallback(async (input: string) => {
     const command = parseCommand(input);
     
-    // 添加命令到输出
-    addOutput({ type: 'command', content: `$ ${input}` });
-    
-    // 执行命令
     setState(prev => ({ ...prev, isLoading: true }));
     
     try {
       const newState = await executeCommand(command, state);
       setState(newState);
     } catch (error) {
-      addOutput({ type: 'error', content: error.message });
+      setState(prev => ({ ...prev, error: error.message }));
     } finally {
       setState(prev => ({ ...prev, isLoading: false }));
     }
   }, [state]);
 
-  // 添加输出
-  const addOutput = useCallback((line: Omit<OutputLine, 'id'>) => {
-    setState(prev => ({
-      ...prev,
-      output: [...prev.output, { ...line, id: generateId() }]
-    }));
-  }, []);
-
-  // 清屏
-  const clear = useCallback(() => {
-    setState(prev => ({ ...prev, output: [] }));
-  }, []);
-
   // 切换路径
   const changePath = useCallback((path: string) => {
-    setState(prev => ({ ...prev, currentPath: path }));
+    setState(prev => ({ ...prev, currentDir: path }));
   }, []);
 
   return {
     state,
     execute,
-    addOutput,
-    clear,
     changePath,
   };
 }
@@ -530,14 +499,11 @@ import { Command } from '@/types/command';
  * 解析用户输入的命令字符串
  * 
  * @example
- * parseCommand("ls --sort=created --desc")
- * // 返回: { name: 'ls', args: [], flags: { sort: 'created', desc: true }, raw: '...' }
- * 
  * parseCommand("cd tech/blog")
  * // 返回: { name: 'cd', args: ['tech/blog'], flags: {}, raw: '...' }
  * 
- * parseCommand("view article.md")
- * // 返回: { name: 'view', args: ['article.md'], flags: {}, raw: '...' }
+ * parseCommand("open article.md")
+ * // 返回: { name: 'open', args: ['article.md'], flags: {}, raw: '...' }
  */
 export function parseCommand(input: string): Command {
   const trimmed = input.trim();
@@ -594,12 +560,9 @@ export function parseCommand(input: string): Command {
 export function getCommandHelp(commandName: string): string {
   const helps: Record<string, string> = {
     cd: 'cd <path> - 切换到指定目录',
-    ls: 'ls [--sort=created|edited] [--asc|--desc] - 列出当前目录内容',
-    view: 'view <filename> - 全屏查看文章',
+    open: 'open <filename> - 打开文章',
     search: 'search <keyword> - 搜索文章标题',
     help: 'help [command] - 显示帮助信息',
-    clear: 'clear - 清屏',
-    exit: 'exit - 退出文章查看模式',
   };
 
   return helps[commandName] || `Unknown command: ${commandName}`;
@@ -609,104 +572,35 @@ export function getCommandHelp(commandName: string): string {
 ### 5.3 命令实现示例
 
 ```typescript
-// components/command/commands/ls.ts
+// components/command/utils.ts
 
-import { Command, TerminalState, OutputLine } from '@/types/command';
-import { getArticles } from '@/lib/api/articles';
-import { formatArticleList } from '@/lib/utils/terminal-format';
+export function navigateToPath(router: AppRouterInstance, path: string) {
+  if (!path) {
+    router.push('/');
+    return;
+  }
 
-export async function executeLs(
-  command: Command,
-  state: TerminalState
-): Promise<TerminalState> {
-  // 解析排序参数
-  const sort = (command.flags.sort as string) || 'edited';
-  const order = command.flags.desc ? 'desc' : (command.flags.asc ? 'asc' : 'desc');
-  
-  // 调用 API
-  const response = await getArticles({
-    dir: state.currentPath,
-    sort,
-    order,
-  });
-
-  // 格式化输出
-  const formatted = formatArticleList(response.articles);
-  
-  // 返回新状态
-  return {
-    ...state,
-    output: [
-      ...state.output,
-      { id: generateId(), type: 'result', content: formatted }
-    ],
-  };
+  router.push(`/dir/${encodePathForUrl(path)}`);
 }
 ```
 
 ```typescript
-// components/command/commands/cd.ts
+// components/command/utils.ts
 
-import { Command, TerminalState } from '@/types/command';
-import { getTree } from '@/lib/api/tree';
-
-export async function executeCd(
-  command: Command,
-  state: TerminalState
-): Promise<TerminalState> {
-  const targetPath = command.args[0];
-  
-  if (!targetPath) {
-    return {
-      ...state,
-      output: [
-        ...state.output,
-        { id: generateId(), type: 'error', content: 'cd: missing directory argument' }
-      ],
-    };
+export function resolveCdPath(currentDir: string, targetPath?: string) {
+  if (!targetPath || targetPath === '~' || targetPath === '/') {
+    return '';
   }
 
-  // 处理路径
-  let newPath: string;
-  
+  if (targetPath === '.') {
+    return currentDir;
+  }
+
   if (targetPath === '..') {
-    // 返回上级目录
-    newPath = state.currentPath.split('/').slice(0, -1).join('/');
-  } else if (targetPath === '/' || targetPath === '~') {
-    // 回到根目录
-    newPath = '';
-  } else {
-    // 进入子目录（验证是否存在）
-    const checkPath = state.currentPath 
-      ? `${state.currentPath}/${targetPath}` 
-      : targetPath;
-    
-    const tree = await getTree({ dir: state.currentPath });
-    const exists = tree.children.some(
-      c => c.name === targetPath && c.type === 'dir'
-    );
-    
-    if (!exists) {
-      return {
-        ...state,
-        output: [
-          ...state.output,
-          { id: generateId(), type: 'error', content: `cd: ${targetPath}: No such directory` }
-        ],
-      };
-    }
-    
-    newPath = checkPath;
+    return currentDir.split('/').slice(0, -1).join('/');
   }
 
-  return {
-    ...state,
-    currentPath: newPath,
-    output: [
-      ...state.output,
-      { id: generateId(), type: 'info', content: '' } // cd 成功无输出
-    ],
-  };
+  return resolvePath(currentDir, targetPath);
 }
 ```
 
@@ -873,14 +767,8 @@ export function ArticleView({ article, content, timeline, onClose }: ArticleView
   const basePath = article.path.replace(/\/[^\/]+\.md$/, '');
 
   return (
-    <div className="article-view h-full overflow-auto">
-      {/* 关闭按钮 */}
-      <button 
-        onClick={onClose}
-        className="close-btn"
-      >
-        × (exit)
-      </button>
+    <div className="article-detail h-full overflow-auto">
+      {/* 当前实现通过导航返回，不再提供 exit 命令按钮 */}
       
       {/* 文章元数据 */}
       <ArticleMeta 
@@ -1013,10 +901,10 @@ export const apiClient = new ApiClient();
 ### 6.2 文章 API
 
 ```typescript
-// lib/api/articles.ts
+// frontend/lib/api/articles.ts
 
 import { apiClient } from './client';
-import { Article, ArticleListResponse, ArticleResponse } from '@/types/article';
+import { ArticleListResponse, ArticleDetailResponse, VersionInfo } from '@/types';
 
 interface GetArticlesParams {
   dir?: string;
@@ -1031,22 +919,26 @@ export async function getArticles(params: GetArticlesParams = {}): Promise<Artic
   if (params.sort) query.set('sort', params.sort);
   if (params.order) query.set('order', params.order);
   
-  return apiClient.get<ArticleListResponse>(`/api/articles?${query}`);
+  return apiClient.get<ArticleListResponse>(`/api/v1/articles?${query}`);
 }
 
-export async function getArticle(path: string): Promise<ArticleResponse> {
-  return apiClient.get<ArticleResponse>(`/api/articles/${encodeURIComponent(path)}`);
+export async function getArticle(path: string): Promise<ArticleDetailResponse> {
+  return apiClient.get<ArticleDetailResponse>(`/api/v1/articles/${encodeURIComponent(path)}`);
 }
 
 export async function getArticleTimeline(path: string): Promise<{ commits: CommitInfo[] }> {
-  return apiClient.get(`/api/articles/${encodeURIComponent(path)}/timeline`);
+  return apiClient.get(`/api/v1/articles/${encodeURIComponent(path)}/timeline`);
+}
+
+export async function getArticleVersion(path: string): Promise<VersionInfo> {
+  return apiClient.get(`/api/v1/articles/${encodeURIComponent(path)}/version`);
 }
 ```
 
 ### 6.3 目录树 API
 
 ```typescript
-// lib/api/tree.ts
+// frontend/lib/api/tree.ts
 
 import { apiClient } from './client';
 import { TreeNode } from '@/types/tree';
@@ -1055,39 +947,22 @@ interface GetTreeParams {
   dir?: string;
 }
 
-export async function getTree(params: GetTreeParams = {}): Promise<{ tree: TreeNode }> {
+export async function getTree(params: GetTreeParams = {}): Promise<{ root: TreeNode; currentDir: string }> {
   const query = params.dir ? `?dir=${encodeURIComponent(params.dir)}` : '';
-  return apiClient.get(`/api/tree${query}`);
+  return apiClient.get(`/api/v1/tree${query}`);
 }
 ```
 
 ### 6.4 搜索 API
 
 ```typescript
-// lib/api/search.ts
-
-import { apiClient } from './client';
-
-interface SearchResult {
-  path: string;
-  title: string;
-  matchedTitle: string;
-}
-
-interface SearchParams {
-  q: string;
-  dir?: string;
-}
-
-export async function searchArticles(params: SearchParams): Promise<{
-  results: SearchResult[];
-  total: number;
-}> {
+// search 使用独立 REST 资源，不再挂在 articles 子资源下
+export async function searchArticles(params: SearchParams): Promise<SearchResponse> {
   const query = new URLSearchParams();
   query.set('q', params.q);
   if (params.dir) query.set('dir', params.dir);
   
-  return apiClient.get(`/api/search?${query}`);
+  return apiClient.get(`/api/v1/search?${query}`);
 }
 ```
 
@@ -1343,7 +1218,7 @@ module.exports = {
        ▼
 ┌──────────────────────────────────────────────┐
 │              API Client                       │
-│  GET /api/articles?dir=newPath               │
+│  GET /api/v1/articles/{newPath}              │
 └──────────────────────────────────────────────┘
        │
        ▼
@@ -1357,12 +1232,12 @@ module.exports = {
 └──────────────────────────────────────────────┘
 ```
 
-### 9.2 浏览文章列表（命令行）
+### 9.2 浏览文章列表（页面导航）
 
 ```
 ┌──────────────┐
 │    用户       │
-│ 输入 ls 命令  │
+│ 点击目录或执行 cd 命令 │
 └──────────────┘
        │
        ▼
@@ -1374,29 +1249,13 @@ module.exports = {
        │
        ▼
 ┌──────────────────────────────────────────────┐
-│              useTerminalState.execute()       │
-│  parseCommand("ls --sort=created")           │
+│            router.push("/dir/tech")          │
 └──────────────────────────────────────────────┘
        │
        ▼
 ┌──────────────────────────────────────────────┐
-│              ls 命令实现                       │
-│  getArticles({ sort: 'created', ... })       │
-└──────────────────────────────────────────────┘
-       │
-       ▼
-返回文章列表
-       │
-       ▼
-┌──────────────────────────────────────────────┐
-│              formatArticleList()              │
-│  格式化为终端风格输出                          │
-└──────────────────────────────────────────────┘
-       │
-       ▼
-┌──────────────────────────────────────────────┐
-│              addOutput()                      │
-│  添加格式化结果到 output                      │
+│              页面数据获取                      │
+│  getArticles({ dir: "tech" })                │
 └──────────────────────────────────────────────┘
 ```
 
@@ -1405,21 +1264,21 @@ module.exports = {
 ```
 ┌──────────────┐
 │    用户       │
-│ view xxx.md  │
+│ open xxx.md  │
 └──────────────┘
        │
        ▼
 ┌──────────────────────────────────────────────┐
-│              view 命令实现                    │
-│  state.mode = 'view'                         │
-│  调用 API 获取文章内容和时间线                 │
+│           CommandPrompt / Link               │
+│  router.push("/article/xxx.md")             │
 └──────────────────────────────────────────────┘
        │
        ▼
 ┌──────────────────────────────────────────────┐
 │              API Client                       │
-│  GET /api/articles/xxx.md                    │
-│  GET /api/articles/xxx.md/timeline           │
+│  GET /api/v1/articles/xxx.md                 │
+│  GET /api/v1/articles/xxx.md/timeline        │
+│  GET /api/v1/articles/xxx.md/version         │
 └──────────────────────────────────────────────┘
        │
        ▼
@@ -1461,15 +1320,15 @@ module.exports = {
 
 ```bash
 cd frontend
-pnpm install
-pnpm dev        # 启动 Next.js 开发服务器 (localhost:3000)
+npm install
+npm run dev     # 启动 Next.js 开发服务器 (localhost:3000)
 ```
 
 ### 11.2 生产构建
 
 ```bash
 cd frontend
-pnpm build      # 静态导出，生成 out/ 目录
+npm run build   # 静态导出，生成 out/ 目录
 ```
 
 ### 11.3 集成到后端
@@ -1486,7 +1345,7 @@ cp -r frontend/out/* ../pkg/embed/static/
 ### 12.1 MVP（当前版本）
 
 - ✅ 终端风格 UI（Dracula 配色）
-- ✅ 命令行交互（cd, ls, view, search, help, clear, exit）
+- ✅ 命令行交互（cd, open, search, help, ?）
 - ✅ 鼠标点击导航
 - ✅ Markdown 渲染（代码高亮、公式、Mermaid、图片）
 - ✅ 编辑时间线展示

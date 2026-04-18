@@ -15,6 +15,7 @@ export default function AboutMePage() {
   const [content, setContent] = useState<string>("");
   const [exists, setExists] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
     const fetchData = async () => {
@@ -24,9 +25,7 @@ export default function AboutMePage() {
         setExists(response.exists);
       } catch (error) {
         console.error("Failed to fetch aboutme:", error);
-        // Use mock content for static export preview
-        setContent(mockContent);
-        setExists(true);
+        setError("Failed to load About Me.");
       } finally {
         setLoading(false);
       }
@@ -35,35 +34,23 @@ export default function AboutMePage() {
     fetchData();
   }, []);
   
-  // Mock content for static export preview
-  const mockContent = `# About Me
-
-Hello, I'm a developer who loves terminal aesthetics and Brutalist design philosophy.
-
-## Background
-
-I build systems that prioritize:
-- **Clarity** over complexity
-- **Precision** over convenience
-- **Intent** over aesthetics
-
-## Projects
-
-- **Terminalog**: A terminal-style blog system with Git integration
-- **Other Projects**: Various tools and experiments
-
-## Contact
-
-Find me on GitHub or reach out via email.
-
----
-
-*This page is rendered from \`_ABOUTME.md\` in your blog content directory.*`;
-  
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <span className="text-outline font-mono">Loading...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen">
+        <main className="pt-24 pb-32 px-6 max-w-4xl mx-auto">
+          <div className="text-center">
+            <h1 className="font-headline text-4xl text-outline mb-4">About Me Unavailable</h1>
+            <p className="text-on-surface-variant">{error}</p>
+          </div>
+        </main>
       </div>
     );
   }

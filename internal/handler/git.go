@@ -15,15 +15,17 @@ import (
 
 // GitHandler handles Git Smart HTTP requests.
 type GitHandler struct {
-	gitSvc  *service.GitService
-	authSvc *service.AuthService
+	gitSvc       *service.GitService
+	authSvc      *service.AuthService
+	onRepoUpdate func()
 }
 
 // NewGitHandler creates a new GitHandler instance.
-func NewGitHandler(gitSvc *service.GitService, authSvc *service.AuthService) *GitHandler {
+func NewGitHandler(gitSvc *service.GitService, authSvc *service.AuthService, onRepoUpdate func()) *GitHandler {
 	return &GitHandler{
-		gitSvc:  gitSvc,
-		authSvc: authSvc,
+		gitSvc:       gitSvc,
+		authSvc:      authSvc,
+		onRepoUpdate: onRepoUpdate,
 	}
 }
 
@@ -169,6 +171,9 @@ func (h *GitHandler) ReceivePack(w http.ResponseWriter, r *http.Request) {
 	}
 	if reloadErr := h.gitSvc.ReloadRepo(); reloadErr != nil {
 		log.Printf("ReceivePack: failed to reload repo: %v", reloadErr)
+	}
+	if h.onRepoUpdate != nil {
+		h.onRepoUpdate()
 	}
 }
 

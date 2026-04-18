@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -28,6 +29,9 @@ type GitService struct {
 
 	// repo is the opened Git repository (for read-only operations).
 	repo *git.Repository
+
+	// historyCache avoids rescanning the full commit history for the same file.
+	historyCache sync.Map // map[string]*model.FileHistory
 }
 
 // NewGitService creates a new GitService instance.
@@ -116,6 +120,10 @@ func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*mode
 
 	// Normalize path
 	filePath = strings.TrimPrefix(filePath, "/")
+
+	if cached, ok := s.historyCache.Load(filePath); ok {
+		return cached.(*model.FileHistory), nil
+	}
 
 	// Get all commits
 	commitIter, err := s.repo.Log(&git.LogOptions{Order: git.LogOrderCommitterTime})
@@ -208,7 +216,136 @@ func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*mode
 		Contributors: mapKeys(contributors),
 	}
 
+	s.historyCache.Store(filePath, history)
+
 	return history, nil
+}
+
+// GetFileHistories returns Git history for multiple files using a single commit walk.
+func (s *GitService) GetFileHistories(ctx context.Context, filePaths []string) (map[string]*model.FileHistory, error) {
+	if s.repo == nil {
+		return nil, model.ErrRepoNotFound
+	}
+
+	targets := make(map[string]struct{}, len(filePaths))
+	results := make(map[string]*model.FileHistory, len(filePaths))
+	pending := make([]string, 0, len(filePaths))
+
+	for _, filePath := range filePaths {
+		normalized := strings.TrimPrefix(filePath, "/")
+		if normalized == "" {
+			continue
+		}
+		if _, seen := targets[normalized]; seen {
+			continue
+		}
+		targets[normalized] = struct{}{}
+
+		if cached, ok := s.historyCache.Load(normalized); ok {
+			results[normalized] = cached.(*model.FileHistory)
+			continue
+		}
+
+		pending = append(pending, normalized)
+	}
+
+	if len(pending) == 0 {
+		return results, nil
+	}
+
+	commitIter, err := s.repo.Log(&git.LogOptions{Order: git.LogOrderCommitterTime})
+	if err != nil {
+		return nil, err
+	}
+
+	commits := make([]*object.Commit, 0)
+	err = commitIter.ForEach(func(c *object.Commit) error {
+		commits = append(commits, c)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
+		commits[i], commits[j] = commits[j], commits[i]
+	}
+
+	type historyBuilder struct {
+		commits      []model.CommitInfo
+		contributors map[string]bool
+		prevHash     plumbing.Hash
+		fileExists   bool
+	}
+
+	builders := make(map[string]*historyBuilder, len(pending))
+	for _, filePath := range pending {
+		builders[filePath] = &historyBuilder{
+			commits:      make([]model.CommitInfo, 0),
+			contributors: make(map[string]bool),
+		}
+	}
+
+	for _, c := range commits {
+		for filePath, builder := range builders {
+			file, err := c.File(filePath)
+			if err != nil {
+				if errors.Is(err, object.ErrFileNotFound) {
+					if builder.fileExists {
+						commitInfo := model.CommitInfo{
+							Hash:      shortHash(c.Hash.String()),
+							Author:    c.Author.Name,
+							Timestamp: c.Author.When,
+							Message:   strings.Split(c.Message, "\n")[0],
+						}
+						builder.commits = append(builder.commits, commitInfo)
+						builder.contributors[c.Author.Name] = true
+					}
+					builder.prevHash = plumbing.ZeroHash
+					builder.fileExists = false
+					continue
+				}
+				return nil, err
+			}
+
+			currentHash := file.Hash
+			if !builder.fileExists || currentHash != builder.prevHash {
+				commitInfo := model.CommitInfo{
+					Hash:      shortHash(c.Hash.String()),
+					Author:    c.Author.Name,
+					Timestamp: c.Author.When,
+					Message:   strings.Split(c.Message, "\n")[0],
+				}
+				builder.commits = append(builder.commits, commitInfo)
+				builder.contributors[c.Author.Name] = true
+			}
+
+			builder.prevHash = currentHash
+			builder.fileExists = true
+		}
+	}
+
+	for filePath, builder := range builders {
+		if len(builder.commits) == 0 {
+			continue
+		}
+
+		sort.Slice(builder.commits, func(i, j int) bool {
+			return builder.commits[i].Timestamp.After(builder.commits[j].Timestamp)
+		})
+
+		history := &model.FileHistory{
+			FirstCommit:  builder.commits[len(builder.commits)-1],
+			LastCommit:   builder.commits[0],
+			AllCommits:   builder.commits,
+			Contributors: mapKeys(builder.contributors),
+		}
+
+		s.historyCache.Store(filePath, history)
+		results[filePath] = history
+	}
+
+	return results, nil
 }
 
 // IsFileCommitted checks if a file has been committed to Git.
@@ -240,6 +377,7 @@ func (s *GitService) ReloadRepo() error {
 		return fmt.Errorf("failed to re-open git repository: %w", err)
 	}
 	s.repo = repo
+	s.historyCache = sync.Map{}
 	return nil
 }
 

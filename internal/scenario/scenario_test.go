@@ -84,7 +84,7 @@ func SetupScenario(t *testing.T, setup func(repo *testutil.TestRepo) error) *Sce
 	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc, fileSvc)
 	assetHandler := handler.NewAssetHandler(assetSvc)
 	searchHandler := handler.NewSearchHandler(articleSvc)
-	gitHandler := handler.NewGitHandler(gitSvc, authSvc)
+	gitHandler := handler.NewGitHandler(gitSvc, authSvc, nil)
 	treeHandler := handler.NewTreeHandler(articleSvc)
 
 	// Create router with all endpoints (RESTful v1)

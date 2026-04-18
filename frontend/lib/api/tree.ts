@@ -13,7 +13,8 @@ interface GetTreeParams {
 }
 
 interface TreeResponse {
-  tree: TreeNode;
+  root: TreeNode;
+  currentDir: string;
 }
 
 /**

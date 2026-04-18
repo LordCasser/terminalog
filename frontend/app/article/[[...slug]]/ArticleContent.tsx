@@ -27,60 +27,13 @@ function extractArticlePathFromURL(): string {
   return path || "";
 }
 
-// Mock data for static export preview
-function getMockData(articlePath: string) {
-  const mockArticle: Article = {
-    path: articlePath,
-    name: articlePath.split("/").pop() || "blog.md",
-    title: "The Brutalist Compiler",
-    type: "file",
-    createdAt: "2024-05-18",
-    createdBy: "root",
-    editedAt: new Date().toISOString(),
-    editedBy: "root",
-    contributors: ["root"],
-    latestCommit: "Update blog structure for v2.0.48",
-  };
-  
-  const mockContent = `## 01. The Core Philosophy
-
-In an era of rounded corners and soft gradients, the **Terminal Editorial** system stands as a monolith of intent. It rejects the standard "boxed" template in favor of intentional asymmetry and monolithic layering.
-
-## 02. Syntax and Structure
-
-The "Compiler" aspect comes from our use of high-contrast "syntax highlighting" colors to guide the eye through complex information architecture.
-
-- **Surface Lowest:** The deepest background level behind the main content.
-- **Surface Container:** Used for sidebar navigation or secondary meta-information.
-- **Active States:** Reserved for highlighted code blocks or focused terminal lines.
-
-## 03. The Glass & Gradient Rule
-
-To add visual "soul," we implement what we call **"Terminal Fog"**. This is the subtle interplay between sharp edges and soft backdrop blurs that creates a sense of spatial depth without traditional shadows.`;
-  
-  const mockCommits: CommitInfo[] = [
-    { hash: "a7f2b91", author: "root", message: "Update blog structure for v2.0.48", timestamp: "2024-05-24 09:12", linesAdded: 12, linesDeleted: 3 },
-    { hash: "c3d1e42", author: "root", message: "Initial draft of The Brutalist Compiler", timestamp: "2024-05-20 16:45", linesAdded: 150, linesDeleted: 0 },
-    { hash: "f9e8d7c", author: "root", message: "Setup repository structure", timestamp: "2024-05-18 10:20", linesAdded: 50, linesDeleted: 0 },
-  ];
-  
-  const mockVersionInfo: VersionInfo = {
-    version: "v2.0.48",
-    changeType: "patch",
-    baseLines: 200,
-    currentLines: 212,
-    changePercent: 6,
-  };
-  
-  return { mockArticle, mockContent, mockCommits, mockVersionInfo };
-}
-
 export function ArticleContent() {
   const [article, setArticle] = useState<Article | null>(null);
   const [content, setContent] = useState<string>("");
   const [commits, setCommits] = useState<CommitInfo[]>([]);
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   
   useEffect(() => {
@@ -91,7 +44,18 @@ export function ArticleContent() {
       try {
         // Fetch article content
         const articleResponse = await getArticleContent(articlePath);
-        setArticle(articleResponse.article);
+        setArticle({
+          path: articleResponse.path,
+          name: articlePath.split("/").pop() || articleResponse.title,
+          title: articleResponse.title,
+          type: "file",
+          createdAt: articleResponse.createdAt,
+          createdBy: articleResponse.createdBy,
+          editedAt: articleResponse.editedAt,
+          editedBy: articleResponse.editedBy,
+          contributors: articleResponse.contributors,
+          latestCommit: "",
+        });
         setContent(articleResponse.content || "");
         
         // Fetch timeline
@@ -100,21 +64,16 @@ export function ArticleContent() {
         
         // Fetch version info
         const versionResponse = await getArticleVersion(articlePath);
-        setVersionInfo(versionResponse.version);
+        setVersionInfo(versionResponse);
       } catch (error) {
         console.error("Failed to fetch article:", error);
-        // Use mock data for static export preview
-        const { mockArticle, mockContent, mockCommits, mockVersionInfo } = getMockData(articlePath);
-        setArticle(mockArticle);
-        setContent(mockContent);
-        setCommits(mockCommits);
-        setVersionInfo(mockVersionInfo);
+        setError("Failed to load article.");
       } finally {
         setLoading(false);
       }
     };
     
-fetchData();
+    fetchData();
   }, []);
   
   // Extract base path for image transformation (client-side only)
@@ -132,6 +91,27 @@ fetchData();
     const date = new Date(dateStr);
     return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <span className="text-outline font-mono">Loading...</span>
+      </div>
+    );
+  }
+
+  if (error || !article) {
+    return (
+      <div className="min-h-screen">
+        <main className="pt-24 pb-32 px-6 max-w-4xl mx-auto">
+          <div className="text-center">
+            <h1 className="font-headline text-4xl text-outline mb-4">Article Unavailable</h1>
+            <p className="text-on-surface-variant">{error || "The requested article could not be loaded."}</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
   
   return (
     <div className="min-h-screen">
@@ -145,22 +125,22 @@ fetchData();
               Article
             </span>
             <span className="font-mono text-xs text-outline">
-              {versionInfo?.version || "v1.0.0"}
+              {versionInfo?.currentVersion || "v1.0.0"}
             </span>
             <span className="font-mono text-xs text-outline">
-              {formatDate(article?.editedAt || new Date().toISOString())}
+              {formatDate(article.editedAt)}
             </span>
           </div>
           
           {/* Title */}
           <h1 className="font-headline font-bold text-4xl leading-none text-on-surface tracking-tighter mb-8">
-            {article?.title?.toUpperCase() || "UNTITLED"}
+            {article.title.toUpperCase() || "UNTITLED"}
           </h1>
           
           {/* Quote Blockquote - only show if quote exists */}
           {quote && (
             <p className="font-mono text-lg text-primary max-w-2xl border-l-4 border-primary pl-6 py-2 italic bg-surface-container-low">
-              "{quote}"
+              &quot;{quote}&quot;
             </p>
           )}
         </section>

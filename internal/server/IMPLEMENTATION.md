@@ -8,13 +8,13 @@
 
 ## 一、模块概述
 
-WebSocket模块提供终端命令的实时通信功能，支持路径补全和搜索功能。
+WebSocket模块提供终端路径补全的实时通信功能。
 
 ### 1.1 文件结构
 
 ```
 internal/server/websocket.go    - WebSocket Handler（HTTP升级、消息处理）
-internal/service/completion.go  - Completion Service（路径补全、搜索逻辑）
+internal/service/completion.go  - Completion Service（路径补全逻辑）
 frontend/components/command/CommandPrompt.tsx - 前端WebSocket客户端
 ```
 
@@ -22,7 +22,7 @@ frontend/components/command/CommandPrompt.tsx - 前端WebSocket客户端
 
 - **端点**：`/ws/terminal`
 - **协议**：WebSocket (JSON消息)
-- **功能**：路径补全、文章搜索
+- **功能**：路径补全
 
 ---
 
@@ -51,31 +51,6 @@ frontend/components/command/CommandPrompt.tsx - 前端WebSocket客户端
 - 文件不带斜杠（`README.md`）
 - 文件夹带斜杠（`tech/`）
 - 过滤 `_` 开头的特殊文件
-
-### 2.2 搜索
-
-**请求**：
-```json
-{
-  "type": "search_request",
-  "keyword": "terminal"
-}
-```
-
-**响应**：
-```json
-{
-  "type": "search_response",
-  "results": [
-    {"path": "README.md", "title": "Terminalog"}
-  ]
-}
-```
-
-**搜索规则**：
-- 搜索文章标题
-- 过滤 `_` 开头的特殊文件
-- 最多返回10条结果
 
 ---
 
@@ -106,7 +81,7 @@ frontend/components/command/CommandPrompt.tsx - 前端WebSocket客户端
 |------|---------|
 | WebSocket库 | `gorilla/websocket` v1.5.3 |
 | 消息格式 | JSON |
-| 超时时间 | 5秒（补全/搜索），60秒（连接） |
+| 超时时间 | 5秒（补全），60秒（连接） |
 
 ---
 
@@ -133,21 +108,7 @@ ws.onmessage = (event) => {
 
 ### 5.2 搜索
 
-```typescript
-// 前端发送搜索请求
-ws.send(JSON.stringify({
-  type: 'search_request',
-  keyword: 'terminal'
-}));
-
-// 接收响应并跳转
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  if (data.type === 'search_response' && data.results.length > 0) {
-    router.push(`/article?path=${data.results[0].path}`);
-  }
-};
-```
+搜索不通过 WebSocket 发送。当前实现使用 REST API `GET /api/v1/search?q=...`。
 
 ---
 

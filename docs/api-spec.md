@@ -151,7 +151,6 @@ ws://blog.example.com
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 |------|------|------|--------|------|
-| `dir` | string | 否 | `""`（根目录） | 目录路径 |
 | `sort` | string | 否 | `"edited"` | 排序字段：`created`、`edited` |
 | `order` | string | 否 | `"desc"` | 排序方向：`asc`、`desc` |
 
@@ -162,7 +161,7 @@ ws://blog.example.com
 curl http://localhost:8080/api/v1/articles
 
 # 获取 tech 目录的文章
-curl http://localhost:8080/api/v1/articles?dir=tech
+curl http://localhost:8080/api/v1/articles/tech
 
 # 按创建时间升序排序
 curl "http://localhost:8080/api/v1/articles?sort=created&order=asc"
@@ -197,7 +196,7 @@ curl "http://localhost:8080/api/v1/articles?sort=created&order=asc"
 
 ---
 
-**端点**：`GET /api/v1/articles/search`
+**端点**：`GET /api/v1/search`
 
 **描述**：搜索文章标题
 
@@ -211,8 +210,8 @@ curl "http://localhost:8080/api/v1/articles?sort=created&order=asc"
 **请求示例**：
 
 ```bash
-curl "http://localhost:8080/api/v1/articles/search?q=golang"
-curl "http://localhost:8080/api/v1/articles/search?q=golang&dir=tech"
+curl "http://localhost:8080/api/v1/search?q=golang"
+curl "http://localhost:8080/api/v1/search?q=golang&dir=tech"
 ```
 
 **响应示例（200 OK）**：
@@ -223,9 +222,11 @@ curl "http://localhost:8080/api/v1/articles/search?q=golang&dir=tech"
     {
       "path": "tech/golang.md",
       "title": "golang",
-      "matchedTitle": "golang"
+      "matchedTitle": "golang",
+      "type": "file"
     }
   ],
+  "query": "golang",
   "total": 1
 }
 ```
@@ -257,19 +258,14 @@ curl "http://localhost:8080/api/v1/articles/guides%2Fimage-test.md"
 
 ```json
 {
-  "article": {
-    "path": "tech/golang.md",
-    "name": "golang.md",
-    "title": "golang",
-    "type": "file",
-    "createdAt": "2024-01-10T09:00:00Z",
-    "createdBy": "developer1",
-    "editedAt": "2024-01-15T10:30:00Z",
-    "editedBy": "developer2",
-    "contributors": ["developer1", "developer2"],
-    "latestCommit": "Update golang guide"
-  },
+  "path": "tech/golang.md",
+  "title": "golang",
   "content": "# Golang Guide\n\nThis is a guide..."
+  "createdAt": "2024-01-10 09:00:00",
+  "createdBy": "developer1",
+  "editedAt": "2024-01-15 10:30:00",
+  "editedBy": "developer2",
+  "contributors": ["developer1", "developer2"]
 }
 ```
 
@@ -563,8 +559,8 @@ curl "http://localhost:8080/api/v1/settings"
 
 **参数说明**：
 - `dir`: 搜索范围目录
-  - 空字符串 `""`：全局搜索（`search`命令使用），匹配所有级别的路径名
-  - 具体路径如 `"tech"`：当前目录搜索（`open`/`cd`命令使用），只匹配直接子项
+  - 空字符串 `""`：从根目录补全
+  - 具体路径如 `"tech"`：当前目录补全，只匹配直接子项
 - `prefix`: 路径前缀匹配
 
 **响应格式**：
@@ -576,29 +572,9 @@ curl "http://localhost:8080/api/v1/settings"
 ```
 
 **返回格式**：
-- 全局搜索（dir为空）：返回完整路径（如 `tech/golang/`、`tech/golang/go-guide.md`）
-- 当前目录搜索（dir指定）：返回basename（如 `golang/`、`go-guide.md`）
+- 根目录补全（dir为空）：返回完整路径（如 `tech/golang/`、`tech/golang/go-guide.md`）
+- 当前目录补全（dir指定）：返回basename（如 `golang/`、`go-guide.md`）
 - 文件不带斜杠，文件夹带斜杠
-
-### 9.2 搜索文章
-
-**请求格式**：
-```json
-{
-  "type": "search_request",
-  "keyword": "terminal"
-}
-```
-
-**响应格式**：
-```json
-{
-  "type": "search_response",
-  "results": [
-    {"path": "README.md", "title": "Terminalog"}
-  ]
-}
-```
 
 ---
 
@@ -659,9 +635,15 @@ interface Article {
 ### 11.2 ArticleDetail
 
 ```typescript
-interface ArticleDetail {
-  article: Article;
+interface ArticleDetailResponse {
+  path: string;
+  title: string;
   content: string;       // Markdown内容
+  createdAt: string;
+  createdBy: string;
+  editedAt: string;
+  editedBy: string;
+  contributors: string[];
 }
 ```
 
@@ -673,8 +655,6 @@ interface CommitInfo {
   author: string;        // 作者
   message: string;       // 提交信息
   timestamp: string;     // 时间
-  linesAdded: number;    // 新增行数
-  linesDeleted: number;  // 删除行数
 }
 ```
 
@@ -682,11 +662,17 @@ interface CommitInfo {
 
 ```typescript
 interface VersionInfo {
-  current: string;       // 当前版本号
-  changeType: string;    // 变更类型
-  baseLines: number;     // 基础行数
-  currentLines: number;  // 当前行数
-  changePercent: number; // 变化百分比
+  currentVersion: string;
+  history: VersionHistoryEntry[];
+}
+
+interface VersionHistoryEntry {
+  version: string;
+  hash: string;
+  author: string;
+  timestamp: string;
+  linesChanged: number;
+  changeType: 'major' | 'minor' | 'patch';
 }
 ```
 
@@ -780,10 +766,10 @@ export async function searchArticles(q: string, dir?: string): Promise<SearchRes
   query.set('q', q);
   if (dir) query.set('dir', dir);
   
-  return apiClient.get(`/api/v1/articles/search?${query}`);
+  return apiClient.get(`/api/v1/search?${query}`);
 }
 
-export async function getArticle(path: string): Promise<ArticleDetail> {
+export async function getArticle(path: string): Promise<ArticleDetailResponse> {
   return apiClient.get(`/api/v1/articles/${encodeURIComponent(path)}`);
 }
 
@@ -791,7 +777,7 @@ export async function getArticleTimeline(path: string): Promise<{ commits: Commi
   return apiClient.get(`/api/v1/articles/${encodeURIComponent(path)}/timeline`);
 }
 
-export async function getArticleVersion(path: string): Promise<{ version: VersionInfo; history: VersionHistoryEntry[] }> {
+export async function getArticleVersion(path: string): Promise<VersionInfo> {
   return apiClient.get(`/api/v1/articles/${encodeURIComponent(path)}/version`);
 }
 ```
@@ -859,7 +845,7 @@ export function transformImagePath(src: string, basePath?: string): string {
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/api/v1/articles` | GET | 获取文章列表 |
-| `/api/v1/articles/search` | GET | 搜索文章 |
+| `/api/v1/search` | GET | 搜索文章 |
 | `/api/v1/articles/{path}` | GET | 获取单个文章 |
 | `/api/v1/articles/{path}/timeline` | GET | 获取时间线 |
 | `/api/v1/articles/{path}/version` | GET | 获取版本信息 |
@@ -874,7 +860,7 @@ export function transformImagePath(src: string, basePath?: string): string {
 | `/api/v1/git/info/refs` | GET | Git refs advertisement |
 | `/api/v1/git/git-upload-pack` | POST | Git clone/fetch |
 | `/api/v1/git/git-receive-pack` | POST | Git push |
-| `/ws/terminal` | WebSocket | 终端通信 |
+| `/ws/terminal` | WebSocket | 路径补全 |
 
 ---
 
@@ -1007,7 +993,7 @@ export default config;
 |--------|--------|------|
 | `/api/articles` | `/api/v1/articles` | 添加版本前缀 |
 | `/api/articles/*` | `/api/v1/articles/{path}` | 明确路径参数 |
-| `/api/search` | `/api/v1/articles/search` | 合并到Articles资源 |
+| `/api/search` | `/api/v1/search` | 统一为独立搜索资源 |
 | `/api/aboutme` | `/api/v1/special/aboutme` | 合并到Special资源 |
 | `/api/config` | `/api/v1/settings` | 重命名为Settings |
 | `/api/assets/*` | `/api/v1/assets/{path}` | 添加版本前缀 |

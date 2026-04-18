@@ -65,9 +65,9 @@ const TerminalConfigContext = createContext<TerminalConfigValue>({
 // Provider component
 export function TerminalConfigProvider({ children }: { children: ReactNode }) {
   const [owner, setOwner] = useState(DEFAULT_OWNER);
-  const [currentDir, setCurrentDir] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const pathname = usePathname();
+  const currentDir = extractDirFromPathname(pathname);
 
   // Fetch config from API on mount
   useEffect(() => {
@@ -86,14 +86,9 @@ export function TerminalConfigProvider({ children }: { children: ReactNode }) {
     fetchConfig();
   }, []);
 
-  // Sync currentDir with URL pathname (works with both client-side and server-side navigation)
-  useEffect(() => {
-    setCurrentDir(extractDirFromPathname(pathname));
-  }, [pathname]);
-
-  // Memoized setCurrentDir
+  // Kept for API compatibility with existing consumers. Navigation drives currentDir.
   const handleSetCurrentDir = useCallback((dir: string) => {
-    setCurrentDir(dir);
+    void dir;
   }, []);
 
   return (

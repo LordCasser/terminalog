@@ -30,17 +30,21 @@ type ArticleCache struct {
 
 	// articleListCache stores cached article lists.
 	articleListCache map[string][]model.Article
+
+	// directoryListCache stores cached directory listings.
+	directoryListCache map[string][]model.Article
 }
 
 // NewArticleCache creates a new ArticleCache with the given TTL.
 func NewArticleCache(ttl time.Duration) *ArticleCache {
 	return &ArticleCache{
-		articles:         make(map[string]*model.Article),
-		timelines:        make(map[string][]model.CommitInfo),
-		treeCache:        make(map[string]*model.TreeNode),
-		articleListCache: make(map[string][]model.Article),
-		ttl:              ttl,
-		lastUpdate:       time.Now(),
+		articles:           make(map[string]*model.Article),
+		timelines:          make(map[string][]model.CommitInfo),
+		treeCache:          make(map[string]*model.TreeNode),
+		articleListCache:   make(map[string][]model.Article),
+		directoryListCache: make(map[string][]model.Article),
+		ttl:                ttl,
+		lastUpdate:         time.Now(),
 	}
 }
 
@@ -136,6 +140,28 @@ func (c *ArticleCache) SetArticleList(dir string, list []model.Article) {
 	c.lastUpdate = time.Now()
 }
 
+// GetDirectoryList retrieves a cached directory listing.
+func (c *ArticleCache) GetDirectoryList(key string) ([]model.Article, bool) {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	if time.Since(c.lastUpdate) > c.ttl {
+		return nil, false
+	}
+
+	list, ok := c.directoryListCache[key]
+	return list, ok
+}
+
+// SetDirectoryList stores a directory listing in the cache.
+func (c *ArticleCache) SetDirectoryList(key string, list []model.Article) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.directoryListCache[key] = list
+	c.lastUpdate = time.Now()
+}
+
 // Clear clears all cache entries.
 func (c *ArticleCache) Clear() {
 	c.mutex.Lock()
@@ -145,6 +171,7 @@ func (c *ArticleCache) Clear() {
 	c.timelines = make(map[string][]model.CommitInfo)
 	c.treeCache = make(map[string]*model.TreeNode)
 	c.articleListCache = make(map[string][]model.Article)
+	c.directoryListCache = make(map[string][]model.Article)
 	c.lastUpdate = time.Now()
 }
 
@@ -170,23 +197,25 @@ func (c *ArticleCache) Stats() CacheStats {
 	defer c.mutex.RUnlock()
 
 	return CacheStats{
-		Articles:     len(c.articles),
-		Timelines:    len(c.timelines),
-		Trees:        len(c.treeCache),
-		ArticleLists: len(c.articleListCache),
-		LastUpdate:   c.lastUpdate,
-		TTL:          c.ttl,
+		Articles:       len(c.articles),
+		Timelines:      len(c.timelines),
+		Trees:          len(c.treeCache),
+		ArticleLists:   len(c.articleListCache),
+		DirectoryLists: len(c.directoryListCache),
+		LastUpdate:     c.lastUpdate,
+		TTL:            c.ttl,
 	}
 }
 
 // CacheStats represents cache statistics.
 type CacheStats struct {
-	Articles     int           `json:"articles"`
-	Timelines    int           `json:"timelines"`
-	Trees        int           `json:"trees"`
-	ArticleLists int           `json:"articleLists"`
-	LastUpdate   time.Time     `json:"lastUpdate"`
-	TTL          time.Duration `json:"ttl"`
+	Articles       int           `json:"articles"`
+	Timelines      int           `json:"timelines"`
+	Trees          int           `json:"trees"`
+	ArticleLists   int           `json:"articleLists"`
+	DirectoryLists int           `json:"directoryLists"`
+	LastUpdate     time.Time     `json:"lastUpdate"`
+	TTL            time.Duration `json:"ttl"`
 }
 
 // DefaultCacheTTL is the default cache TTL (5 minutes).

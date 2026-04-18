@@ -11,7 +11,7 @@
  */
 
 import { apiClient } from './client';
-import type { Article, ArticleListResponse, ArticleResponse, CommitInfo, VersionInfo, VersionHistoryEntry } from '@/types';
+import type { ArticleListResponse, ArticleDetailResponse, CommitInfo, VersionInfo } from '@/types';
 
 /** Sort field options */
 export type SortField = 'created' | 'edited' | 'name';
@@ -50,8 +50,8 @@ export async function getArticles(dir?: string, sort?: SortField, order?: SortOr
  * Get article content by path
  * GET /api/v1/articles/{path}
  */
-export async function getArticleContent(path: string): Promise<ArticleResponse> {
-  return apiClient.get<ArticleResponse>(`/api/v1/articles/${encodePath(path)}`);
+export async function getArticleContent(path: string): Promise<ArticleDetailResponse> {
+  return apiClient.get<ArticleDetailResponse>(`/api/v1/articles/${encodePath(path)}`);
 }
 
 /**
@@ -74,6 +74,6 @@ export async function getArticleTimeline(path: string): Promise<{ commits: Commi
  * Get article version info
  * GET /api/v1/articles/{path}/version
  */
-export async function getArticleVersion(path: string): Promise<{ version: VersionInfo; history: VersionHistoryEntry[] }> {
-  return apiClient.get(`/api/v1/articles/${encodePath(path)}/version`);
+export async function getArticleVersion(path: string): Promise<VersionInfo> {
+  return apiClient.get<VersionInfo>(`/api/v1/articles/${encodePath(path)}/version`);
 }

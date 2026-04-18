@@ -9,12 +9,18 @@
 # All Markdown files (.md) in this directory will be treated as blog articles.
 content_dir = "./content"
 
+# Owner name displayed in the navbar path, for example ~/alice
+owner = "lordcasser"
+
 [server]
 # Server host address (default: 0.0.0.0 for all interfaces)
 host = "0.0.0.0"
 
 # Server port (default: 8080)
 port = 8080
+
+# Enable debug mode for local frontend/backend split development
+debug = false
 
 [auth]
 # Users for Git push authentication.

@@ -8,7 +8,7 @@ The Version Service provides semantic version calculation for articles based on 
 
 - **Service**: `internal/service/version.go`
 - **Handler**: Integrated into `internal/handler/article.go`
-- **Route**: `GET /api/articles/{path}/version`
+- **Route**: `GET /api/v1/articles/{path}/version`
 
 ## Version Number Rules
 

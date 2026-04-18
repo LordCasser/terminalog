@@ -102,6 +102,11 @@ func (s *ArticleService) ListArticles(ctx context.Context, opts ListOptions) ([]
 // contain at least one markdown file recursively.
 // Sort controls the order of items within each group (dirs and files separately).
 func (s *ArticleService) ListDirectory(ctx context.Context, dir string, sortField model.SortField, sortOrder model.SortOrder) ([]model.Article, error) {
+	cacheKey := dir + ":" + string(sortField) + ":" + string(sortOrder)
+	if cached, ok := s.cache.GetDirectoryList(cacheKey); ok {
+		return cached, nil
+	}
+
 	// Scan the directory for direct children
 	entries, err := s.fileSvc.ScanDirectory(ctx, dir)
 	if err != nil {
@@ -109,10 +114,42 @@ func (s *ArticleService) ListDirectory(ctx context.Context, dir string, sortFiel
 	}
 
 	articles := make([]model.Article, 0, len(entries))
+	dirFiles := make(map[string][]string)
+	allFiles := make([]string, 0)
+	seenFiles := make(map[string]struct{})
+
+	addFile := func(path string) {
+		if _, ok := seenFiles[path]; ok {
+			return
+		}
+		seenFiles[path] = struct{}{}
+		allFiles = append(allFiles, path)
+	}
 
 	for _, entry := range entries {
 		if entry.Type == model.NodeTypeDir {
-			dirArticle, err := s.getDirectoryArticle(ctx, entry.Path)
+			files, err := s.fileSvc.ScanMarkdownFiles(ctx, entry.Path)
+			if err != nil {
+				continue
+			}
+			dirFiles[entry.Path] = files
+			for _, file := range files {
+				addFile(file)
+			}
+			continue
+		}
+
+		addFile(entry.Path)
+	}
+
+	histories, err := s.gitSvc.GetFileHistories(ctx, allFiles)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.Type == model.NodeTypeDir {
+			dirArticle, err := s.getDirectoryArticleFromHistories(entry.Path, dirFiles[entry.Path], histories)
 			if err != nil {
 				dirArticle = model.Article{
 					Path:  entry.Path,
@@ -123,7 +160,7 @@ func (s *ArticleService) ListDirectory(ctx context.Context, dir string, sortFiel
 			}
 			articles = append(articles, dirArticle)
 		} else {
-			article, err := s.processFile(ctx, entry.Path)
+			article, err := s.articleFromHistory(entry.Path, histories[entry.Path])
 			if err != nil {
 				continue
 			}
@@ -133,21 +170,13 @@ func (s *ArticleService) ListDirectory(ctx context.Context, dir string, sortFiel
 
 	// Sort: directories first, then files; within each group, apply sort criteria
 	sortDirectoryListing(articles, sortField, sortOrder)
+	s.cache.SetDirectoryList(cacheKey, articles)
 
 	return articles, nil
 }
 
-// getDirectoryArticle creates an Article entry for a directory.
-// It uses metadata from the most recently edited file in the directory as the
-// directory's metadata, providing useful information without requiring git
-// operations on the directory itself.
-func (s *ArticleService) getDirectoryArticle(ctx context.Context, dirPath string) (model.Article, error) {
-	// Find the most recently edited file in this directory (recursive)
-	files, err := s.fileSvc.ScanMarkdownFiles(ctx, dirPath)
-	if err != nil {
-		return model.Article{}, err
-	}
-
+// getDirectoryArticleFromHistories creates a directory entry from child file histories.
+func (s *ArticleService) getDirectoryArticleFromHistories(dirPath string, files []string, histories map[string]*model.FileHistory) (model.Article, error) {
 	if len(files) == 0 {
 		return model.Article{
 			Path:  dirPath,
@@ -162,7 +191,7 @@ func (s *ArticleService) getDirectoryArticle(ctx context.Context, dirPath string
 	var latestTime time.Time
 
 	for _, file := range files {
-		article, err := s.processFile(ctx, file)
+		article, err := s.articleFromHistory(file, histories[file])
 		if err != nil {
 			continue
 		}
@@ -191,6 +220,29 @@ func (s *ArticleService) getDirectoryArticle(ctx context.Context, dirPath string
 	}
 
 	return result, nil
+}
+
+func (s *ArticleService) articleFromHistory(file string, history *model.FileHistory) (model.Article, error) {
+	if history == nil || len(history.AllCommits) == 0 {
+		return model.Article{}, model.ErrNotCommitted
+	}
+
+	article := model.Article{
+		Path:         file,
+		Name:         filepath.Base(file),
+		Title:        utils.ExtractTitle(file),
+		Type:         model.NodeTypeFile,
+		CreatedAt:    history.FirstCommit.Timestamp,
+		CreatedBy:    history.FirstCommit.Author,
+		EditedAt:     history.LastCommit.Timestamp,
+		EditedBy:     history.LastCommit.Author,
+		Contributors: history.Contributors,
+		LatestCommit: history.LastCommit.Message,
+	}
+
+	s.cache.SetArticle(file, &article)
+
+	return article, nil
 }
 func (s *ArticleService) listArticlesSequential(ctx context.Context, files []string) []model.Article {
 	articles := make([]model.Article, 0, len(files))
@@ -263,39 +315,11 @@ func (s *ArticleService) processFile(ctx context.Context, file string) (model.Ar
 		return *cached, nil
 	}
 
-	// Check if committed
-	committed, err := s.gitSvc.IsFileCommitted(ctx, file)
-	if err != nil {
-		return model.Article{}, err
-	}
-	if !committed {
-		return model.Article{}, model.ErrNotCommitted
-	}
-
-	// Get history
 	history, err := s.gitSvc.GetFileHistory(ctx, file)
 	if err != nil {
 		return model.Article{}, err
 	}
-
-	// Build Article
-	article := model.Article{
-		Path:         file,
-		Name:         filepath.Base(file),
-		Title:        utils.ExtractTitle(file),
-		Type:         model.NodeTypeFile,
-		CreatedAt:    history.FirstCommit.Timestamp,
-		CreatedBy:    history.FirstCommit.Author,
-		EditedAt:     history.LastCommit.Timestamp,
-		EditedBy:     history.LastCommit.Author,
-		Contributors: history.Contributors,
-		LatestCommit: history.LastCommit.Message,
-	}
-
-	// Cache article
-	s.cache.SetArticle(file, &article)
-
-	return article, nil
+	return s.articleFromHistory(file, history)
 }
 
 // GetArticle returns the content and metadata of a specific article.

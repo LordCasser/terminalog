@@ -28,112 +28,21 @@ import {
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 import { getArticles } from "@/lib/api/articles";
 import { searchArticles } from "@/lib/api/search";
-
-/**
- * Navigate to a path based on its type.
- * If path ends with .md → navigate to article page.
- * Otherwise → navigate to directory page.
- */
-function navigateToPath(router: ReturnType<typeof useRouter>, path: string) {
-  if (path.endsWith(".md")) {
-    router.push(`/article/${encodePathForUrl(path)}`);
-  } else {
-    router.push(`/dir/${encodePathForUrl(path)}`);
-  }
-}
-
-/**
- * Encode a path for URL path segments.
- * Preserves "/" separators but encodes special characters in each segment.
- */
-function encodePathForUrl(path: string): string {
-  return path.split("/").map(segment => encodeURIComponent(segment)).join("/");
-}
-
-/**
- * Resolve path relative to current directory.
- * Used by `open` command for file paths.
- * Same logic as resolveCdPath but simpler - just resolve the path.
- */
-function resolvePath(currentDir: string, target: string): string {
-  const normalizedTarget = target.trim();
-  
-  const segments = normalizedTarget.split("/");
-  let currentSegments = currentDir ? currentDir.split("/") : [];
-  
-  for (const seg of segments) {
-    if (seg === "..") {
-      if (currentSegments.length > 0) {
-        currentSegments = currentSegments.slice(0, -1);
-      }
-    } else if (seg === "." || seg === "") {
-      continue;
-    } else {
-      currentSegments.push(seg);
-    }
-  }
-  
-  return currentSegments.join("/");
-}
-
-/**
- * Resolve cd path relative to current directory.
- * - ".." → go up one level
- * - "subdir" → append to currentDir
- * - "/abs/path" → absolute path (strip leading /)
- * - "." → stay in current directory (no-op)
- */
-function resolveCdPath(currentDir: string, target: string): string {
-  const normalizedTarget = target.trim();
-  
-  // Special: "." means stay here
-  if (normalizedTarget === "." || normalizedTarget === "") {
-    return currentDir;
-  }
-  
-  // Absolute path: "/" or "/tech/frontend" → reset to that path
-  if (normalizedTarget.startsWith("/")) {
-    const absolutePath = normalizedTarget.slice(1); // Remove leading "/"
-    if (!absolutePath) {
-      return ""; // cd / → root directory
-    }
-    return absolutePath;
-  }
-  
-  // Handle relative paths: "..", "subdir", "../sibling"
-  const segments = normalizedTarget.split("/");
-  let currentSegments = currentDir ? currentDir.split("/") : [];
-  
-  for (const seg of segments) {
-    if (seg === "..") {
-      // Go up one level
-      if (currentSegments.length > 0) {
-        currentSegments = currentSegments.slice(0, -1);
-      }
-    } else if (seg === "." || seg === "") {
-      // Skip current directory markers and empty segments
-      continue;
-    } else {
-      // Append subdirectory
-      currentSegments.push(seg);
-    }
-  }
-  
-  return currentSegments.join("/");
-}
+import {
+  COMMANDS,
+  HISTORY_KEY,
+  MAX_HISTORY_SIZE,
+  encodePathForUrl,
+  navigateToPath,
+  resolveCdPath,
+  resolvePath,
+} from "./utils";
 
 // Custom event for search icon click
 export const FOCUS_COMMAND_INPUT = "focusCommandInput";
 
 // Custom event for modal visibility (to prevent keyboard conflict)
 export const SEARCH_MODAL_VISIBLE = "searchModalVisible";
-
-// Available commands for auto-completion
-const COMMANDS = ["search", "open", "cd", "help"];
-
-// History storage key and max size
-const HISTORY_KEY = "terminalog_command_history";
-const MAX_HISTORY_SIZE = 100;
 
 // WebSocket message types
 interface CompletionRequest {
@@ -147,22 +56,12 @@ interface CompletionResponse {
   items: string[];
 }
 
-interface SearchRequest {
-  type: "search_request";
-  keyword: string;
-}
-
-interface SearchResponse {
-  type: "search_response";
-  results: Array<{ path: string; title: string }>;
-}
-
 interface ErrorResponse {
   type: "error";
   error: string;
 }
 
-type WebSocketMessage = CompletionResponse | SearchResponse | ErrorResponse;
+type WebSocketMessage = CompletionResponse | ErrorResponse;
 
 // No match hint state (shows for 1 second)
 export const NO_MATCH_HINT = "noMatchHint";
@@ -212,6 +111,12 @@ export function CommandPrompt() {
   // Get owner and currentDir from TerminalConfig context
   const { owner, currentDir } = useTerminalConfig();
 
+  const showTransientNoMatchHint = useCallback((type: "completion" | "search") => {
+    setNoMatchHintType(type);
+    setShowNoMatchHint(true);
+    setTimeout(() => setShowNoMatchHint(false), 1000);
+  }, []);
+
   // Save history to localStorage
   const saveHistory = useCallback((newHistory: string[]) => {
     try {
@@ -238,7 +143,7 @@ export function CommandPrompt() {
         // WebSocket connected
       };
 
-      ws.onerror = (error) => {
+      ws.onerror = () => {
         // WebSocket error
       };
 
@@ -340,7 +245,7 @@ export function CommandPrompt() {
 
   // Send WebSocket message and wait for response
   const sendWebSocketMessage = useCallback(
-    <T extends WebSocketMessage>(message: CompletionRequest | SearchRequest): Promise<T> => {
+    <T extends WebSocketMessage>(message: CompletionRequest): Promise<T> => {
       return new Promise((resolve, reject) => {
         if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
           reject(new Error("WebSocket not connected"));
@@ -387,10 +292,7 @@ export function CommandPrompt() {
       if (matchingCommands.length === 1) {
         setInput(matchingCommands[0] + " ");
       } else if (matchingCommands.length === 0) {
-        // No matching command - show hint
-        setNoMatchHintType("completion");
-        setShowNoMatchHint(true);
-        setTimeout(() => setShowNoMatchHint(false), 1000);
+        showTransientNoMatchHint("completion");
       }
       return;
     }
@@ -442,20 +344,14 @@ export function CommandPrompt() {
             );
             window.dispatchEvent(event);
           } else {
-            // No matches: show hint
-            setNoMatchHintType("completion");
-            setShowNoMatchHint(true);
-            setTimeout(() => setShowNoMatchHint(false), 1000);
+            showTransientNoMatchHint("completion");
           }
         }
-      } catch (error) {
-        // WebSocket error: show hint
-        setNoMatchHintType("completion");
-        setShowNoMatchHint(true);
-        setTimeout(() => setShowNoMatchHint(false), 1000);
+      } catch {
+        showTransientNoMatchHint("completion");
       }
     }
-  }, [input, currentDir, sendWebSocketMessage]);
+  }, [input, currentDir, sendWebSocketMessage, showTransientNoMatchHint]);
 
   // Handle ArrowUp/ArrowDown for history navigation
   const handleHistoryNavigation = useCallback((e: React.KeyboardEvent) => {
@@ -523,7 +419,7 @@ export function CommandPrompt() {
           try {
             await getArticles(resolvedPath);
             router.push(`/dir/${encodePathForUrl(resolvedPath)}`);
-          } catch (error) {
+          } catch {
             // Not a directory - might be an article without .md extension
             router.push(`/article/${encodePathForUrl(resolvedPath)}`);
           }
@@ -558,17 +454,11 @@ export function CommandPrompt() {
             window.dispatchEvent(event);
           }
         } else {
-          // No search results: show hint
-          setNoMatchHintType("search");
-          setShowNoMatchHint(true);
-          setTimeout(() => setShowNoMatchHint(false), 1000);
+          showTransientNoMatchHint("search");
         }
       } catch (error) {
         console.error("Search API error:", error);
-        // Show no match hint on error
-        setNoMatchHintType("search");
-        setShowNoMatchHint(true);
-        setTimeout(() => setShowNoMatchHint(false), 1000);
+        showTransientNoMatchHint("search");
       }
       return;
     }
@@ -596,18 +486,15 @@ export function CommandPrompt() {
       
       // Validate directory exists by trying to fetch its listing
       try {
-        const response = await getArticles(resolvedPath);
+        await getArticles(resolvedPath);
         // Directory exists - navigate to it
         if (resolvedPath) {
           router.push(`/dir/${encodePathForUrl(resolvedPath)}`);
         } else {
           router.push("/");
         }
-      } catch (error) {
-        // Directory doesn't exist or error - show no match hint
-        setNoMatchHintType("completion");
-        setShowNoMatchHint(true);
-        setTimeout(() => setShowNoMatchHint(false), 1000);
+      } catch {
+        showTransientNoMatchHint("completion");
       }
       return;
     }
@@ -622,7 +509,7 @@ export function CommandPrompt() {
     if (trimmedCmd !== "") {
       console.log(`Unknown command: ${cmd}`);
     }
-  }, [router, sendWebSocketMessage, currentDir]);
+  }, [router, currentDir, showTransientNoMatchHint]);
 
   // Handle form submit
   const handleSubmit = (e: React.FormEvent) => {

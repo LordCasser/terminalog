@@ -19,7 +19,7 @@ func NewTreeHandler(svc *service.ArticleService) *TreeHandler {
 	return &TreeHandler{svc: svc}
 }
 
-// Get handles GET /api/tree.
+// Get handles GET /api/v1/tree.
 func (h *TreeHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

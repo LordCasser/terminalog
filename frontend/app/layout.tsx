@@ -17,7 +17,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-        {/* Google Fonts - Dracula Spectrum Typography */}
+        {/* Google Fonts - kept as stylesheet links to preserve offline-compatible static builds */}
         <link
           href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"

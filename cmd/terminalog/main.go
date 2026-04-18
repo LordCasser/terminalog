@@ -134,7 +134,7 @@ func main() {
 	handlers := &server.Handlers{
 		Article:   handler.NewArticleHandler(articleSvc, versionSvc, fileSvc),
 		Asset:     handler.NewAssetHandler(assetSvc),
-		Git:       handler.NewGitHandler(gitSvc, authSvc),
+		Git:       handler.NewGitHandler(gitSvc, authSvc, articleSvc.InvalidateCache),
 		Search:    handler.NewSearchHandler(articleSvc),
 		Tree:      handler.NewTreeHandler(articleSvc),
 		Health:    healthHandler,

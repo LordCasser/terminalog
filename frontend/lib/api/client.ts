@@ -15,6 +15,16 @@ interface RequestOptions {
   body?: unknown;
 }
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 /**
  * API Client class for making HTTP requests
  */
@@ -42,7 +52,7 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw new ApiError(error.error || `HTTP ${response.status}`, response.status);
     }
 
     return response.json();
@@ -57,7 +67,7 @@ class ApiClient {
     const response = await fetch(url);
     
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw new ApiError(`HTTP ${response.status}`, response.status);
     }
     
     return response.text();

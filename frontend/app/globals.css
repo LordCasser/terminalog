@@ -1,8 +1,3 @@
-/* Google Fonts Import - Must be at top */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
-
 @import "tailwindcss";
 
 /* ============================================
@@ -257,6 +252,114 @@ body {
 .markdown-body img {
   max-width: 100%;
   height: auto;
+}
+
+.markdown-table-shell {
+  position: relative;
+  margin: 2.5rem 0;
+  background: var(--color-surface-lowest);
+  border: 2px solid var(--color-outline-variant);
+  box-shadow:
+    8px 8px 0 rgba(11, 14, 24, 0.9),
+    inset 0 0 0 1px rgba(225, 225, 241, 0.03);
+  overflow: hidden;
+}
+
+.markdown-table-scroll {
+  overflow-x: auto;
+  background:
+    linear-gradient(90deg, rgba(17, 19, 30, 0.98), rgba(17, 19, 30, 0.98)),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 23px,
+      rgba(150, 142, 156, 0.04) 24px
+    );
+}
+
+.markdown-table {
+  width: 100%;
+  min-width: 42rem;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--color-on-surface);
+}
+
+.markdown-table-head {
+  background: var(--color-surface-container-highest);
+}
+
+.markdown-table-heading {
+  padding: 1rem 1.15rem;
+  border-bottom: 2px solid var(--color-outline-variant);
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-secondary-fixed-dim);
+  white-space: nowrap;
+}
+
+.markdown-table-body .markdown-table-row:nth-child(odd) {
+  background: rgba(29, 31, 43, 0.92);
+}
+
+.markdown-table-body .markdown-table-row:nth-child(even) {
+  background: rgba(11, 14, 24, 0.98);
+}
+
+.markdown-table-body .markdown-table-row:hover {
+  background: rgba(50, 52, 64, 0.98);
+}
+
+.markdown-table-cell {
+  padding: 1rem 1.15rem;
+  border-bottom: 2px solid rgba(74, 68, 81, 0.75);
+  vertical-align: top;
+}
+
+.markdown-table-heading + .markdown-table-heading,
+.markdown-table-cell + .markdown-table-cell {
+  border-left: 2px solid rgba(74, 68, 81, 0.6);
+}
+
+.markdown-table-body .markdown-table-cell:first-child {
+  color: var(--color-primary-fixed);
+}
+
+.markdown-table-body .markdown-table-cell strong {
+  color: var(--color-secondary-fixed-dim);
+}
+
+.markdown-table-body .markdown-table-cell em {
+  color: var(--color-outline);
+}
+
+.markdown-table-cell code,
+.markdown-table-heading code {
+  white-space: nowrap;
+  background: var(--color-surface-lowest);
+  outline: 1px solid rgba(150, 142, 156, 0.35);
+}
+
+@media (max-width: 768px) {
+  .markdown-table-shell {
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+  }
+
+  .markdown-table {
+    min-width: 32rem;
+    font-size: 0.84rem;
+  }
+
+  .markdown-table-heading,
+  .markdown-table-cell {
+    padding: 0.85rem 0.95rem;
+  }
 }
 
 /* ============================================

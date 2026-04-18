@@ -23,7 +23,7 @@ func NewAboutMeHandler(fileSvc *service.FileService) *AboutMeHandler {
 	return &AboutMeHandler{fileSvc: fileSvc}
 }
 
-// Get handles GET /api/aboutme.
+// Get handles GET /api/v1/special/aboutme.
 // It reads and returns the content of _ABOUTME.md.
 func (h *AboutMeHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -33,7 +33,12 @@ func (h *AboutMeHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, model.ErrNotFound):
-			utils.RespondNotFound(w, "About Me not found")
+			utils.RespondJSON(w, http.StatusOK, model.AboutMeResponse{
+				Path:    AboutMeFilename,
+				Title:   "About Me",
+				Content: "",
+				Exists:  false,
+			})
 		default:
 			utils.RespondInternalServerError(w, err.Error())
 		}

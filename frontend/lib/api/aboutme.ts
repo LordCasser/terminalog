@@ -5,7 +5,7 @@
  * RESTful v1 API path: GET /api/v1/special/aboutme
  */
 
-import { apiClient } from './client';
+import { ApiError, apiClient } from './client';
 
 export interface AboutMeResponse {
   content: string;
@@ -17,5 +17,16 @@ export interface AboutMeResponse {
  * GET /api/v1/special/aboutme
  */
 export async function getAboutMe(): Promise<AboutMeResponse> {
-  return apiClient.get<AboutMeResponse>('/api/v1/special/aboutme');
+  try {
+    return await apiClient.get<AboutMeResponse>('/api/v1/special/aboutme');
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return {
+        content: '',
+        exists: false,
+      };
+    }
+
+    throw error;
+  }
 }

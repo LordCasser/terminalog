@@ -19,7 +19,7 @@ func NewSearchHandler(svc *service.ArticleService) *SearchHandler {
 	return &SearchHandler{svc: svc}
 }
 
-// Search handles GET /api/search.
+// Search handles GET /api/v1/search.
 func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

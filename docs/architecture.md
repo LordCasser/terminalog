@@ -170,7 +170,7 @@ Terminalog 采用**前后端分离 + 单文件部署**的架构模式：
 | `/api/v1/articles/{path}` | GET | 获取文章内容 |
 | `/api/v1/articles/{path}/timeline` | GET | 获取文章 Git 时间线 |
 | `/api/v1/articles/{path}/version` | GET | 获取文章版本号及历史（v1.2 新增） |
-| `/api/v1/articles/search` | GET | 搜索文章标题（**排除 `_` 开头文件**） |
+| `/api/v1/search` | GET | 搜索文章标题（**排除 `_` 开头文件**） |
 | `/api/v1/tree` | GET | 获取目录树结构（**排除 `_` 开头文件**） |
 | `/api/v1/assets/{path}` | GET | 获取图片等静态资源 |
 | `/api/v1/special/aboutme` | GET | 获取 About Me 内容（v1.2 新增） |
@@ -275,8 +275,8 @@ terminalog/
 ```bash
 # 前端开发
 cd frontend
-pnpm install
-pnpm dev         # Next.js 开发模式 (localhost:3000)
+npm install
+npm run dev      # Next.js 开发模式 (localhost:3000)
 
 # 后端开发
 go run cmd/terminalog/main.go --port 8080 --config config.toml
@@ -290,7 +290,7 @@ make build       # 前端 + 后端完整构建
 
 # 或手动构建
 cd frontend
-pnpm build       # 静态导出到 out/
+npm run build    # 静态导出到 out/
 cp -r out/* ../pkg/embed/static/
 cd ..
 go build -o bin/terminalog cmd/terminalog/main.go
@@ -359,8 +359,8 @@ make release     # 跨平台构建
 - ✅ About Me 页面（从 `_ABOUTME.md` 读取）
 - ✅ 特殊文件处理（`_` 开头文件不参与列表展示）
 - ✅ 鼠标交互（顶部导航 + 底部单行 prompt）
-- ✅ 命令行交互（cd, view, search, help，支持 `cd ..`/`cd .`/`cd` 空）
-- ❌ 移除命令：ls、clear、exit
+- ✅ 命令行交互（cd, open, search, help，支持 `cd ..`/`cd .`/`cd` 空）
+- ❌ 移除命令：ls、view、clear、exit
 - ✅ 文章列表 5 列表格（Created/Updated/Editors/Filename/Latest Commit）
 - ✅ 表头点击排序（与命令行排序共用逻辑）
 - ✅ 三字体系统（Space Grotesk + JetBrains Mono + Inter）

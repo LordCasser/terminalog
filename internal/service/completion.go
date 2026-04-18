@@ -31,37 +31,7 @@ type CompletionResponse struct {
 	Items []string `json:"items"`
 }
 
-// SearchRequest represents a search request via WebSocket.
-type SearchRequest struct {
-	// Type is the message type ("search_request").
-	Type string `json:"type"`
-
-	// Keyword is the search keyword.
-	Keyword string `json:"keyword"`
-}
-
-// SearchResponse represents a search response via WebSocket.
-type SearchResponse struct {
-	// Type is the message type ("search_response").
-	Type string `json:"type"`
-
-	// Results is the list of search results.
-	Results []WebSocketSearchResult `json:"results"`
-}
-
-// WebSocketSearchResult represents a search result for WebSocket.
-type WebSocketSearchResult struct {
-	// Path is the result path (e.g., "tech/golang" for dirs, "tech/golang/go-guide.md" for files).
-	Path string `json:"path"`
-
-	// Title is the display title (article title for files, directory name for dirs).
-	Title string `json:"title"`
-
-	// Type is the result type: "file" for articles, "dir" for directories.
-	Type string `json:"type"`
-}
-
-// CompletionService provides path completion and search functionality.
+// CompletionService provides path completion functionality.
 type CompletionService struct {
 	articleSvc *ArticleService
 	fileSvc    *FileService
@@ -202,38 +172,4 @@ func (s *CompletionService) GetMatchingItems(ctx context.Context, dir, prefix st
 	}
 
 	return items, nil
-}
-
-// HandleSearch handles a search request via WebSocket.
-// It searches article titles and returns matching results.
-// Special files (starting with "_") are filtered out.
-// Maximum of 10 results are returned.
-func (s *CompletionService) HandleSearch(ctx context.Context, req SearchRequest) (*SearchResponse, error) {
-	// Search using the article service
-	results, err := s.articleSvc.Search(ctx, req.Keyword, "")
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert to WebSocket search result format
-	wsResults := make([]WebSocketSearchResult, 0, len(results))
-
-	// Limit to 10 results
-	maxResults := 10
-	if len(results) < maxResults {
-		maxResults = len(results)
-	}
-
-	for i := 0; i < maxResults; i++ {
-		wsResults = append(wsResults, WebSocketSearchResult{
-			Path:  results[i].Path,
-			Title: results[i].Title,
-			Type:  string(results[i].Type),
-		})
-	}
-
-	return &SearchResponse{
-		Type:    "search_response",
-		Results: wsResults,
-	}, nil
 }

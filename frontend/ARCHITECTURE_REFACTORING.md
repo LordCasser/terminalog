@@ -2,7 +2,7 @@
 
 > Document Version: v2.0
 > Created Date: 2026-04-17
-> Purpose: Record frontend architecture changes (public components + MDX rendering)
+> Purpose: Record frontend architecture changes (public components + Markdown rendering)
 
 ---
 
@@ -16,7 +16,7 @@
 
 **改动内容**：
 1. **Navbar组件** (`components/brutalist/Navbar.tsx`)
-   - 移除 `currentPath` 参数，改为固定显示 `~/lordcasser`
+   - 移除旧的 `currentPath` 入参，改为由共享配置和当前路由推导导航路径
    - 统一为公共组件，不再在各页面单独导入
    
 2. **Layout集成** (`app/layout.tsx`)
@@ -29,36 +29,28 @@
    - `article/page.tsx`：移除Navbar导入和使用
    - `aboutme/page.tsx`：移除独立navbar实现，使用统一样式
 
-### 1.2 MDX实现
+### 1.2 Markdown渲染实现
 
 **改动目标**：
-- 使用Next.js官方MDX指导实现Markdown渲染
+- 使用 `react-markdown` 渲染从后端 API 获取的 Markdown 内容
 - Markdown样式遵循Dracula Spectrum设计系统
 
 **改动内容**：
 1. **依赖安装** (`package.json`)
    ```
-   @next/mdx @mdx-js/loader @mdx-js/react @types/mdx
    react-markdown remark-gfm rehype-highlight remark-math rehype-katex highlight.js
    ```
 
 2. **配置文件** (`next.config.mjs`)
-   - 使用 `createMDX` 配置MDX支持
-   - 配置 `pageExtensions` 包含 `.md` 和 `.mdx`
    - 启用静态导出（`output: 'export'`）
 
-3. **全局MDX组件** (`mdx-components.tsx`)
-   - 定义Markdown元素样式（h1, h2, p, code, blockquote, list等）
-   - 应用Dracula Spectrum配色系统
-   - 字体约束：Space Grotesk（标题）、Inter（正文）、JetBrains Mono（代码）
-
-4. **MarkdownRenderer组件** (`components/article/MarkdownRenderer.tsx`)
+3. **MarkdownRenderer组件** (`components/article/MarkdownRenderer.tsx`)
    - 用于渲染从API获取的远程Markdown内容
    - 支持GitHub Flavored Markdown（remark-gfm）
    - 支持代码语法高亮（rehype-highlight + Dracula theme）
    - 支持数学公式渲染（remark-math + rehype-katex）
    - 支持图片路径转换（相对路径 → API路径）
-   - 应用与mdx-components.tsx相同的样式
+   - 应用统一的Dracula Spectrum排版样式
 
 ---
 
@@ -68,18 +60,17 @@
 
 **约束**：
 - 所有页面共享同一导航栏（统一视觉体验）
-- Navbar显示固定路径 `~/lordcasser`（简化架构，避免复杂路径解析）
-- CommandPrompt显示固定路径 `~/lordcasser`（与Navbar一致）
+- Navbar 和 CommandPrompt 显示同一份当前目录信息
+- Blog owner 通过 `/api/v1/settings` 下发，当前目录由路由解析得到
 
 **优点**：
-1. 架构统一，所有页面共享同一UI框架
+1. 架构统一，所有页面共享同一 UI 框架
 2. 减少代码重复，提高维护性
-3. 遵循YAGNI原则，避免过度复杂的路径解析逻辑
+3. 当前目录显示和路由状态一致，不再依赖页面手动同步
 
 ### 2.2 Markdown渲染原则
 
 **约束**：
-- 遵循Next.js官方MDX指导
 - 样式遵循Dracula Spectrum设计系统
 - 字体约束：
   - 标题：Space Grotesk（text-3xl for h2）
@@ -89,7 +80,7 @@
   - 列表：JetBrains Mono（text-base）
 
 **优点**：
-1. 官方指导，确保最佳实践
+1. 渲染链路简单，和后端 API 返回的 Markdown 内容直接对接
 2. 统一样式，确保视觉一致性
 3. 功能完整（GFM、语法高亮、数学公式、图片路径转换）
 
@@ -121,24 +112,18 @@ export default function RootLayout({ children }) {
 }
 ```
 
-### 3.2 MDX配置
+### 3.2 Next.js配置
 
 ```mjs
 // next.config.mjs
-import createMDX from '@next/mdx'
-
 const nextConfig = {
   output: 'export',
   trailingSlash: true,
   images: { unoptimized: true },
-  pageExtensions: ['js', 'jsx', 'md', 'mdx', 'ts', 'tsx'],
+  pageExtensions: ['js', 'jsx', 'ts', 'tsx'],
 }
 
-const withMDX = createMDX({
-  extension: /\.(md|mdx)$/,
-})
-
-export default withMDX(nextConfig)
+export default nextConfig
 ```
 
 ### 3.3 MarkdownRenderer使用示例
@@ -162,7 +147,6 @@ const basePath = decodedPath.replace(/\/[^\/]+\.md$/, '');
 
 ✅ **遵守以下约束**：
 - 遵循YAGNI原则：只实现必要功能，不编写不需要的接口
-- 遵循Next.js官方MDX指导
 - 遵循Dracula Spectrum设计系统
 - 遵循UI视觉统一性约束（导航栏统一、Markdown渲染样式统一）
 - 遵循模块化封装原则（MarkdownRenderer独立组件）
@@ -214,7 +198,7 @@ const basePath = decodedPath.replace(/\/[^\/]+\.md$/, '');
 ```
 refactor(frontend): integrate Navbar as public component in layout
 
-- Remove currentPath parameter from Navbar component
+- Remove deprecated currentPath prop from Navbar component
 - Integrate Navbar in layout.tsx as top public component
 - Remove independent Navbar implementations from pages
 - Update pages to use layout.tsx architecture
@@ -225,5 +209,5 @@ refactor(frontend): integrate Navbar as public component in layout
 
 **文档结束**
 
-> 本实现文档记录前端架构改动（公共组件整合 + MDX实现）
+> 本实现文档记录前端架构改动（公共组件整合 + Markdown渲染实现）
 > 关联文档：frontend-architecture.md, requirements.md, testing.md

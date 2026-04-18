@@ -74,8 +74,7 @@ INFO  Terminalog starting version=dev buildDate=unknown
 INFO  Server started addr=0.0.0.0:18085
 INFO  Enabling debug mode from command line
 INFO  Git service initialized repoPath=/tmp/articles
-INFO  CORS enabled for frontend dev server
-INFO  Access the API at http://0.0.0.0:18085/api
+INFO  Access the blog at http://0.0.0.0:18085
 ```
 
 ### 3.2 启动前端
@@ -85,10 +84,10 @@ INFO  Access the API at http://0.0.0.0:18085/api
 cd frontend
 
 # 安装依赖（首次）
-pnpm install
+npm install
 
 # 启动 Next.js dev server
-pnpm dev
+npm run dev
 ```
 
 **前端日志示例**：
@@ -191,7 +190,7 @@ Access-Control-Allow-Headers: Accept, Content-Type, Content-Length, Accept-Encod
 
 1. 确认后端已启用 `--debug` 参数
 2. 确认前端 `.env.local` 配置了正确的 API URL
-3. 检查后端日志是否显示 "CORS enabled"
+3. 检查后端是否使用 `--debug` 启动，并确认浏览器请求命中了正确的后端地址
 
 ### 5.2 前端页面空白
 
@@ -200,7 +199,7 @@ Access-Control-Allow-Headers: Accept, Content-Type, Content-Length, Accept-Encod
 **解决**：
 
 1. 检查浏览器 Console 是否有错误
-2. 确认后端 API 正常运行（访问 `http://localhost:18085/api/articles`）
+2. 确认后端 API 正常运行（访问 `http://localhost:18085/api/v1/articles`）
 3. 检查前端 API Client 配置
 
 ### 5.3 如何切换回 Production Mode
@@ -225,7 +224,7 @@ debug = false
 ### 6.1 推荐调试流程
 
 1. **启动后端**：`go run cmd/terminalog/main.go --debug --port 18085`
-2. **启动前端**：`cd frontend && pnpm dev`
+2. **启动前端**：`cd frontend && npm run dev`
 3. **浏览器调试**：访问 `http://localhost:3000`
 4. **修改代码**：前端热更新，后端需重启
 
@@ -247,10 +246,8 @@ debug = false
 # 更详细的日志
 ./terminalog --debug --log debug
 
-# 或修改 config.toml
-[server]
-debug = true
-log_level = "debug"
+# 或启动时直接传参
+./terminalog --debug --log debug --config config.toml
 ```
 
 ---
@@ -264,7 +261,7 @@ log_level = "debug"
 ```bash
 # 编译前端
 cd frontend
-pnpm build
+npm run build
 
 # 复制到 embed 目录
 cp -r out/* ../pkg/embed/static/

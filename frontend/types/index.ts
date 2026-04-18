@@ -18,13 +18,19 @@ export interface Article {
 export interface ArticleListResponse {
   articles: Article[];
   total: number;
-  currentPath: string;
+  currentDir: string;
 }
 
 // 文章详情响应
-export interface ArticleResponse {
-  article: Article;
+export interface ArticleDetailResponse {
+  path: string;
+  title: string;
   content: string;
+  createdAt: string;
+  createdBy: string;
+  editedAt: string;
+  editedBy: string;
+  contributors: string[];
 }
 
 // Commit 信息
@@ -33,8 +39,6 @@ export interface CommitInfo {
   author: string;
   timestamp: string;
   message: string;
-  linesAdded: number;
-  linesDeleted: number;
 }
 
 // 目录树节点
@@ -63,7 +67,7 @@ export interface OutputLine {
 
 // 终端状态
 export interface TerminalState {
-  currentPath: string;
+  currentDir: string;
   history: string[];
   output: OutputLine[];
   mode: 'list' | 'view';
@@ -80,11 +84,8 @@ export interface SortState {
 
 // 版本信息
 export interface VersionInfo {
-  version: string;
-  changeType: 'major' | 'minor' | 'patch';
-  baseLines: number;
-  currentLines: number;
-  changePercent: number;
+  currentVersion: string;
+  history: VersionHistoryEntry[];
 }
 
 // 版本历史条目
@@ -93,9 +94,7 @@ export interface VersionHistoryEntry {
   hash: string;
   author: string;
   timestamp: string;
-  message: string;
-  linesAdded: number;
-  linesDeleted: number;
+  linesChanged: number;
   changeType: 'major' | 'minor' | 'patch';
 }
 

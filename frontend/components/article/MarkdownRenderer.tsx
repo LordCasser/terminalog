@@ -13,6 +13,8 @@
  * <MarkdownRenderer content={markdownContent} basePath="tech/blog" />
  */
 
+/* eslint-disable @next/next/no-img-element */
+
 "use client";
 
 import ReactMarkdown from 'react-markdown';
@@ -21,6 +23,8 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
+import { isValidElement } from 'react';
+import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react';
 
 interface MarkdownRendererProps {
   content: string;
@@ -108,11 +112,13 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
           ),
           
           // Code blocks - wrapped in section with bg-surface-container-lowest, language tag, p-8
-          pre: ({ children, ...props }) => {
+          pre: ({ children }) => {
             // Extract language from code element's className
-            const childCode = Array.isArray(children) ? children[0] : children;
-            const codeProps = (childCode as any)?.props || {};
-            const className = codeProps.className || '';
+            const childCode = (Array.isArray(children) ? children[0] : children) as ReactElement<ComponentPropsWithoutRef<'code'>> | ReactNode;
+            const codeProps = isValidElement<ComponentPropsWithoutRef<'code'>>(childCode)
+              ? childCode.props
+              : undefined;
+            const className = codeProps?.className || '';
             const langMatch = /language-(\w+)/.exec(className);
             const language = langMatch ? langMatch[1] : '';
             
@@ -176,6 +182,46 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
               <span className="text-tertiary">➜</span>
               <span>{children}</span>
             </li>
+          ),
+
+          table: ({ children }) => (
+            <div className="markdown-table-shell my-10">
+              <div className="markdown-table-scroll">
+                <table className="markdown-table">
+                  {children}
+                </table>
+              </div>
+            </div>
+          ),
+
+          thead: ({ children }) => (
+            <thead className="markdown-table-head">
+              {children}
+            </thead>
+          ),
+
+          tbody: ({ children }) => (
+            <tbody className="markdown-table-body">
+              {children}
+            </tbody>
+          ),
+
+          tr: ({ children }) => (
+            <tr className="markdown-table-row">
+              {children}
+            </tr>
+          ),
+
+          th: ({ children }) => (
+            <th className="markdown-table-heading">
+              {children}
+            </th>
+          ),
+
+          td: ({ children }) => (
+            <td className="markdown-table-cell">
+              {children}
+            </td>
           ),
           
           // Links

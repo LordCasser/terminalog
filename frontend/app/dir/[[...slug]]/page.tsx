@@ -2,7 +2,7 @@
  * Directory Page - Article List for Subdirectories
  * 
  * RESTful routing: /dir/{path} (path parameter, not query parameter)
- * Uses Next.js catch-all route [...slug] to capture nested paths.
+ * Uses Next.js optional catch-all route [[...slug]] to capture nested paths.
  * Examples:
  *   /dir/tech → shows articles in tech/ directory
  *   /dir/tech/golang → shows articles in tech/golang/ directory
@@ -13,9 +13,10 @@
 
 import { ArticleListPage } from "@/components/brutalist/ArticleListPage";
 
-// Generate static params for static export
+// Generate static params for static export.
+// The empty slug satisfies Next.js export requirements for the route itself.
 export async function generateStaticParams() {
-  return [{ slug: ["_fallback"] }];
+  return [{ slug: [] }, { slug: ["_fallback"] }];
 }
 
 export default function DirPage() {

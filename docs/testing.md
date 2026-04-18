@@ -223,11 +223,11 @@
 
 ### 3.1 文章列表API测试
 
-**测试端点**：`GET /api/articles`
+**测试端点**：`GET /api/v1/articles`
 
 **测试步骤**：
 1. 启动后端服务（debug模式）
-2. 使用curl请求 `/api/articles`
+2. 使用curl请求 `/api/v1/articles`
 3. 验证响应包含文章列表
 4. 验证响应包含CORS headers（debug模式）
 
@@ -239,10 +239,10 @@
 
 ### 3.2 文章内容API测试
 
-**测试端点**：`GET /api/articles/{path}`
+**测试端点**：`GET /api/v1/articles/{path}`
 
 **测试步骤**：
-1. 使用curl请求 `/api/articles/welcome.md`
+1. 使用curl请求 `/api/v1/articles/welcome.md`
 2. 验证响应包含文章内容
 
 **验收标准**：
@@ -252,11 +252,11 @@
 
 ### 3.3 About Me API测试
 
-**测试端点**：`GET /api/aboutme`
+**测试端点**：`GET /api/v1/special/aboutme`
 
 **测试步骤**：
 1. 创建 `_ABOUTME.md` 文件并提交
-2. 使用curl请求 `/api/aboutme`
+2. 使用curl请求 `/api/v1/special/aboutme`
 3. 验证响应包含About Me内容
 
 **验收标准**：

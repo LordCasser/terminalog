@@ -59,7 +59,7 @@ func NewWebSocketHandler(completionSvc *service.CompletionService, logger *slog.
 }
 
 // HandleTerminal handles WebSocket connections for the terminal endpoint.
-// It processes completion requests and search requests from the frontend.
+// It processes path completion requests from the frontend.
 func (h *WebSocketHandler) HandleTerminal(w http.ResponseWriter, r *http.Request) {
 	// Upgrade HTTP connection to WebSocket
 	conn, err := h.upgrader.Upgrade(w, r, nil)
@@ -126,8 +126,6 @@ func (h *WebSocketHandler) HandleTerminal(w http.ResponseWriter, r *http.Request
 		switch baseMsg.Type {
 		case "completion_request":
 			h.handleCompletionRequest(conn, message)
-		case "search_request":
-			h.handleSearchRequest(conn, message)
 		default:
 			h.logger.Warn("Unknown message type", "connID", connID, "type", baseMsg.Type)
 			h.sendError(conn, "Unknown message type: "+baseMsg.Type)
@@ -155,33 +153,6 @@ func (h *WebSocketHandler) handleCompletionRequest(conn *websocket.Conn, message
 	if err != nil {
 		h.logger.Error("Failed to handle completion", "error", err)
 		h.sendError(conn, "Completion error: "+err.Error())
-		return
-	}
-
-	// Send response
-	h.sendMessage(conn, response)
-}
-
-// handleSearchRequest handles a search request.
-func (h *WebSocketHandler) handleSearchRequest(conn *websocket.Conn, message []byte) {
-	// Parse request
-	var req service.SearchRequest
-	if err := json.Unmarshal(message, &req); err != nil {
-		h.logger.Error("Failed to parse search request", "error", err)
-		h.sendError(conn, "Invalid search request format")
-		return
-	}
-
-	h.logger.Debug("Received search request", "keyword", req.Keyword)
-
-	// Process request
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	response, err := h.completionSvc.HandleSearch(ctx, req)
-	if err != nil {
-		h.logger.Error("Failed to handle search", "error", err)
-		h.sendError(conn, "Search error: "+err.Error())
 		return
 	}
 

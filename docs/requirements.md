@@ -127,10 +127,10 @@ Terminalog 是一个模拟终端风格的现代化 Blog 系统，采用单文件
 
 | 文件名 | 用途 | 访问方式 |
 |--------|------|---------|
-| `_ABOUTME.md` | About Me 页面内容 | 通过顶部导航栏 "ABOUTME" 链接访问，或 API `/api/aboutme` |
+| `_ABOUTME.md` | About Me 页面内容 | 通过顶部导航栏 "ABOUTME" 链接访问，或 API `/api/v1/special/aboutme` |
 | 其他 `_*.md` | 预留特殊文件 | 暂不处理 |
 
-**文章列表规则**：**排除**所有以 `_` 开头的 Markdown 文件。例如 `ls` 命令或 `/api/articles` 不返回 `_ABOUTME.md`。
+**文章列表规则**：**排除**所有以 `_` 开头的 Markdown 文件。例如文章列表接口 `/api/v1/articles` 不返回 `_ABOUTME.md`。
 
 #### 3.1.5 元数据规则
 
@@ -274,22 +274,20 @@ Glass 效果:
 
 **架构约束（v1.4新增 - 架构重大变更）**：
 
-> **变更原因**：底部终端输入框是纯前端UI组件，命令执行不应依赖后端HTTP API，仅路径补全和搜索需要后端支持（WebSocket实时通信）。
+> **变更原因**：底部终端输入框是纯前端UI组件，命令执行不应依赖后端 HTTP API。当前实现中，搜索走 REST API，WebSocket 仅用于路径补全。
 
 1. **前端命令处理**：
    - 底部终端输入框大部分命令不与后端通信（纯前端路由跳转）
-   - `open <filename>` → 前端路由跳转到文章页面 `/article?path=filename`
-   - `cd <path>` → 前端路由跳转到目录页面 `/?dir=path`
+   - `open <filename>` → 前端路由跳转到文章页面 `/article/{path}`
+   - `cd <path>` → 前端路由跳转到目录页面 `/dir/{path}` 或根目录 `/`
    - `help` / `?` → 触发前端模态框组件显示
    - 不需要HTTP API `/api/command` 端点
 
-2. **WebSocket搜索命令**：
-   - `search <keyword>` → WebSocket实时搜索（避免HTTP请求延迟）
-   - 后端检索匹配文章标题，返回最匹配的文章路径列表
+2. **搜索命令**：
+   - `search <keyword>` → 通过 REST API `GET /api/v1/search?q=...` 搜索
+   - 后端检索匹配文章标题，返回匹配的文章路径列表
    - **过滤约束**：不搜索以 `_` 开头的隐藏文件（如 `_ABOUTME.md`）
-   - 前端接收结果后直接跳转到第一个匹配结果（或显示列表）
-   - WebSocket消息格式：`{"type":"search_request","keyword":"terminal"}`
-   - 响应格式：`{"type":"search_response","results":[{"path":"README.md","title":"Terminalog"}]}`
+   - 前端对单个结果直接跳转，对多个结果弹出模态框展示
 
 3. **历史记录前端存储**：
    - 命令历史记录存储在localStorage（key: `terminalog_command_history`）
@@ -302,11 +300,10 @@ Glass 效果:
    - WebSocket端点：`ws://localhost:18085/ws/terminal`
    - 路径补全消息：`{"type":"completion_request","dir":"","prefix":"go"}`
    - 响应格式：`{"type":"completion_response","items":["tech/golang/","tech/golang/go-guide.md"]}`
-   - **全局搜索**：`search`命令使用空字符串作为dir，匹配所有级别的路径名和目录名
    - **当前目录搜索**：`open`/`cd`命令使用currentDir，只匹配当前目录下的直接子项
 
 **导航栏选中状态（v1.6新增，v1.6.1优化）**：
-1. **POSTS选中样式**：在首页（`/` 或 `/?dir=`）时，POSTS文字颜色变为强调色（primary-container），并显示下划线
+1. **POSTS选中样式**：在首页（`/`）或目录页（`/dir/{path}`）时，POSTS文字颜色变为强调色（primary-container），并显示下划线
 2. **ABOUTME选中样式**：在About Me页面（`/aboutme`）时，ABOUTME文字颜色变为强调色（primary-container），并显示下划线；同时POSTS文字颜色变为非强调色（outline），无下划线
 3. **下划线样式**：使用CSS伪元素（after）实现独立下划线，下划线位于文字下方额外位置，**不影响span字体对齐**——POSTS和ABOUTME的span文字始终保持同一基线对齐
 4. **未选中链接**：文字颜色为 outline（暗灰色），hover 时背景色变化，无下划线
@@ -565,7 +562,7 @@ password = "custom-password-123"
 | 端点 | 方法 | 描述 |
 |------|------|------|
 | `/api/v1/articles` | GET | 获取文章列表，支持 `?sort=created|edited&order=asc|desc`（**排除** `_` 开头的文件） |
-| `/api/v1/articles/search` | GET | 搜索文章标题（query: `?q=keyword`，**排除** `_` 开头的文件） |
+| `/api/v1/search` | GET | 搜索文章标题（query: `?q=keyword`，**排除** `_` 开头的文件） |
 | `/api/v1/articles/{path}` | GET | 获取文章内容 |
 | `/api/v1/articles/{path}/timeline` | GET | 获取文章 Git 时间线 |
 | `/api/v1/articles/{path}/version` | GET | 获取文章版本号及历史版本列表 |
@@ -632,7 +629,7 @@ password = "custom-password-123"
 | v1.2 | 2026-04-16 | **设计 v1.2 升级**：Brutalist 编辑器（Dracula Spectrum 配色+三字体+0px圆角）、版本号自动计算、About Me页面、特殊文件处理、鼠标为主命令为辅、移除clear命令、不支持移动端 |
 | v1.3 | 2026-04-17 | **UI统一性 v1.3**：导航栏路径同步（currentDir状态共享）、blog.owner配置、搜索icon自动填充命令、placeholder透明度降低、HelpModal宽度调整+回车关闭 |
 | v1.4 | 2026-04-17 | **架构重构 v1.4**：WebSocket终端端点（路径补全+搜索）、前端命令处理（纯前端路由跳转）、历史记录localStorage存储 |
-| v1.5 | 2026-04-17 | **UI改进 v1.5**：导航栏选中状态（下划线不影响字体对齐，使用after伪元素）、MDX样式对齐原型HTML、EDITORS字体增大(10px→12px) |
+| v1.5 | 2026-04-17 | **UI改进 v1.5**：导航栏选中状态（下划线不影响字体对齐，使用after伪元素）、Markdown渲染样式对齐原型HTML、EDITORS字体增大(10px→12px) |
 | v1.6 | 2026-04-18 | **API统一前缀 v1.6**：Git Smart HTTP移至`/api/v1/git/`，健康检查移至`/api/v1/healthz`等，所有API统一`/api/v1/`前缀 |
 
 ---

@@ -7,7 +7,7 @@ The About Me feature allows users to have a dedicated "About Me" page that is se
 ## Location
 
 - **Handler**: `internal/handler/aboutme.go`
-- **Route**: `GET /api/aboutme`
+- **Route**: `GET /api/v1/special/aboutme`
 - **File**: `_ABOUTME.md` in content directory
 
 ## Special File Handling
@@ -39,6 +39,6 @@ No additional configuration required. The `_ABOUTME.md` file should be placed in
 ## Frontend Integration
 
 The frontend should:
-1. Call `/api/aboutme` when navigating to the About Me page
+1. Call `/api/v1/special/aboutme` when navigating to the About Me page
 2. Display the Markdown content using the same renderer as articles
 3. The title is always "About Me" (extracted from filename)

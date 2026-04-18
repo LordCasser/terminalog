@@ -1,13 +1,13 @@
 # RESTful API Migration Implementation
 
 > Date: 2026-04-17
-> Author: Architecture alignment based on api-spec.md v2.0
+> Author: Architecture alignment based on current runtime routes
 
 ---
 
 ## Summary
 
-This document describes the RESTful API migration from the legacy `/api/*` endpoints to the versioned `/api/v1/*` endpoints as specified in `docs/api-spec.md`.
+This document records the migration from legacy `/api/*` endpoints and query-style frontend routes to the current versioned REST API and path-based page routes.
 
 ## Changes Overview
 
@@ -17,7 +17,7 @@ This document describes the RESTful API migration from the legacy `/api/*` endpo
 |-------------|--------------|-------|
 | `/api/articles` | `/api/v1/articles` | Added version prefix |
 | `/api/articles/*` | `/api/v1/articles/*` | Path parameter routing |
-| `/api/search` | `/api/v1/articles/search` | Merged into Articles resource |
+| `/api/search` | `/api/v1/search` | Independent search resource |
 | `/api/tree` | `/api/v1/tree` | Added version prefix |
 | `/api/assets/*` | `/api/v1/assets/*` | Added version prefix |
 | `/api/aboutme` | `/api/v1/special/aboutme` | Moved to Special resource |
@@ -30,7 +30,7 @@ This document describes the RESTful API migration from the legacy `/api/*` endpo
 |------|---------|
 | `articles.ts` | All paths updated to `/api/v1/articles/*` |
 | `aboutme.ts` | Path updated to `/api/v1/special/aboutme` |
-| `search.ts` | Path updated to `/api/v1/articles/search` |
+| `search.ts` | Path updated to `/api/v1/search` |
 | `tree.ts` | Path updated to `/api/v1/tree` |
 | `settings.ts` | **New**: `/api/v1/settings` endpoint |
 
@@ -75,7 +75,7 @@ const articlePath = slug.join("/");
 ## Testing
 
 1. Backend build: `go build ./...` - ✅ Pass
-2. TypeScript check: `npx tsc --noEmit` - ✅ Pass
+2. Frontend build: `npm run build -- --webpack` - ✅ Pass
 
 ## References
 

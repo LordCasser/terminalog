@@ -138,7 +138,7 @@ export function ArticleContent() {
           </div>
           
           {/* Title */}
-          <h1 className="font-headline font-bold text-6xl md:text-8xl leading-none text-on-surface tracking-tighter mb-8">
+          <h1 className="font-headline font-bold text-5xl leading-none text-on-surface tracking-tighter mb-8">
             {articleHeading}
           </h1>
         </section>

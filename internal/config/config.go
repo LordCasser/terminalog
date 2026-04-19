@@ -80,6 +80,30 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// ResolveContentDir resolves a content directory path to an absolute path.
+// Relative paths from the config file are resolved against the config file directory.
+func ResolveContentDir(contentDir, configPath string) (string, error) {
+	if contentDir == "" {
+		return "", fmt.Errorf("blog.content_dir is required")
+	}
+
+	if filepath.IsAbs(contentDir) {
+		return filepath.Clean(contentDir), nil
+	}
+
+	if configPath == "" {
+		return filepath.Abs(contentDir)
+	}
+
+	configAbsPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid config path: %w", err)
+	}
+
+	baseDir := filepath.Dir(configAbsPath)
+	return filepath.Abs(filepath.Join(baseDir, contentDir))
+}
+
 // LoadOrCreate reads the configuration file, or creates a default one if it doesn't exist.
 func LoadOrCreate(path string) (*Config, bool, error) {
 	cfg, err := Load(path)

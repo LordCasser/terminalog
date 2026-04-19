@@ -72,6 +72,33 @@ function transformImagePath(src: string, basePath?: string): string {
   return `/api/v1/assets/${fullPath}`;
 }
 
+function extractLanguageLabel(className: string): string {
+  const langMatch = /language-([A-Za-z0-9_+-]+)/.exec(className);
+  if (!langMatch) {
+    return '';
+  }
+
+  const language = langMatch[1].toLowerCase();
+  const aliases: Record<string, string> = {
+    js: 'JavaScript',
+    ts: 'TypeScript',
+    tsx: 'TSX',
+    jsx: 'JSX',
+    sh: 'Shell',
+    bash: 'Bash',
+    zsh: 'Zsh',
+    yml: 'YAML',
+    md: 'Markdown',
+    plaintext: 'Plain Text',
+    text: 'Plain Text',
+    golang: 'Go',
+    csharp: 'C#',
+    cpp: 'C++',
+  };
+
+  return aliases[language] ?? language.toUpperCase();
+}
+
 export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
   return (
     <div className="markdown-body">
@@ -119,17 +146,16 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
               ? childCode.props
               : undefined;
             const className = codeProps?.className || '';
-            const langMatch = /language-(\w+)/.exec(className);
-            const language = langMatch ? langMatch[1] : '';
+            const language = extractLanguageLabel(className);
             
             return (
-              <section className="bg-surface-container-lowest p-8 relative">
+              <section className="markdown-code-block">
                 {language && (
-                  <div className="absolute top-0 right-0 p-4 font-mono text-xs text-outline-variant">
+                  <div className="markdown-code-block__label">
                     {language}
                   </div>
                 )}
-                <pre className="font-mono text-sm overflow-x-auto text-on-surface leading-loose">
+                <pre className="markdown-code-block__pre">
                   <code className={className}>
                     {children}
                   </code>
@@ -143,7 +169,7 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
             // Inline code (no className)
             if (!className) {
               return (
-                <code className="font-mono text-sm bg-surface-container-low text-tertiary px-2 py-0.5">
+                <code className="markdown-inline-code">
                   {children}
                 </code>
               );
@@ -159,28 +185,32 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
           
           // Blockquotes - JetBrains Mono font, border-l-4 border-primary
           blockquote: ({ children }) => (
-            <blockquote className="font-mono text-lg text-primary border-l-4 border-primary bg-surface-container-low pl-6 py-2 italic mb-6">
-              {children}
+            <blockquote className="markdown-blockquote">
+              <span className="markdown-blockquote__mark" aria-hidden="true">
+                {'//'}
+              </span>
+              <div className="markdown-blockquote__content">
+                {children}
+              </div>
             </blockquote>
           ),
           
-          // Lists - JetBrains Mono font, space-y-4, with tertiary arrow symbols
+          // Lists - unordered and ordered lists use different visual treatments
           ul: ({ children }) => (
-            <ul className="space-y-4 font-mono mb-6">
+            <ul className="markdown-list markdown-list--unordered">
               {children}
             </ul>
           ),
           
           ol: ({ children }) => (
-            <ol className="space-y-4 font-mono mb-6 list-decimal list-inside">
+            <ol className="markdown-list markdown-list--ordered">
               {children}
             </ol>
           ),
           
           li: ({ children }) => (
-            <li className="flex items-start gap-4">
-              <span className="text-tertiary">➜</span>
-              <span>{children}</span>
+            <li className="markdown-list__item">
+              {children}
             </li>
           ),
 

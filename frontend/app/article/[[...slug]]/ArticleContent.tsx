@@ -79,13 +79,6 @@ export function ArticleContent() {
   // Extract base path for image transformation (client-side only)
   const basePath = (article?.path || "").replace(/\/[^\/]+\.md$/, '');
   
-  // Extract quote from content (first blockquote)
-  const extractQuote = (markdown: string): string => {
-    const match = markdown.match(/^> (.+)$/m);
-    return match ? match[1] : "";
-  };
-  const quote = extractQuote(content);
-  
   // Format date
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -136,13 +129,6 @@ export function ArticleContent() {
           <h1 className="font-headline font-bold text-4xl leading-none text-on-surface tracking-tighter mb-8">
             {article.title.toUpperCase() || "UNTITLED"}
           </h1>
-          
-          {/* Quote Blockquote - only show if quote exists */}
-          {quote && (
-            <p className="font-mono text-lg text-primary max-w-2xl border-l-4 border-primary pl-6 py-2 italic bg-surface-container-low">
-              &quot;{quote}&quot;
-            </p>
-          )}
         </section>
         
         {/* Content - Use MarkdownRenderer */}

@@ -69,15 +69,32 @@ func main() {
 		logger.Info("Enabling debug mode from command line")
 	}
 
+	contentDir := cfg.Blog.ContentDir
+	if flags.contentDir == "" {
+		contentDir, err = config.ResolveContentDir(cfg.Blog.ContentDir, flags.configPath)
+		if err != nil {
+			logger.Error("Failed to resolve content directory from config", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		contentDir, err = config.ResolveContentDir(flags.contentDir, "")
+		if err != nil {
+			logger.Error("Failed to resolve content directory from command line", "error", err)
+			os.Exit(1)
+		}
+	}
+
+	logger.Info("Using content directory", "contentDir", contentDir)
+
 	// Ensure Git repository exists (auto-initialize if needed)
 	gitInitSvc := service.NewGitInitService()
-	if err := gitInitSvc.EnsureGitRepo(cfg.Blog.ContentDir, true); err != nil {
+	if err := gitInitSvc.EnsureGitRepo(contentDir, true); err != nil {
 		logger.Error("Failed to initialize Git repository", "error", err)
 		os.Exit(1)
 	}
 
 	// Get repository status
-	repoStatus, err := gitInitSvc.GetRepoStatus(cfg.Blog.ContentDir)
+	repoStatus, err := gitInitSvc.GetRepoStatus(contentDir)
 	if err == nil {
 		logger.Info("Git repository status",
 			"branch", repoStatus.CurrentBranch,
@@ -86,19 +103,19 @@ func main() {
 	}
 
 	// Initialize services
-	fileSvc, err := service.NewFileService(cfg.Blog.ContentDir)
+	fileSvc, err := service.NewFileService(contentDir)
 	if err != nil {
 		logger.Error("Failed to initialize file service", "error", err)
 		os.Exit(1)
 	}
 
-	gitSvc, err := service.NewGitService(cfg.Blog.ContentDir)
+	gitSvc, err := service.NewGitService(contentDir)
 	if err != nil {
 		logger.Error("Failed to initialize git service", "error", err)
 		os.Exit(1)
 	}
 
-	logger.Info("Git service initialized", "repoPath", cfg.Blog.ContentDir)
+	logger.Info("Git service initialized", "repoPath", contentDir)
 
 	articleSvc := service.NewArticleService(fileSvc, gitSvc)
 	authSvc := service.NewAuthService(cfg)

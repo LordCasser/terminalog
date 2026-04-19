@@ -71,7 +71,7 @@ export function CommandPrompt() {
   const [isFocused, setIsFocused] = useState(false);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [showNoMatchHint, setShowNoMatchHint] = useState(false);
-  const [noMatchHintType, setNoMatchHintType] = useState<"completion" | "search">("completion");
+  const [noMatchHintType, setNoMatchHintType] = useState<"completion" | "search" | "command">("completion");
   // Initialize history from localStorage (lazy initialization)
   const [history, setHistory] = useState<string[]>(() => {
     try {
@@ -111,7 +111,7 @@ export function CommandPrompt() {
   // Get owner and currentDir from TerminalConfig context
   const { owner, currentDir } = useTerminalConfig();
 
-  const showTransientNoMatchHint = useCallback((type: "completion" | "search") => {
+  const showTransientNoMatchHint = useCallback((type: "completion" | "search" | "command") => {
     setNoMatchHintType(type);
     setShowNoMatchHint(true);
     setTimeout(() => setShowNoMatchHint(false), 1000);
@@ -508,6 +508,7 @@ export function CommandPrompt() {
     // Unknown command
     if (trimmedCmd !== "") {
       console.log(`Unknown command: ${cmd}`);
+      showTransientNoMatchHint("command");
     }
   }, [router, currentDir, showTransientNoMatchHint]);
 
@@ -573,7 +574,11 @@ export function CommandPrompt() {
               className="absolute bottom-full mb-2 px-2 py-1 bg-surface-container-high text-error font-mono text-xs rounded"
               style={{ left: `${cursorPosition}px` }}
             >
-              {noMatchHintType === "search" ? "没有搜索结果" : "没有匹配内容"}
+              {noMatchHintType === "search"
+                ? "没有搜索结果"
+                : noMatchHintType === "command"
+                  ? "命令不存在"
+                  : "没有匹配内容"}
             </span>
           )}
         </div>

@@ -13,6 +13,7 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   headers?: Record<string, string>;
   body?: unknown;
+  cache?: RequestCache;
 }
 
 export class ApiError extends Error {
@@ -43,6 +44,7 @@ class ApiClient {
     
     const response = await fetch(url, {
       method: options.method || 'GET',
+      cache: options.cache ?? 'no-store',
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
@@ -64,7 +66,7 @@ class ApiClient {
 
   async getText(path: string): Promise<string> {
     const url = `${this.baseUrl}${path}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: 'no-store' });
     
     if (!response.ok) {
       throw new ApiError(`HTTP ${response.status}`, response.status);

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -290,6 +292,55 @@ func TestArticleService_GetTimeline(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestArticleService_ListDirectory_AfterDeleteAndInvalidate(t *testing.T) {
+	repo, err := testutil.NewTestRepo()
+	require.NoError(t, err)
+	defer repo.Cleanup()
+
+	now := time.Now()
+	require.NoError(t, repo.CreateMarkdownFileWithTime("hardware_security/FragAttack.md", "# FragAttack", "Add FragAttack", "author", now.Add(-2*time.Hour)))
+
+	fileSvc, err := service.NewFileService(repo.Path)
+	require.NoError(t, err)
+
+	gitSvc, err := service.NewGitService(repo.Path)
+	require.NoError(t, err)
+
+	articleSvc := service.NewArticleService(fileSvc, gitSvc)
+	ctx := context.Background()
+
+	articles, err := articleSvc.ListDirectory(ctx, "hardware_security", model.SortName, model.OrderAsc)
+	require.NoError(t, err)
+	require.Len(t, articles, 1)
+	assert.Equal(t, "hardware_security/FragAttack.md", articles[0].Path)
+
+	wt, err := repo.Repo.Worktree()
+	require.NoError(t, err)
+
+	_, err = wt.Remove("hardware_security/FragAttack.md")
+	require.NoError(t, err)
+
+	_, err = wt.Commit("Delete FragAttack", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "author",
+			Email: "author@example.com",
+			When:  now.Add(-1 * time.Hour),
+		},
+	})
+	require.NoError(t, err)
+
+	// Directory listing is cached until explicitly invalidated after a repo update.
+	cachedArticles, err := articleSvc.ListDirectory(ctx, "hardware_security", model.SortName, model.OrderAsc)
+	require.NoError(t, err)
+	require.Len(t, cachedArticles, 1)
+
+	articleSvc.InvalidateCache()
+
+	updatedArticles, err := articleSvc.ListDirectory(ctx, "hardware_security", model.SortName, model.OrderAsc)
+	require.NoError(t, err)
+	assert.Empty(t, updatedArticles)
 }
 
 func TestArticleService_Search(t *testing.T) {

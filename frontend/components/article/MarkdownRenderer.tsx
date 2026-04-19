@@ -108,7 +108,7 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
         components={{
           // Headings - Space Grotesk font
           h1: ({ children }) => (
-            <h1 className="font-headline text-6xl font-bold text-on-surface tracking-tighter mb-8">
+            <h1 className="font-headline text-4xl md:text-5xl font-bold leading-none text-on-surface tracking-tighter mb-8 mt-12 first:mt-0">
               {children}
             </h1>
           ),
@@ -179,15 +179,10 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
             );
           },
           
-          // Blockquotes - JetBrains Mono font, border-l-4 border-primary
+          // Blockquotes - cleaner editorial pull quote treatment
           blockquote: ({ children }) => (
             <blockquote className="markdown-blockquote">
-              <span className="markdown-blockquote__mark" aria-hidden="true">
-                {'//'}
-              </span>
-              <div className="markdown-blockquote__content">
-                {children}
-              </div>
+              <div className="markdown-blockquote__content">{children}</div>
             </blockquote>
           ),
           

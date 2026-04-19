@@ -27,6 +27,15 @@ function extractArticlePathFromURL(): string {
   return path || "";
 }
 
+function extractLeadingMarkdownTitle(markdown: string): string | null {
+  const match = markdown.match(/^\s*#\s+(.+?)\s*(?:\r?\n|$)/);
+  return match?.[1]?.trim() || null;
+}
+
+function stripLeadingMarkdownTitle(markdown: string): string {
+  return markdown.replace(/^\s*#\s+.+?\s*(?:\r?\n){1,2}/, "");
+}
+
 export function ArticleContent() {
   const [article, setArticle] = useState<Article | null>(null);
   const [content, setContent] = useState<string>("");
@@ -78,6 +87,9 @@ export function ArticleContent() {
   
   // Extract base path for image transformation (client-side only)
   const basePath = (article?.path || "").replace(/\/[^\/]+\.md$/, '');
+  const leadingMarkdownTitle = extractLeadingMarkdownTitle(content);
+  const articleHeading = leadingMarkdownTitle || article?.title || "UNTITLED";
+  const renderedContent = leadingMarkdownTitle ? stripLeadingMarkdownTitle(content) : content;
   
   // Format date
   const formatDate = (dateStr: string) => {
@@ -126,14 +138,14 @@ export function ArticleContent() {
           </div>
           
           {/* Title */}
-          <h1 className="font-headline font-bold text-4xl leading-none text-on-surface tracking-tighter mb-8">
-            {article.title.toUpperCase() || "UNTITLED"}
+          <h1 className="font-headline font-bold text-6xl md:text-8xl leading-none text-on-surface tracking-tighter mb-8">
+            {articleHeading}
           </h1>
         </section>
         
         {/* Content - Use MarkdownRenderer */}
         <article className="space-y-12 text-on-surface-variant leading-relaxed">
-          <MarkdownRenderer content={content} basePath={basePath} />
+          <MarkdownRenderer content={renderedContent} basePath={basePath} />
           
           {/* EOF Section */}
           <section className="border-t border-surface-container pt-12">

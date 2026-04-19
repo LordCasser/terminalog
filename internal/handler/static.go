@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -118,8 +119,13 @@ func (h *StaticHandler) serveFile(w http.ResponseWriter, r *http.Request, path s
 	// Clean path
 	path = strings.TrimPrefix(path, "/")
 
+	servedPath, contentEncoding, ok := h.resolveCompressedPath(r, path)
+	if !ok {
+		return false
+	}
+
 	// Open file
-	file, err := h.fs.Open(path)
+	file, err := h.fs.Open(servedPath)
 	if err != nil {
 		return false
 	}
@@ -139,10 +145,51 @@ func (h *StaticHandler) serveFile(w http.ResponseWriter, r *http.Request, path s
 	// Set content type based on extension
 	contentType := getContentType(path)
 	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
+	if contentEncoding != "" {
+		w.Header().Set("Content-Encoding", contentEncoding)
+		w.Header().Set("Vary", "Accept-Encoding")
+	}
+	if cacheControl := getCacheControl(path); cacheControl != "" {
+		w.Header().Set("Cache-Control", cacheControl)
+	}
 
 	// Serve file content
 	io.Copy(w, file)
 	return true
+}
+
+func (h *StaticHandler) resolveCompressedPath(r *http.Request, path string) (string, string, bool) {
+	if !isCompressibleAsset(path) || r.Header.Get("Range") != "" {
+		if _, err := fs.Stat(h.fs, path); err != nil {
+			return "", "", false
+		}
+		return path, "", true
+	}
+
+	acceptEncoding := strings.ToLower(r.Header.Get("Accept-Encoding"))
+	candidates := []struct {
+		suffix   string
+		encoding string
+	}{
+		{suffix: ".br", encoding: "br"},
+		{suffix: ".gz", encoding: "gzip"},
+	}
+
+	for _, candidate := range candidates {
+		if !strings.Contains(acceptEncoding, candidate.encoding) {
+			continue
+		}
+		compressedPath := path + candidate.suffix
+		if _, err := fs.Stat(h.fs, compressedPath); err == nil {
+			return compressedPath, candidate.encoding, true
+		}
+	}
+
+	if _, err := fs.Stat(h.fs, path); err != nil {
+		return "", "", false
+	}
+	return path, "", true
 }
 
 // getContentType returns the MIME type for a file path.
@@ -176,6 +223,40 @@ func getContentType(path string) string {
 		return "font/woff2"
 	}
 	return "application/octet-stream"
+}
+
+func isCompressibleAsset(path string) bool {
+	lowerPath := strings.ToLower(path)
+	compressibleExtensions := []string{
+		".css",
+		".html",
+		".js",
+		".json",
+		".map",
+		".md",
+		".svg",
+		".txt",
+		".xml",
+	}
+
+	for _, ext := range compressibleExtensions {
+		if strings.HasSuffix(lowerPath, ext) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func getCacheControl(path string) string {
+	lowerPath := strings.ToLower(path)
+	if strings.Contains(lowerPath, "_next/static/") {
+		return "public, max-age=31536000, immutable"
+	}
+	if strings.HasSuffix(lowerPath, ".html") {
+		return "public, max-age=0, must-revalidate"
+	}
+	return "public, max-age=3600"
 }
 
 // ServeResources handles static resource requests for /api/v1/resources/*.

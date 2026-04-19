@@ -4,7 +4,7 @@
  * Modal dialog showing available commands when user types 'help' or '?'.
  * Features:
  * - Displays all available commands with descriptions
- * - 3-second auto-close timer
+ * - 10-second auto-close timer
  * - Manual close via right-top 'x' button
  * - Enter key to close
  * - Dracula Spectrum styling with Glass effect
@@ -46,11 +46,11 @@ export function HelpModal() {
     const handleShowModal = () => {
       setIsVisible(true);
       
-      // Start 3-second auto-close timer
+      // Start 10-second auto-close timer
       const autoCloseTimer = setTimeout(() => {
         setIsVisible(false);
         setTimer(null);
-      }, 3000);
+      }, 10000);
       
       setTimer(autoCloseTimer);
     };
@@ -125,7 +125,7 @@ export function HelpModal() {
         {/* Footer hint */}
         <div className="p-4 border-t border-surface-container-highest text-center">
           <span className="font-mono text-xs text-on-surface-variant">
-            Auto-closes in 3 seconds, press Enter or click × to close
+            Auto-closes in 10 seconds, press Enter or click × to close
           </span>
         </div>
       </div>

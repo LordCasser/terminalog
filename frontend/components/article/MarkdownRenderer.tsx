@@ -155,11 +155,7 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
                     {language}
                   </div>
                 )}
-                <pre className="markdown-code-block__pre">
-                  <code className={className}>
-                    {children}
-                  </code>
-                </pre>
+                <pre className="markdown-code-block__pre">{children}</pre>
               </section>
             );
           },
@@ -210,7 +206,9 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
           
           li: ({ children }) => (
             <li className="markdown-list__item">
-              {children}
+              <div className="markdown-list__content">
+                {children}
+              </div>
             </li>
           ),
 

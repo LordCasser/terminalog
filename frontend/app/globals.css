@@ -272,56 +272,33 @@ body {
 .markdown-code-block {
   position: relative;
   margin: 2rem 0;
-  background:
-    linear-gradient(180deg, rgba(25, 27, 38, 0.95) 0%, rgba(11, 14, 24, 0.98) 100%);
-  border: 1px solid rgba(74, 68, 81, 0.8);
-  box-shadow:
-    0 0 0 1px rgba(225, 225, 241, 0.03) inset,
-    10px 10px 0 rgba(11, 14, 24, 0.88);
+  background: var(--color-surface-lowest);
+  padding: 2rem;
   overflow: hidden;
-}
-
-.markdown-code-block::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto auto 0;
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary), var(--color-tertiary));
 }
 
 .markdown-code-block__label {
   position: absolute;
-  top: 0.9rem;
-  right: 1rem;
-  z-index: 1;
+  top: 0;
+  right: 0;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  color: var(--color-secondary-fixed-dim);
-  background: rgba(39, 41, 53, 0.92);
-  border: 1px solid rgba(74, 68, 81, 0.7);
-  padding: 0.45rem 0.55rem;
+  color: var(--color-outline-variant);
+  padding: 1rem;
 }
 
 .markdown-code-block__pre {
   margin: 0;
-  padding: 1.5rem 1.5rem 1.35rem;
+  padding: 0;
   overflow-x: auto;
   font-family: var(--font-mono);
-  font-size: 0.92rem;
-  line-height: 1.8;
+  font-size: 0.875rem;
+  line-height: 2;
   color: var(--color-on-surface);
-  background:
-    linear-gradient(180deg, rgba(17, 19, 30, 0.75), rgba(11, 14, 24, 0.92)),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0,
-      transparent 27px,
-      rgba(150, 142, 156, 0.04) 28px
-    );
+  background: transparent;
 }
 
 .markdown-code-block__pre code {
@@ -449,8 +426,12 @@ body {
   position: relative;
 }
 
-.markdown-list__item > :last-child {
+.markdown-list__content > :last-child {
   margin-bottom: 0;
+}
+
+.markdown-list__content {
+  min-width: 0;
 }
 
 .markdown-list--unordered {
@@ -497,6 +478,18 @@ body {
   letter-spacing: 0.14em;
   text-align: right;
   padding-right: 0.2rem;
+}
+
+.markdown-list--unordered > .markdown-list__item > .markdown-list__content,
+.markdown-list--ordered > .markdown-list__item > .markdown-list__content {
+  grid-column: 2;
+}
+
+.markdown-list__content > .markdown-code-block,
+.markdown-list__content > .markdown-blockquote,
+.markdown-list__content > .markdown-table-shell,
+.markdown-list__content > .markdown-list {
+  margin-top: 0.9rem;
 }
 
 .markdown-list .markdown-list {
@@ -627,16 +620,16 @@ body {
   .markdown-code-block {
     margin-left: -0.75rem;
     margin-right: -0.75rem;
-    box-shadow: none;
   }
 
   .markdown-code-block__label {
-    top: 0.7rem;
-    right: 0.75rem;
+    top: 0;
+    right: 0;
+    padding: 0.85rem;
   }
 
   .markdown-code-block__pre {
-    padding: 1.25rem 1rem 1rem;
+    padding: 0;
     font-size: 0.84rem;
   }
 

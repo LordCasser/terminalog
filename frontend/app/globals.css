@@ -88,6 +88,111 @@
 }
 
 /* ============================================
+   Markdown Theme System
+   
+   All markdown rendering styles are driven by
+   these CSS custom properties. Override them in
+   a theme file to change the entire markdown
+   visual identity with a single CSS import.
+   
+   Usage: Create a theme.css that redefines the
+   --md-* variables under :root or [data-theme].
+   Import it AFTER globals.css to override.
+   ============================================ */
+:root {
+  /* --- Typography --- */
+  --md-font-size: 1.05rem;
+  --md-line-height: 1.9;
+  --md-font-body: var(--font-body);
+  --md-font-headline: var(--font-headline);
+  --md-font-mono: var(--font-mono);
+  
+  /* --- Colors: Body Text --- */
+  --md-color-text: var(--color-on-surface-variant);
+  --md-color-heading: var(--color-on-surface);
+  --md-color-heading-2: var(--color-secondary-fixed-dim);
+  --md-color-heading-3: var(--color-on-surface);
+  --md-color-strong: var(--color-primary-fixed);
+  --md-color-link: var(--color-primary);
+  --md-color-link-hover: var(--color-secondary);
+  --md-color-emphasis: var(--color-outline);
+  
+  /* --- Colors: Code Blocks --- */
+  --md-code-block-bg: var(--color-surface-lowest);
+  --md-code-block-text: var(--color-on-surface);
+  --md-code-block-label-color: var(--color-outline-variant);
+  --md-code-block-padding: 1.25rem;
+  --md-code-block-margin: 1.5rem 0;
+  --md-code-font-size: 0.875rem;
+  --md-code-line-height: 1.85;
+  
+  /* --- Colors: Inline Code --- */
+  --md-inline-code-bg: rgba(39, 41, 53, 0.92);
+  --md-inline-code-color: var(--color-tertiary-fixed);
+  --md-inline-code-border: 1px solid rgba(74, 68, 81, 0.7);
+  --md-inline-code-padding: 0.125rem 0.45rem;
+  --md-inline-code-font-size: 0.9rem;
+  --md-inline-code-shadow: inset 0 -1px 0 rgba(225, 225, 241, 0.06);
+  
+  /* --- Colors: Blockquote --- */
+  --md-blockquote-border: 4px solid var(--color-primary);
+  --md-blockquote-bg: linear-gradient(90deg, rgba(25, 27, 38, 0.88), rgba(25, 27, 38, 0.36));
+  --md-blockquote-color: var(--color-primary);
+  --md-blockquote-padding: 1rem 0 1rem 1.5rem;
+  --md-blockquote-margin: 1.5rem 0;
+  
+  /* --- Colors: Lists --- */
+  --md-list-marker-ul: "➜";
+  --md-list-marker-color: var(--color-tertiary);
+  --md-list-number-color: var(--color-secondary-fixed-dim);
+  
+  /* --- Colors: Tables --- */
+  --md-table-bg: var(--color-surface-lowest);
+  --md-table-border: 2px solid var(--color-outline-variant);
+  --md-table-shadow: 8px 8px 0 rgba(11, 14, 24, 0.9);
+  --md-table-inner-shadow: inset 0 0 0 1px rgba(225, 225, 241, 0.03);
+  --md-table-header-bg: var(--color-surface-container-highest);
+  --md-table-header-color: var(--color-secondary-fixed-dim);
+  --md-table-row-odd: rgba(29, 31, 43, 0.92);
+  --md-table-row-even: rgba(11, 14, 24, 0.98);
+  --md-table-row-hover: rgba(50, 52, 64, 0.98);
+  --md-table-cell-border: 2px solid rgba(74, 68, 81, 0.75);
+  --md-table-cell-inner-border: 2px solid rgba(74, 68, 81, 0.6);
+  --md-table-first-cell-color: var(--color-primary-fixed);
+  --md-table-cell-strong-color: var(--color-secondary-fixed-dim);
+  --md-table-cell-em-color: var(--color-outline);
+  --md-table-cell-code-bg: var(--color-surface-lowest);
+  --md-table-cell-code-border: 1px solid rgba(150, 142, 156, 0.35);
+  
+  /* --- Syntax Highlighting (Dracula Spectrum) --- */
+  --md-hl-comment: var(--color-outline);
+  --md-hl-keyword: var(--color-secondary-fixed-dim);
+  --md-hl-title: var(--color-primary-fixed);
+  --md-hl-string: #ffd6a5;
+  --md-hl-number: #ff9e64;
+  --md-hl-builtin: #8be9fd;
+  --md-hl-function: var(--color-tertiary-fixed);
+  --md-hl-meta: #7dcfff;
+  
+  /* --- Spacing: Headings --- */
+  --md-h1-size: 3rem;
+  --md-h1-margin-bottom: 1.5rem;
+  --md-h2-size: 1.75rem;
+  --md-h2-margin-top: 3.25rem;
+  --md-h2-margin-bottom: 1rem;
+  --md-h3-size: 1.25rem;
+  --md-h3-margin-top: 2.5rem;
+  --md-h3-margin-bottom: 0.85rem;
+  
+  /* --- Mobile Responsive --- */
+  --md-mobile-font-size: 1rem;
+  --md-mobile-h2-margin-top: 2.5rem;
+  --md-mobile-h3-margin-top: 2rem;
+  --md-mobile-code-font-size: 0.84rem;
+  --md-mobile-blockquote-font-size: 0.94rem;
+}
+
+/* ============================================
    Global Styles
    ============================================ */
 
@@ -167,43 +272,45 @@ body {
 
 /* ============================================
    Markdown Body Styles
+   All values reference theme variables above.
    ============================================ */
 .markdown-body {
-  font-family: var(--font-body);
-  font-size: 1.05rem;
-  line-height: 1.9;
-  color: var(--color-on-surface-variant);
+  font-family: var(--md-font-body);
+  font-size: var(--md-font-size);
+  line-height: var(--md-line-height);
+  color: var(--md-color-text);
 }
 
+/* --- Headings --- */
 .markdown-body h1 {
-  font-family: var(--font-headline);
-  font-size: 3rem;
+  font-family: var(--md-font-headline);
+  font-size: var(--md-h1-size);
   font-weight: 700;
-  color: var(--color-on-surface);
+  color: var(--md-color-heading);
   letter-spacing: -0.02em;
   line-height: 1.02;
   margin-top: 0;
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--md-h1-margin-bottom);
 }
 
 .markdown-body h2 {
-  font-family: var(--font-headline);
-  font-size: 1.75rem;
+  font-family: var(--md-font-headline);
+  font-size: var(--md-h2-size);
   font-weight: 600;
-  color: var(--color-secondary-fixed-dim);
+  color: var(--md-color-heading-2);
   line-height: 1.12;
-  margin-top: 3.25rem;
-  margin-bottom: 1rem;
+  margin-top: var(--md-h2-margin-top);
+  margin-bottom: var(--md-h2-margin-bottom);
 }
 
 .markdown-body h3 {
-  font-family: var(--font-headline);
-  font-size: 1.25rem;
+  font-family: var(--md-font-headline);
+  font-size: var(--md-h3-size);
   font-weight: 500;
-  color: var(--color-on-surface);
+  color: var(--md-color-heading-3);
   line-height: 1.2;
-  margin-top: 2.5rem;
-  margin-bottom: 0.85rem;
+  margin-top: var(--md-h3-margin-top);
+  margin-bottom: var(--md-h3-margin-bottom);
 }
 
 .markdown-body h4,
@@ -214,6 +321,7 @@ body {
   margin-bottom: 0.75rem;
 }
 
+/* --- Body Text --- */
 .markdown-body p {
   margin-bottom: 1.1rem;
   text-wrap: pretty;
@@ -224,56 +332,67 @@ body {
 }
 
 .markdown-body strong {
-  color: var(--color-primary-fixed);
+  color: var(--md-color-strong);
 }
 
 .markdown-body a {
-  color: var(--color-primary);
+  color: var(--md-color-link);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
 .markdown-body a:hover {
-  color: var(--color-secondary);
+  color: var(--md-color-link-hover);
 }
 
+/* --- Inline Code --- */
 .markdown-body code {
-  font-family: var(--font-mono);
+  font-family: var(--md-font-mono);
   background-color: var(--color-surface-container-low);
   padding: 0.125rem 0.25rem;
   color: var(--color-tertiary);
 }
 
+.markdown-inline-code {
+  display: inline-block;
+  font-family: var(--md-font-mono);
+  font-size: var(--md-inline-code-font-size);
+  line-height: 1.4;
+  background: var(--md-inline-code-bg);
+  color: var(--md-inline-code-color);
+  padding: var(--md-inline-code-padding);
+  border: var(--md-inline-code-border);
+  box-shadow: var(--md-inline-code-shadow);
+}
+
+/* --- Code Blocks --- */
+
+/*
+ * Reset base <pre> inside .markdown-body.
+ * Padding is handled by .markdown-code-block wrapper, NOT by <pre>.
+ * This avoids the old specificity bug where .markdown-body pre (0-1-1)
+ * overrode .markdown-code-block__pre (0-1-0).
+ */
 .markdown-body pre {
-  font-family: var(--font-mono);
-  background-color: var(--color-surface-lowest);
-  padding: 2rem;
+  font-family: var(--md-font-mono);
+  background-color: transparent;
+  padding: 0;
+  margin: 0;
   overflow-x: auto;
-  margin-bottom: 1.5rem;
 }
 
 .markdown-body pre code {
   background: none;
   padding: 0;
-}
-
-.markdown-inline-code {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  line-height: 1.4;
-  background: rgba(39, 41, 53, 0.92);
-  color: var(--color-tertiary-fixed);
-  padding: 0.125rem 0.45rem;
-  border: 1px solid rgba(74, 68, 81, 0.7);
-  box-shadow: inset 0 -1px 0 rgba(225, 225, 241, 0.06);
+  border: none;
+  box-shadow: none;
 }
 
 .markdown-code-block {
   position: relative;
-  margin: 2rem 0;
-  background: var(--color-surface-lowest);
-  padding: 2rem;
+  margin: var(--md-code-block-margin);
+  background: var(--md-code-block-bg);
+  padding: var(--md-code-block-padding);
   overflow: hidden;
 }
 
@@ -281,23 +400,23 @@ body {
   position: absolute;
   top: 0;
   right: 0;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-family: var(--md-font-mono);
+  font-size: 0.7rem;
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  color: var(--color-outline-variant);
-  padding: 1rem;
+  color: var(--md-code-block-label-color);
+  padding: 0.75rem 1rem;
 }
 
 .markdown-code-block__pre {
   margin: 0;
   padding: 0;
   overflow-x: auto;
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  line-height: 2;
-  color: var(--color-on-surface);
+  font-family: var(--md-font-mono);
+  font-size: var(--md-code-font-size);
+  line-height: var(--md-code-line-height);
+  color: var(--md-code-block-text);
   background: transparent;
 }
 
@@ -306,21 +425,25 @@ body {
   min-width: max-content;
   background: transparent;
   color: inherit;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
+/* --- Blockquotes --- */
 .markdown-blockquote {
   position: relative;
-  margin: 2rem 0;
-  padding: 1rem 0 1rem 1.5rem;
-  border-left: 4px solid var(--color-primary);
-  background: linear-gradient(90deg, rgba(25, 27, 38, 0.88), rgba(25, 27, 38, 0.36));
+  margin: var(--md-blockquote-margin);
+  padding: var(--md-blockquote-padding);
+  border-left: var(--md-blockquote-border);
+  background: var(--md-blockquote-bg);
 }
 
 .markdown-blockquote__content {
-  font-family: var(--font-mono);
-  font-size: 1.05rem;
+  font-family: var(--md-font-mono);
+  font-size: var(--md-font-size);
   line-height: 1.85;
-  color: var(--color-primary);
+  color: var(--md-blockquote-color);
   font-style: italic;
 }
 
@@ -332,14 +455,15 @@ body {
   margin-top: 0.6rem;
 }
 
+/* --- Syntax Highlighting (Dracula Spectrum) --- */
 .markdown-body .hljs {
   background: transparent;
-  color: var(--color-on-surface);
+  color: var(--md-code-block-text);
 }
 
 .markdown-body .hljs-comment,
 .markdown-body .hljs-quote {
-  color: var(--color-outline);
+  color: var(--md-hl-comment);
   font-style: italic;
 }
 
@@ -348,7 +472,7 @@ body {
 .markdown-body .hljs-literal,
 .markdown-body .hljs-section,
 .markdown-body .hljs-link {
-  color: var(--color-secondary-fixed-dim);
+  color: var(--md-hl-keyword);
 }
 
 .markdown-body .hljs-title,
@@ -358,13 +482,13 @@ body {
 .markdown-body .hljs-attribute,
 .markdown-body .hljs-selector-id,
 .markdown-body .hljs-selector-class {
-  color: var(--color-primary-fixed);
+  color: var(--md-hl-title);
 }
 
 .markdown-body .hljs-string,
 .markdown-body .hljs-regexp,
 .markdown-body .hljs-meta .hljs-string {
-  color: #ffd6a5;
+  color: var(--md-hl-string);
 }
 
 .markdown-body .hljs-number,
@@ -372,25 +496,25 @@ body {
 .markdown-body .hljs-bullet,
 .markdown-body .hljs-variable,
 .markdown-body .hljs-template-variable {
-  color: #ff9e64;
+  color: var(--md-hl-number);
 }
 
 .markdown-body .hljs-built_in,
 .markdown-body .hljs-type,
 .markdown-body .hljs-class {
-  color: #8be9fd;
+  color: var(--md-hl-builtin);
 }
 
 .markdown-body .hljs-function,
 .markdown-body .hljs-property,
 .markdown-body .hljs-params,
 .markdown-body .hljs-tag {
-  color: var(--color-tertiary-fixed);
+  color: var(--md-hl-function);
 }
 
 .markdown-body .hljs-meta,
 .markdown-body .hljs-meta .hljs-keyword {
-  color: #7dcfff;
+  color: var(--md-hl-meta);
 }
 
 .markdown-body .hljs-emphasis {
@@ -401,10 +525,11 @@ body {
   font-weight: 700;
 }
 
+/* --- Lists --- */
 .markdown-list {
   margin: 1.5rem 0 2rem;
   padding: 0;
-  font-family: var(--font-mono);
+  font-family: var(--md-font-mono);
 }
 
 .markdown-list__item {
@@ -432,8 +557,8 @@ body {
 }
 
 .markdown-list--unordered > .markdown-list__item::before {
-  content: "➜";
-  color: var(--color-tertiary);
+  content: var(--md-list-marker-ul);
+  color: var(--md-list-marker-color);
   font-size: 0.95rem;
   line-height: 1.8;
 }
@@ -456,7 +581,7 @@ body {
 
 .markdown-list--ordered > .markdown-list__item::before {
   content: counter(ordered-list, decimal-leading-zero) ".";
-  color: var(--color-secondary-fixed-dim);
+  color: var(--md-list-number-color);
   font-weight: 700;
   font-size: 0.88rem;
   line-height: 1.75;
@@ -482,29 +607,33 @@ body {
   margin-bottom: 0.2rem;
 }
 
+/* --- Horizontal Rule --- */
 .markdown-body hr {
   margin: 3rem 0;
 }
 
+/* --- Scroll Anchors --- */
 .markdown-body table,
 .markdown-body .markdown-code-block,
 .markdown-body .markdown-blockquote {
   scroll-margin-top: 6rem;
 }
 
+/* --- Images --- */
 .markdown-body img {
   max-width: 100%;
   height: auto;
 }
 
+/* --- Tables --- */
 .markdown-table-shell {
   position: relative;
   margin: 2.5rem 0;
-  background: var(--color-surface-lowest);
-  border: 2px solid var(--color-outline-variant);
+  background: var(--md-table-bg);
+  border: var(--md-table-border);
   box-shadow:
-    8px 8px 0 rgba(11, 14, 24, 0.9),
-    inset 0 0 0 1px rgba(225, 225, 241, 0.03);
+    var(--md-table-shadow),
+    var(--md-table-inner-shadow);
   overflow: hidden;
 }
 
@@ -527,82 +656,85 @@ body {
   width: max-content;
   min-width: max(100%, 42rem);
   border-collapse: collapse;
-  font-family: var(--font-mono);
+  font-family: var(--md-font-mono);
   font-size: 0.88rem;
   line-height: 1.55;
-  color: var(--color-on-surface);
+  color: var(--md-code-block-text);
 }
 
 .markdown-table-head {
-  background: var(--color-surface-container-highest);
+  background: var(--md-table-header-bg);
 }
 
 .markdown-table-heading {
   padding: 1rem 1.15rem;
-  border-bottom: 2px solid var(--color-outline-variant);
+  border-bottom: var(--md-table-border);
   text-align: left;
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--color-secondary-fixed-dim);
+  color: var(--md-table-header-color);
   white-space: nowrap;
 }
 
 .markdown-table-body .markdown-table-row:nth-child(odd) {
-  background: rgba(29, 31, 43, 0.92);
+  background: var(--md-table-row-odd);
 }
 
 .markdown-table-body .markdown-table-row:nth-child(even) {
-  background: rgba(11, 14, 24, 0.98);
+  background: var(--md-table-row-even);
 }
 
 .markdown-table-body .markdown-table-row:hover {
-  background: rgba(50, 52, 64, 0.98);
+  background: var(--md-table-row-hover);
 }
 
 .markdown-table-cell {
   padding: 1rem 1.15rem;
-  border-bottom: 2px solid rgba(74, 68, 81, 0.75);
+  border-bottom: var(--md-table-cell-border);
   vertical-align: top;
 }
 
 .markdown-table-heading + .markdown-table-heading,
 .markdown-table-cell + .markdown-table-cell {
-  border-left: 2px solid rgba(74, 68, 81, 0.6);
+  border-left: var(--md-table-cell-inner-border);
 }
 
 .markdown-table-body .markdown-table-cell:first-child {
-  color: var(--color-primary-fixed);
+  color: var(--md-table-first-cell-color);
 }
 
 .markdown-table-body .markdown-table-cell strong {
-  color: var(--color-secondary-fixed-dim);
+  color: var(--md-table-cell-strong-color);
 }
 
 .markdown-table-body .markdown-table-cell em {
-  color: var(--color-outline);
+  color: var(--md-table-cell-em-color);
 }
 
 .markdown-table-cell code,
 .markdown-table-heading code {
   white-space: nowrap;
-  background: var(--color-surface-lowest);
-  outline: 1px solid rgba(150, 142, 156, 0.35);
+  background: var(--md-table-cell-code-bg);
+  outline: var(--md-table-cell-code-border);
 }
 
+/* ============================================
+   Responsive Breakpoint
+   ============================================ */
 @media (max-width: 768px) {
   .markdown-body {
-    font-size: 1rem;
+    font-size: var(--md-mobile-font-size);
     line-height: 1.8;
   }
 
   .markdown-body h2 {
-    margin-top: 2.5rem;
+    margin-top: var(--md-mobile-h2-margin-top);
   }
 
   .markdown-body h3 {
-    margin-top: 2rem;
+    margin-top: var(--md-mobile-h3-margin-top);
   }
 
   .markdown-code-block {
@@ -613,21 +745,19 @@ body {
   .markdown-code-block__label {
     top: 0;
     right: 0;
-    padding: 0.85rem;
+    padding: 0.65rem 0.75rem;
   }
 
   .markdown-code-block__pre {
-    padding: 0;
-    font-size: 0.84rem;
+    font-size: var(--md-mobile-code-font-size);
   }
 
   .markdown-blockquote {
     padding: 0.9rem 0 0.9rem 1rem;
-    box-shadow: none;
   }
 
   .markdown-blockquote__content {
-    font-size: 0.94rem;
+    font-size: var(--md-mobile-blockquote-font-size);
     line-height: 1.75;
   }
 
@@ -643,7 +773,7 @@ body {
 
   .markdown-table {
     min-width: max(100%, 32rem);
-    font-size: 0.84rem;
+    font-size: var(--md-mobile-code-font-size);
   }
 
   .markdown-table-heading,
@@ -653,7 +783,7 @@ body {
 }
 
 /* ============================================
-   Table Styles
+   Article Table Styles (Legacy)
    ============================================ */
 .article-table {
   width: 100%;
@@ -680,8 +810,8 @@ body {
 }
 
 /* ============================================
-    Tag Styles
-    ============================================ */
+   Tag Styles
+   ============================================ */
 .tag {
   font-family: var(--font-mono);
   font-size: 12px;

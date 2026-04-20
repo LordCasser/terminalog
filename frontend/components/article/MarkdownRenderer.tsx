@@ -160,10 +160,19 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
             );
           },
           
-          // Inline code (no className) vs code block
+          // Inline code vs code block detection
+          //   - className includes "hljs"/"language-"  → code block (highlight.js)
+          //   - no className + multiline content        → code block (plain fenced)
+          //   - no className + single-line content      → inline code
           code: ({ className, children, ...props }) => {
-            // Inline code (no className)
-            if (!className) {
+            const textContent = typeof children === 'string'
+              ? children
+              : Array.isArray(children)
+                ? children.join('')
+                : '';
+            const isMultilineCodeBlock = !className && textContent.includes('\n');
+            
+            if (!className && !isMultilineCodeBlock) {
               return (
                 <code className="markdown-inline-code">
                   {children}
@@ -171,7 +180,6 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
               );
             }
             
-            // Code block (has className like language-xxx) - rendered inside pre
             return (
               <code className={className} {...props}>
                 {children}

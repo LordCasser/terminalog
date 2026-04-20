@@ -23,6 +23,7 @@ builds:
     goarch:
       - amd64
       - arm64
+      - riscv64
     goarm:
       - 6
     ldflags:
@@ -35,6 +36,10 @@ builds:
     ignore:
       - goos: windows
         goarch: arm64
+      - goos: darwin
+        goarch: riscv64
+      - goos: windows
+        goarch: riscv64
 
 archives:
   - id: default

@@ -121,6 +121,7 @@ release-manual: web-embed
 	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_WINDOWS) cmd/terminalog/main.go
 	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_DARWIN) cmd/terminalog/main.go
 	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME)_darwin_arm64 cmd/terminalog/main.go
+	GOOS=linux GOARCH=riscv64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME)_linux_riscv64 cmd/terminalog/main.go
 	@echo "Release binaries built in $(BIN_DIR)/"
 
 ## install: Install the binary to system

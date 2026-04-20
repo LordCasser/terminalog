@@ -44,7 +44,7 @@ ws://blog.example.com
 | **Tree** | `/api/v1/tree` | 目录树结构 |
 | **Special Pages** | `/api/v1/special` | 特殊页面（AboutMe等） |
 | **Settings** | `/api/v1/settings` | 前端配置 |
-| **WebSocket** | `/ws` | 实时通信 |
+| **WebSocket** | `/ws/terminal` | 实时通信（路径补全） |
 | **Git Smart HTTP** | `/` | Git协议端点 |
 
 ### 1.4 RESTful 设计原则

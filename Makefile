@@ -11,10 +11,8 @@ GOMOD=$(GOCMD) mod
 
 # Binary names
 BINARY_NAME=terminalog
-BINARY_UNIX=$(BINARY_NAME)_unix
 BINARY_LINUX=$(BINARY_NAME)_linux
-BINARY_WINDOWS=$(BINARY_NAME)_windows.exe
-BINARY_DARWIN=$(BINARY_NAME)_darwin
+BINARY_DARWIN_ARM64=$(BINARY_NAME)_darwin_arm64
 
 # Directories
 BIN_DIR=bin
@@ -118,9 +116,8 @@ release:
 release-manual: web-embed
 	@echo "Building release binaries manually..."
 	GOOS=linux GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_LINUX) cmd/terminalog/main.go
-	GOOS=windows GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_WINDOWS) cmd/terminalog/main.go
-	GOOS=darwin GOARCH=amd64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_DARWIN) cmd/terminalog/main.go
 	GOOS=darwin GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME)_darwin_arm64 cmd/terminalog/main.go
+	GOOS=linux GOARCH=arm64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME)_linux_arm64 cmd/terminalog/main.go
 	GOOS=linux GOARCH=riscv64 $(GOBUILD) $(LDFLAGS) -o $(BIN_DIR)/$(BINARY_NAME)_linux_riscv64 cmd/terminalog/main.go
 	@echo "Release binaries built in $(BIN_DIR)/"
 

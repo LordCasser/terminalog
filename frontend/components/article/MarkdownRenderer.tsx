@@ -4,10 +4,18 @@
  * Renders remote Markdown content fetched from API.
  * Features:
  * - GitHub Flavored Markdown support (remark-gfm)
+ * - GitHub Alerts / Callouts (remark-github-blockquote-alert)
  * - Code syntax highlighting (rehype-highlight)
  * - Math formula rendering (remark-math + rehype-katex)
  * - Image path transformation (relative → /api/v1/assets/ paths)
  * - Dracula Spectrum styling (aligned with article view prototype HTML)
+ * 
+ * Supported alert types:
+ *   > [!NOTE]     → informational callout
+ *   > [!TIP]      → helpful suggestion
+ *   > [!IMPORTANT] → critical information
+ *   > [!WARNING]  → cautionary advice
+ *   > [!CAUTION]  → potential danger
  * 
  * Usage:
  * <MarkdownRenderer content={markdownContent} basePath="tech/blog" />
@@ -22,6 +30,7 @@ import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { remarkAlert } from 'remark-github-blockquote-alert';
 import 'katex/dist/katex.min.css';
 import { isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react';
@@ -103,7 +112,7 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
   return (
     <div className="markdown-body">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkAlert]}
         rehypePlugins={[rehypeHighlight, rehypeKatex]}
         components={{
           // Headings - Space Grotesk font

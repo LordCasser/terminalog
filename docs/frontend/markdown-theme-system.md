@@ -16,6 +16,7 @@ Markdown 渲染系统采用完全模块化的 CSS 变量架构。所有 Markdown
 .markdown-body        ← 使用主题令牌的容器
 .markdown-code-block  ← 代码块组件
 .markdown-blockquote  ← 引用块组件
+.markdown-alert       ← GitHub 风格警告框组件
 .markdown-list*       ← 列表组件
 .markdown-table*      ← 表格组件
 .markdown-inline-code ← 行内代码组件
@@ -30,6 +31,7 @@ Markdown 渲染系统采用完全模块化的 CSS 变量架构。所有 Markdown
 | Code Block | `.markdown-code-block` | 代码块外层容器 |
 | Inline Code | `.markdown-inline-code` | 行内代码 |
 | Blockquote | `.markdown-blockquote` | 引用块 |
+| Alert / Callout | `.markdown-alert` | GitHub 风格警告框 |
 | List | `.markdown-list` | 有序/无序列表 |
 | Table | `.markdown-table-shell` | 表格容器 |
 
@@ -160,6 +162,34 @@ frontend/app/
 | `--md-blockquote-padding` | `1rem 0 1rem 1.5rem` | 内边距 |
 | `--md-blockquote-margin` | `1.5rem 0` | 外边距 |
 
+#### Alerts / Callouts（警告框）
+警告框使用 GitHub 风格的 `> [!NOTE]` 语法，由 `remark-github-blockquote-alert` 插件支持。
+
+支持五种类型：`[!NOTE]`、`[!TIP]`、`[!IMPORTANT]`、`[!WARNING]`、`[!CAUTION]`
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `--md-alert-note-border` | `var(--color-primary-container)` | NOTE 边框色（紫色） |
+| `--md-alert-note-bg` | `rgba(189,147,249,0.08)` | NOTE 背景色 |
+| `--md-alert-note-title` | `var(--color-primary-fixed)` | NOTE 标题色 |
+| `--md-alert-tip-border` | `var(--color-tertiary)` | TIP 边框色（绿色） |
+| `--md-alert-tip-bg` | `rgba(49,227,104,0.08)` | TIP 背景色 |
+| `--md-alert-tip-title` | `var(--color-tertiary-fixed)` | TIP 标题色 |
+| `--md-alert-important-border` | `var(--color-secondary-fixed-dim)` | IMPORTANT 边框色（粉色） |
+| `--md-alert-important-bg` | `rgba(255,175,215,0.08)` | IMPORTANT 背景色 |
+| `--md-alert-important-title` | `var(--color-secondary-fixed)` | IMPORTANT 标题色 |
+| `--md-alert-warning-border` | `#ffd6a5` | WARNING 边框色（琥珀色） |
+| `--md-alert-warning-bg` | `rgba(255,214,165,0.08)` | WARNING 背景色 |
+| `--md-alert-warning-title` | `#ffd6a5` | WARNING 标题色 |
+| `--md-alert-caution-border` | `#ff6e6e` | CAUTION 边框色（红色） |
+| `--md-alert-caution-bg` | `rgba(255,110,110,0.08)` | CAUTION 背景色 |
+| `--md-alert-caution-title` | `#ff6e6e` | CAUTION 标题色 |
+| `--md-alert-padding` | `1rem 1.25rem` | 警告框内边距 |
+| `--md-alert-margin` | `1.5rem 0` | 警告框外边距 |
+| `--md-alert-border-width` | `4px` | 左边框宽度 |
+| `--md-alert-title-font-size` | `0.85rem` | 标题字号 |
+| `--md-alert-body-font-size` | `0.94rem` | 正文字号 |
+
 #### Syntax Highlighting（语法高亮）
 | 变量 | 默认值 | 说明 |
 |---|---|---|
@@ -254,15 +284,59 @@ function setTheme(theme: 'dark' | 'light') {
 
 ---
 
-## 四、主题编写最佳实践
+## 四、Alerts / Callouts 使用方法
 
-### 4.1 保持一致性
+Markdown 渲染支持 GitHub 风格的警告框语法，使用 blockquote 语法加特殊标记实现。
+
+### 4.1 语法格式
+
+在 Markdown 中使用 `> [!TYPE]` 语法创建警告框：
+
+```markdown
+> [!NOTE]
+> 这是一条提示信息。
+
+> [!TIP]
+> 这是一个技巧建议。
+
+> [!IMPORTANT]
+> 这是一条重要信息。
+
+> [!WARNING]
+> 这是一个警告提醒。
+
+> [!CAUTION]
+> 这是一个危险警示。
+```
+
+### 4.2 支持的警告类型
+
+| 类型 | 用途 | 色系 |
+|---|---|---|
+| `NOTE` | 有用的提示信息 | 紫色（Primary） |
+| `TIP` | 有帮助的建议 | 绿色（Tertiary） |
+| `IMPORTANT` | 需要关注的关键信息 | 粉色（Secondary） |
+| `WARNING` | 警告性建议 | 琥珀色 |
+| `CAUTION` | 潜在危险警示 | 红色 |
+
+### 4.3 技术实现
+
+- **插件**：`remark-github-blockquote-alert`（remark 插件）
+- **HTML 输出**：`<div class="markdown-alert markdown-alert-{type}">`
+- **CSS 类**：`.markdown-alert`（容器）、`.markdown-alert-title`（标题行）、`.markdown-alert-{note|tip|important|warning|caution}`（类型变体）
+- **SVG 图标**：插件自动注入 GitHub Octicon SVG
+
+---
+
+## 五、主题编写最佳实践
+
+### 5.1 保持一致性
 
 - **颜色体系**：选择一套协调的颜色方案（如 Tailwind 颜色调色板）
 - **对比度**：确保正文与背景对比度至少 4.5:1（WCAG AA 标准）
 - **代码高亮**：语法高亮颜色应与整体色调一致
 
-### 4.2 最小覆盖原则
+### 5.2 最小覆盖原则
 
 只覆盖真正需要改变的变量。例如，如果只想改变代码块背景色：
 
@@ -274,7 +348,7 @@ function setTheme(theme: 'dark' | 'light') {
 
 其他变量自动继承默认值。
 
-### 4.3 语义化命名
+### 5.3 语义化命名
 
 使用有意义的前缀区分不同主题：
 
@@ -287,15 +361,15 @@ markdown-theme-monokai.css  ← Monokai 风格
 
 ---
 
-## 五、已修复的渲染问题
+## 六、已修复的渲染问题
 
-### 5.1 CSS 特异性问题
+### 6.1 CSS 特异性问题
 
 **问题**：`.markdown-body pre` 选择器（特异性 0-1-1）覆盖了 `.markdown-code-block__pre`（0-1-0），导致代码块 `<pre>` 元素获得额外的 `2rem` padding，总内边距达到 64px。
 
 **修复**：将 `.markdown-body pre` 重置为 `padding: 0; margin: 0;`，由外层 `.markdown-code-block` 统一控制间距。
 
-### 5.2 无语言代码块白框问题
+### 6.2 无语言代码块白框问题
 
 **问题**：没有语言标注的代码块（如 ` ``` ` 空代码块）被错误判定为"行内代码"，获得 `markdown-inline-code` 类，导致内部出现 `1px solid` 边框。
 
@@ -303,9 +377,9 @@ markdown-theme-monokai.css  ← Monokai 风格
 
 ---
 
-## 六、示例主题
+## 七、示例主题
 
-### 6.1 GitHub Light 风格
+### 7.1 GitHub Light 风格
 
 ```css
 :root {
@@ -333,7 +407,7 @@ markdown-theme-monokai.css  ← Monokai 风格
 }
 ```
 
-### 6.2 Monokai 风格
+### 7.2 Monokai 风格
 
 ```css
 :root {
@@ -356,7 +430,7 @@ markdown-theme-monokai.css  ← Monokai 风格
 
 ---
 
-## 七、相关文档
+## 八、相关文档
 
 - [Frontend Architecture](./architecture.md) — 前端架构设计
 - [Frontend Implementation](./implementation.md) — 前端实现笔记

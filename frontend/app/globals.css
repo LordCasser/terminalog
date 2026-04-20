@@ -164,6 +164,33 @@
   --md-table-cell-code-bg: var(--color-surface-lowest);
   --md-table-cell-code-border: 1px solid rgba(150, 142, 156, 0.35);
   
+  /* --- Colors: Alerts / Callouts --- */
+  --md-alert-note-border: var(--color-primary-container);    /* purple */
+  --md-alert-note-bg: rgba(189, 147, 249, 0.08);
+  --md-alert-note-title: var(--color-primary-fixed);
+
+  --md-alert-tip-border: var(--color-tertiary);              /* green */
+  --md-alert-tip-bg: rgba(49, 227, 104, 0.08);
+  --md-alert-tip-title: var(--color-tertiary-fixed);
+
+  --md-alert-important-border: var(--color-secondary-fixed-dim); /* pink */
+  --md-alert-important-bg: rgba(255, 175, 215, 0.08);
+  --md-alert-important-title: var(--color-secondary-fixed);
+
+  --md-alert-warning-border: #ffd6a5;                        /* amber */
+  --md-alert-warning-bg: rgba(255, 214, 165, 0.08);
+  --md-alert-warning-title: #ffd6a5;
+
+  --md-alert-caution-border: #ff6e6e;                        /* red */
+  --md-alert-caution-bg: rgba(255, 110, 110, 0.08);
+  --md-alert-caution-title: #ff6e6e;
+  
+  --md-alert-padding: 1rem 1.25rem;
+  --md-alert-margin: 1.5rem 0;
+  --md-alert-border-width: 4px;
+  --md-alert-title-font-size: 0.85rem;
+  --md-alert-body-font-size: 0.94rem;
+  
   /* --- Syntax Highlighting (Dracula Spectrum) --- */
   --md-hl-comment: var(--color-outline);
   --md-hl-keyword: var(--color-secondary-fixed-dim);
@@ -453,6 +480,96 @@ body {
 
 .markdown-blockquote__content > * + * {
   margin-top: 0.6rem;
+}
+
+/* --- Alerts / Callouts (GitHub-style [!NOTE] etc.) --- */
+.markdown-alert {
+  position: relative;
+  margin: var(--md-alert-margin);
+  padding: var(--md-alert-padding);
+  border-left: var(--md-alert-border-width) solid var(--color-outline-variant);
+  border-radius: 0;
+  font-family: var(--md-font-body);
+  font-size: var(--md-alert-body-font-size);
+  line-height: 1.7;
+  color: var(--md-color-text);
+}
+
+.markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-alert p {
+  margin-bottom: 0.5rem;
+}
+
+.markdown-alert > :last-child > :last-child,
+.markdown-alert > p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-alert .markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--md-font-headline);
+  font-size: var(--md-alert-title-font-size);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-alert .markdown-alert-title svg.octicon {
+  flex-shrink: 0;
+  fill: currentColor;
+  width: 1em;
+  height: 1em;
+}
+
+/* Note alert — purple / primary */
+.markdown-alert-note {
+  border-left-color: var(--md-alert-note-border);
+  background: var(--md-alert-note-bg);
+}
+.markdown-alert-note .markdown-alert-title {
+  color: var(--md-alert-note-title);
+}
+
+/* Tip alert — green / tertiary */
+.markdown-alert-tip {
+  border-left-color: var(--md-alert-tip-border);
+  background: var(--md-alert-tip-bg);
+}
+.markdown-alert-tip .markdown-alert-title {
+  color: var(--md-alert-tip-title);
+}
+
+/* Important alert — pink / secondary */
+.markdown-alert-important {
+  border-left-color: var(--md-alert-important-border);
+  background: var(--md-alert-important-bg);
+}
+.markdown-alert-important .markdown-alert-title {
+  color: var(--md-alert-important-title);
+}
+
+/* Warning alert — amber */
+.markdown-alert-warning {
+  border-left-color: var(--md-alert-warning-border);
+  background: var(--md-alert-warning-bg);
+}
+.markdown-alert-warning .markdown-alert-title {
+  color: var(--md-alert-warning-title);
+}
+
+/* Caution alert — red */
+.markdown-alert-caution {
+  border-left-color: var(--md-alert-caution-border);
+  background: var(--md-alert-caution-bg);
+}
+.markdown-alert-caution .markdown-alert-title {
+  color: var(--md-alert-caution-title);
 }
 
 /* --- Syntax Highlighting (Dracula Spectrum) --- */
@@ -759,6 +876,10 @@ body {
   .markdown-blockquote__content {
     font-size: var(--md-mobile-blockquote-font-size);
     line-height: 1.75;
+  }
+
+  .markdown-alert {
+    padding: 0.85rem 1rem;
   }
 
   .markdown-list--ordered > .markdown-list__item {

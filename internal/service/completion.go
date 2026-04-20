@@ -70,11 +70,13 @@ func (s *CompletionService) HandleCompletion(ctx context.Context, req Completion
 	}, nil
 }
 
-// GetMatchingItems returns matching files and directories based on prefix.
+// GetMatchingItems returns matching files and directories based on a search prefix.
 // Files are returned without slash, directories with trailing slash.
 // Only committed Markdown files are included.
 // Special files (starting with "_") are filtered out.
-// When dir is empty (global search), it matches against all levels of path names.
+// When dir is empty (global search), it matches against all levels of path names
+// and article titles, using substring matching to support Chinese and other
+// non-alphabetic languages.
 // When dir is specified, it only matches against names relative to that directory.
 func (s *CompletionService) GetMatchingItems(ctx context.Context, dir, prefix string) ([]string, error) {
 	// Normalize inputs
@@ -100,6 +102,9 @@ func (s *CompletionService) GetMatchingItems(ctx context.Context, dir, prefix st
 	itemSet := make(map[string]bool)
 
 	// If dir is empty (global search), match against all levels of path names
+	// Use substring matching (Contains) instead of prefix matching (HasPrefix)
+	// to support mid-word matches, which is essential for Chinese and other
+	// non-alphabetic languages where users may search by a substring of the name.
 	if dir == "" || dir == "/" {
 		for _, article := range articles {
 			// Split the path into components
@@ -110,8 +115,8 @@ func (s *CompletionService) GetMatchingItems(ctx context.Context, dir, prefix st
 				if parts[i] == "" {
 					continue
 				}
-				// Check if this directory name matches prefix
-				if strings.HasPrefix(strings.ToLower(parts[i]), prefix) {
+				// Use Contains for substring matching: "体系" matches "微体系结构攻击"
+				if strings.Contains(strings.ToLower(parts[i]), prefix) {
 					// Build the relative path up to this directory
 					dirPath := strings.Join(parts[:i+1], "/") + "/"
 					if !itemSet[dirPath] {
@@ -121,9 +126,11 @@ func (s *CompletionService) GetMatchingItems(ctx context.Context, dir, prefix st
 				}
 			}
 
-			// Check the filename
+			// Check the filename — match against both filename and title
 			filename := filepath.Base(article.Path)
-			if strings.HasPrefix(strings.ToLower(filename), prefix) {
+			titleLower := strings.ToLower(article.Title)
+			filenameLower := strings.ToLower(filename)
+			if strings.Contains(filenameLower, prefix) || strings.Contains(titleLower, prefix) {
 				// Return full path for file
 				filePath := article.Path
 				if !itemSet[filePath] {
@@ -133,42 +140,45 @@ func (s *CompletionService) GetMatchingItems(ctx context.Context, dir, prefix st
 			}
 		}
 	} else {
-		// When dir is specified, match against names relative to that directory
-		for _, article := range articles {
-			// Get the name (basename)
-			name := filepath.Base(article.Path)
+// When dir is specified, match against names relative to that directory.
+	// Use substring matching for consistency with global search.
+	for _, article := range articles {
+		// Get the name (basename)
+		name := filepath.Base(article.Path)
+		nameLower := strings.ToLower(name)
+		titleLower := strings.ToLower(article.Title)
 
-			// Check if name matches prefix
-			if strings.HasPrefix(strings.ToLower(name), prefix) {
-				// Add file without trailing slash
-				if !itemSet[name] {
-					items = append(items, name)
-					itemSet[name] = true
-				}
+		// Match by filename or title (substring match)
+		if strings.Contains(nameLower, prefix) || strings.Contains(titleLower, prefix) {
+			// Add file without trailing slash
+			if !itemSet[name] {
+				items = append(items, name)
+				itemSet[name] = true
 			}
+		}
 
-			// Handle directories - extract parent directories from paths
-			articleDir := filepath.Dir(article.Path)
-			articleDir = utils.NormalizePath(articleDir)
+		// Handle directories - extract parent directories from paths
+		articleDir := filepath.Dir(article.Path)
+		articleDir = utils.NormalizePath(articleDir)
 
-			// Get relative directory from the requested dir
-			relDir := strings.TrimPrefix(articleDir, dir)
-			relDir = strings.TrimPrefix(relDir, "/")
+		// Get relative directory from the requested dir
+		relDir := strings.TrimPrefix(articleDir, dir)
+		relDir = strings.TrimPrefix(relDir, "/")
 
-			// If there's a subdirectory that matches the prefix
-			if relDir != "" && relDir != "." {
-				// Get the first component of the relative path
-				parts := strings.Split(relDir, "/")
-				if len(parts) > 0 && parts[0] != "" {
-					subDirName := parts[0]
-					if strings.HasPrefix(strings.ToLower(subDirName), prefix) && !itemSet[subDirName+"/"] {
-						// Add directory with trailing slash
-						items = append(items, subDirName+"/")
-						itemSet[subDirName+"/"] = true
-					}
+		// If there's a subdirectory that matches the prefix
+		if relDir != "" && relDir != "." {
+			// Get the first component of the relative path
+			parts := strings.Split(relDir, "/")
+			if len(parts) > 0 && parts[0] != "" {
+				subDirName := parts[0]
+				if strings.Contains(strings.ToLower(subDirName), prefix) && !itemSet[subDirName+"/"] {
+					// Add directory with trailing slash
+					items = append(items, subDirName+"/")
+					itemSet[subDirName+"/"] = true
 				}
 			}
 		}
+	}
 	}
 
 	return items, nil

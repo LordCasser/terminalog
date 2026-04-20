@@ -24,6 +24,17 @@ interface ArticleTableProps {
 }
 
 /**
+ * Encode a path for use in URL path segments.
+ * Encodes parentheses as %28 and %29 which are unsafe in URL paths.
+ */
+function encodePathForUrl(path: string): string {
+  return path
+    .split("/")
+    .map(segment => encodeURIComponent(segment).replace(/\(/g, '%28').replace(/\)/g, '%29'))
+    .join("/");
+}
+
+/**
  * Get file icon based on type/extension
  */
 function getFileIcon(article: Article): string {
@@ -145,7 +156,7 @@ export function ArticleTable({ articles, sortField, sortOrder, onSort }: Article
               {/* Filename */}
               <td className="px-6 py-5 whitespace-nowrap">
                 <Link 
-                  href={article.type === "dir" ? `/dir/${article.path}` : `/article/${article.path}`}
+                  href={article.type === "dir" ? `/dir/${encodePathForUrl(article.path)}` : `/article/${encodePathForUrl(article.path)}`}
                   className="flex items-center gap-3 font-bold transition-colors"
                 >
                   <span className={`material-symbols-outlined text-[18px] ${getIconColor(article)}`}>

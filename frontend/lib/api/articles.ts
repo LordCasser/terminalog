@@ -22,9 +22,15 @@ export type SortOrder = 'asc' | 'desc';
 /**
  * Encode a path for use in URL path segments.
  * Preserves "/" separators but encodes special characters in each segment.
+ * 
+ * Note: encodeURIComponent() does not encode () which are unsafe in URL paths.
+ * We manually encode parentheses as %28 and %29 to ensure proper URL handling.
  */
 function encodePath(path: string): string {
-  return path.split("/").map(segment => encodeURIComponent(segment)).join("/");
+  return path
+    .split("/")
+    .map(segment => encodeURIComponent(segment).replace(/\(/g, '%28').replace(/\)/g, '%29'))
+    .join("/");
 }
 
 /**

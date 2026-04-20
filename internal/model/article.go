@@ -212,11 +212,34 @@ type VersionHistoryEntry struct {
 	// Timestamp is the commit timestamp.
 	Timestamp time.Time `json:"timestamp"`
 
-	// LinesChanged is the number of lines changed in this commit.
+	// LinesAdded is the number of lines added in this commit.
+	LinesAdded int `json:"linesAdded"`
+
+	// LinesRemoved is the number of lines removed in this commit.
+	LinesRemoved int `json:"linesRemoved"`
+
+	// LinesChanged is the total number of lines changed (added + removed) in this commit.
 	LinesChanged int `json:"linesChanged"`
 
 	// ChangeType indicates whether this was a patch, minor, or major change.
 	ChangeType ChangeType `json:"changeType"`
+}
+
+// CommitDiffInfo represents the diff statistics for a single commit on a file.
+type CommitDiffInfo struct {
+	// Hash is the short commit hash (7 characters).
+	Hash string
+
+	// LinesAdded is the number of lines added.
+	LinesAdded int
+
+	// LinesRemoved is the number of lines removed.
+	LinesRemoved int
+
+	// FileLinesAfter is the total line count of the file after this commit.
+	// For the first commit (file creation), this is the total lines.
+	// For subsequent commits, this represents the file size after the change.
+	FileLinesAfter int
 }
 
 // AboutMeResponse represents the response for the About Me API.

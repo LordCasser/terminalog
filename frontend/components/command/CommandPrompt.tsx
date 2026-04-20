@@ -71,7 +71,7 @@ export function CommandPrompt() {
   const [isFocused, setIsFocused] = useState(false);
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [showNoMatchHint, setShowNoMatchHint] = useState(false);
-  const [noMatchHintType, setNoMatchHintType] = useState<"completion" | "search" | "command">("completion");
+  const [noMatchHintType, setNoMatchHintType] = useState<"completion" | "search" | "command" | "searchTab">("completion");
   // Initialize history from localStorage (lazy initialization)
   const [history, setHistory] = useState<string[]>(() => {
     try {
@@ -111,7 +111,7 @@ export function CommandPrompt() {
   // Get owner and currentDir from TerminalConfig context
   const { owner, currentDir } = useTerminalConfig();
 
-  const showTransientNoMatchHint = useCallback((type: "completion" | "search" | "command") => {
+  const showTransientNoMatchHint = useCallback((type: "completion" | "search" | "command" | "searchTab") => {
     setNoMatchHintType(type);
     setShowNoMatchHint(true);
     setTimeout(() => setShowNoMatchHint(false), 1000);
@@ -297,14 +297,20 @@ export function CommandPrompt() {
       return;
     }
     
-    // Auto-complete paths via WebSocket
+    // Path completion for commands after the first word
     if (parts.length === 2 && parts[1].length > 0) {
       const cmd = parts[0].toLowerCase();
+      
+      // search command: Tab completion is NOT supported — show hint
+      if (cmd === "search") {
+        showTransientNoMatchHint("searchTab");
+        return;
+      }
+      
       const partialPath = parts[1];
       
-      // search command: global search (empty dir)
       // open/cd commands: search within current directory
-      const dir = cmd === "search" ? "" : currentDir || "/";
+      const dir = currentDir || "/";
       
       try {
         const response = await sendWebSocketMessage<CompletionResponse>({
@@ -432,27 +438,21 @@ export function CommandPrompt() {
         const searchResponse = await searchArticles({ q: query });
 
         if (searchResponse.results.length > 0) {
-          // Single result: directly navigate
-          if (searchResponse.results.length === 1) {
-            navigateToPath(router, searchResponse.results[0].path);
-          } 
-          // Multiple results: show modal
-          else {
-            const event = new CustomEvent<SearchResultsEventDetail>(
-              SHOW_SEARCH_RESULTS_MODAL,
-              {
-                detail: {
-                  results: searchResponse.results.map(r => ({
-                    path: r.path,
-                    title: r.title,
-                    type: r.type,
-                    lastModified: undefined,
-                  })),
-                },
-              }
-            );
-            window.dispatchEvent(event);
-          }
+          // Always show modal for selection (v1.7: no single-result auto-navigation)
+          const event = new CustomEvent<SearchResultsEventDetail>(
+            SHOW_SEARCH_RESULTS_MODAL,
+            {
+              detail: {
+                results: searchResponse.results.map(r => ({
+                  path: r.path,
+                  title: r.title,
+                  type: r.type,
+                  lastModified: undefined,
+                })),
+              },
+            }
+          );
+          window.dispatchEvent(event);
         } else {
           showTransientNoMatchHint("search");
         }
@@ -574,11 +574,13 @@ export function CommandPrompt() {
               className="absolute bottom-full mb-2 px-2 py-1 bg-surface-container-high text-error font-mono text-xs rounded"
               style={{ left: `${cursorPosition}px` }}
             >
-              {noMatchHintType === "search"
-                ? "没有搜索结果"
-                : noMatchHintType === "command"
-                  ? "命令不存在"
-                  : "没有匹配内容"}
+              {noMatchHintType === "searchTab"
+                ? "search 不可补全"
+                : noMatchHintType === "search"
+                  ? "没有搜索结果"
+                  : noMatchHintType === "command"
+                    ? "命令不存在"
+                    : "没有匹配内容"}
             </span>
           )}
         </div>

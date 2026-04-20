@@ -348,6 +348,146 @@ func (s *GitService) GetFileHistories(ctx context.Context, filePaths []string) (
 	return results, nil
 }
 
+// GetFileCommitDiffs returns real diff statistics (lines added/removed) for each
+// commit that touched a file. The results are ordered oldest-first.
+// It uses go-git's Patch API to compute accurate add/remove counts per commit.
+func (s *GitService) GetFileCommitDiffs(ctx context.Context, filePath string) ([]model.CommitDiffInfo, error) {
+	if s.repo == nil {
+		return nil, model.ErrRepoNotFound
+	}
+
+	filePath = strings.TrimPrefix(filePath, "/")
+
+	// Get file history to obtain ordered commit list
+	history, err := s.GetFileHistory(ctx, filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(history.AllCommits) == 0 {
+		return nil, model.ErrNotCommitted
+	}
+
+	// We need commits in chronological order (oldest first)
+	commits := reverseCommits(history.AllCommits)
+
+	// Resolve each commit hash back to a go-git commit object
+	var gitCommits []*object.Commit
+	for _, ci := range commits {
+		hash := plumbing.NewHash(ci.Hash)
+		// ci.Hash is a short hash (7 chars); resolve it via repo
+		commitObj, err := s.repo.CommitObject(hash)
+		if err != nil {
+			// Try to find by prefix
+			found := false
+			iter, iterErr := s.repo.Log(&git.LogOptions{Order: git.LogOrderCommitterTime})
+			if iterErr != nil {
+				return nil, iterErr
+			}
+			iterErr = iter.ForEach(func(c *object.Commit) error {
+				if strings.HasPrefix(c.Hash.String(), ci.Hash) {
+					gitCommits = append(gitCommits, c)
+					found = true
+				}
+				return nil
+			})
+			if iterErr != nil || !found {
+				return nil, fmt.Errorf("commit not found: %s", ci.Hash)
+			}
+		} else {
+			gitCommits = append(gitCommits, commitObj)
+		}
+	}
+
+	diffs := make([]model.CommitDiffInfo, 0, len(gitCommits))
+
+	for i, commit := range gitCommits {
+		var added, removed, fileLinesAfter int
+
+		if i == 0 {
+			// First commit: file creation. The "diff" is the entire file content.
+			file, err := commit.File(filePath)
+			if err != nil {
+				// File might not exist in this commit (e.g., it was deleted)
+				diffs = append(diffs, model.CommitDiffInfo{
+					Hash:           shortHash(commit.Hash.String()),
+					LinesAdded:     0,
+					LinesRemoved:   0,
+					FileLinesAfter: 0,
+				})
+				continue
+			}
+			contents, err := file.Contents()
+			if err != nil {
+				return nil, fmt.Errorf("failed to read file %s at commit %s: %w", filePath, shortHash(commit.Hash.String()), err)
+			}
+			fileLinesAfter = countLines(contents)
+			added = fileLinesAfter
+			removed = 0
+		} else {
+			// Subsequent commit: compute patch from parent
+			parent := gitCommits[i-1]
+
+			patch, err := parent.Patch(commit)
+			if err != nil {
+				// If patch fails (e.g., parent didn't have the file), fall back to diff stat
+				diffs = append(diffs, model.CommitDiffInfo{
+					Hash:           shortHash(commit.Hash.String()),
+					LinesAdded:     0,
+					LinesRemoved:   0,
+					FileLinesAfter: 0,
+				})
+				continue
+			}
+
+			// Find our file in the patch stats
+			stats := patch.Stats()
+			for _, stat := range stats {
+				if stat.Name == filePath {
+					added = stat.Addition
+					removed = stat.Deletion
+					break
+				}
+			}
+
+			// Get the file content at this commit for line count
+			file, err := commit.File(filePath)
+			if err != nil {
+				// File was deleted in this commit
+				diffs = append(diffs, model.CommitDiffInfo{
+					Hash:           shortHash(commit.Hash.String()),
+					LinesAdded:     added,
+					LinesRemoved:   removed,
+					FileLinesAfter: 0,
+				})
+				continue
+			}
+			contents, err := file.Contents()
+			if err != nil {
+				contents = ""
+			}
+			fileLinesAfter = countLines(contents)
+		}
+
+		diffs = append(diffs, model.CommitDiffInfo{
+			Hash:           shortHash(commit.Hash.String()),
+			LinesAdded:     added,
+			LinesRemoved:   removed,
+			FileLinesAfter: fileLinesAfter,
+		})
+	}
+
+	return diffs, nil
+}
+
+// countLines counts the number of lines in a string.
+func countLines(content string) int {
+	if content == "" {
+		return 0
+	}
+	return len(strings.Split(content, "\n"))
+}
+
 // IsFileCommitted checks if a file has been committed to Git.
 func (s *GitService) IsFileCommitted(ctx context.Context, filePath string) (bool, error) {
 	history, err := s.GetFileHistory(ctx, filePath)

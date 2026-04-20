@@ -283,9 +283,10 @@ export function CommandPrompt() {
     
     const trimmedInput = input.trim();
     const parts = trimmedInput.split(/\s+/);
-    
-    // Auto-complete commands
-    if (parts.length === 1 && parts[0].length > 0) {
+    const hasTrailingSpace = input.endsWith(' ');
+
+    // Phase 1: Command auto-completion (typing command, no trailing space yet)
+    if (parts.length === 1 && parts[0].length > 0 && !hasTrailingSpace) {
       const partialCmd = parts[0].toLowerCase();
       const matchingCommands = COMMANDS.filter(cmd => cmd.startsWith(partialCmd));
       
@@ -296,65 +297,73 @@ export function CommandPrompt() {
       }
       return;
     }
-    
-    // Path completion for commands after the first word
-    if (parts.length === 2 && parts[1].length > 0) {
+
+    // Phase 2: Command is complete, entering argument area
+    //   hasTrailingSpace → "search " / "open " / "cd "
+    //   parts.length >= 2 → "search abc" / "open foo"
+    if ((parts.length === 1 && hasTrailingSpace) || (parts.length >= 2)) {
       const cmd = parts[0].toLowerCase();
-      
+
       // search command: Tab completion is NOT supported — show hint
       if (cmd === "search") {
         showTransientNoMatchHint("searchTab");
         return;
       }
-      
-      const partialPath = parts[1];
-      
-      // open/cd commands: search within current directory
-      const dir = currentDir || "/";
-      
-      try {
-        const response = await sendWebSocketMessage<CompletionResponse>({
-          type: "completion_request",
-          dir: dir,
-          prefix: partialPath,
-        });
 
-        if (response.type === "completion_response") {
-          // Filter items based on command type
-          let matchingItems = response.items;
-          
-          if (cmd === "open") {
-            // Files only (no trailing slash)
-            matchingItems = response.items.filter(item => !item.endsWith("/"));
-          } else if (cmd === "cd") {
-            // Directories only (trailing slash)
-            matchingItems = response.items.filter(item => item.endsWith("/"));
-          }
-          
-          if (matchingItems.length === 1) {
-            // Single match: auto-fill
-            setInput(`${cmd} ${matchingItems[0]}`);
-          } else if (matchingItems.length > 1) {
-            // Multiple matches: show modal
-            const event = new CustomEvent<PathCompletionEventDetail>(
-              SHOW_PATH_COMPLETION_MODAL,
-              {
-                detail: {
-                  paths: matchingItems.map(path => ({
-                    path,
-                    isDirectory: path.endsWith("/"),
-                  })),
-                  command: cmd,
-                },
-              }
-            );
-            window.dispatchEvent(event);
-          } else {
-            showTransientNoMatchHint("completion");
-          }
-        }
-      } catch {
+      // open/cd with empty argument (e.g., "open "): no completion target
+      if (parts.length === 1 && hasTrailingSpace) {
         showTransientNoMatchHint("completion");
+        return;
+      }
+
+      // open/cd: path completion with concrete prefix
+      if (parts.length >= 2 && parts[1].length > 0) {
+        const partialPath = parts[1];
+        const dir = currentDir || "/";
+
+        try {
+          const response = await sendWebSocketMessage<CompletionResponse>({
+            type: "completion_request",
+            dir: dir,
+            prefix: partialPath,
+          });
+
+          if (response.type === "completion_response") {
+            let matchingItems = response.items;
+
+            if (cmd === "open") {
+              // Files only (no trailing slash)
+              matchingItems = response.items.filter(item => !item.endsWith("/"));
+            } else if (cmd === "cd") {
+              // Directories only (trailing slash)
+              matchingItems = response.items.filter(item => item.endsWith("/"));
+            }
+
+            if (matchingItems.length === 1) {
+              // Single match: auto-fill
+              setInput(`${cmd} ${matchingItems[0]}`);
+            } else if (matchingItems.length > 1) {
+              // Multiple matches: show modal
+              const event = new CustomEvent<PathCompletionEventDetail>(
+                SHOW_PATH_COMPLETION_MODAL,
+                {
+                  detail: {
+                    paths: matchingItems.map(path => ({
+                      path,
+                      isDirectory: path.endsWith("/"),
+                    })),
+                    command: cmd,
+                  },
+                }
+              );
+              window.dispatchEvent(event);
+            } else {
+              showTransientNoMatchHint("completion");
+            }
+          }
+        } catch {
+          showTransientNoMatchHint("completion");
+        }
       }
     }
   }, [input, currentDir, sendWebSocketMessage, showTransientNoMatchHint]);

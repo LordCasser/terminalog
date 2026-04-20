@@ -58,6 +58,9 @@ jobs:
           - goos: linux
             goarch: arm64
             archive: tar.gz
+          - goos: linux
+            goarch: riscv64
+            archive: tar.gz
           - goos: darwin
             goarch: arm64
             archive: tar.gz

@@ -1,3 +1,7 @@
+import { encodePathForUrl } from '@/lib/utils/path';
+
+export { encodePathForUrl };
+
 export const COMMANDS = ["search", "open", "cd", "help"] as const;
 export const HISTORY_KEY = "terminalog_command_history";
 export const MAX_HISTORY_SIZE = 100;
@@ -5,20 +9,6 @@ export const MAX_HISTORY_SIZE = 100;
 type RouterLike = {
   push: (href: string) => void;
 };
-
-/**
- * Encode a path for use in URL path segments.
- * Preserves "/" separators but encodes special characters in each segment.
- * 
- * Note: encodeURIComponent() does not encode () which are unsafe in URL paths.
- * We manually encode parentheses as %28 and %29 to ensure proper URL handling.
- */
-export function encodePathForUrl(path: string): string {
-  return path
-    .split("/")
-    .map(segment => encodeURIComponent(segment).replace(/\(/g, '%28').replace(/\)/g, '%29'))
-    .join("/");
-}
 
 export function navigateToPath(router: RouterLike, path: string) {
   if (path.endsWith(".md")) {

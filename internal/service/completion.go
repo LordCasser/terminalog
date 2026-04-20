@@ -140,45 +140,50 @@ func (s *CompletionService) GetMatchingItems(ctx context.Context, dir, prefix st
 			}
 		}
 	} else {
-// When dir is specified, match against names relative to that directory.
-	// Use substring matching for consistency with global search.
-	for _, article := range articles {
-		// Get the name (basename)
-		name := filepath.Base(article.Path)
-		nameLower := strings.ToLower(name)
-		titleLower := strings.ToLower(article.Title)
+		// When dir is specified, match against names relative to that directory.
+		// Use prefix matching (HasPrefix) for directory-scoped completion, which is
+		// more predictable for Tab completion than substring matching.
+		// Title matching still uses Contains to support Chinese input methods.
+		for _, article := range articles {
+			// Get the name (basename)
+			name := filepath.Base(article.Path)
+			nameLower := strings.ToLower(name)
+			titleLower := strings.ToLower(article.Title)
 
-		// Match by filename or title (substring match)
-		if strings.Contains(nameLower, prefix) || strings.Contains(titleLower, prefix) {
-			// Add file without trailing slash
-			if !itemSet[name] {
-				items = append(items, name)
-				itemSet[name] = true
+			// Match by filename prefix OR title substring
+			// Filename uses HasPrefix (Tab completion convention: type first chars to narrow)
+			// Title uses Contains (supports Chinese substring matching)
+			if strings.HasPrefix(nameLower, prefix) || strings.Contains(titleLower, prefix) {
+				// Add file without trailing slash
+				if !itemSet[name] {
+					items = append(items, name)
+					itemSet[name] = true
+				}
 			}
-		}
 
-		// Handle directories - extract parent directories from paths
-		articleDir := filepath.Dir(article.Path)
-		articleDir = utils.NormalizePath(articleDir)
+			// Handle directories - extract parent directories from paths
+			articleDir := filepath.Dir(article.Path)
+			articleDir = utils.NormalizePath(articleDir)
 
-		// Get relative directory from the requested dir
-		relDir := strings.TrimPrefix(articleDir, dir)
-		relDir = strings.TrimPrefix(relDir, "/")
+			// Get relative directory from the requested dir
+			relDir := strings.TrimPrefix(articleDir, dir)
+			relDir = strings.TrimPrefix(relDir, "/")
 
-		// If there's a subdirectory that matches the prefix
-		if relDir != "" && relDir != "." {
-			// Get the first component of the relative path
-			parts := strings.Split(relDir, "/")
-			if len(parts) > 0 && parts[0] != "" {
-				subDirName := parts[0]
-				if strings.Contains(strings.ToLower(subDirName), prefix) && !itemSet[subDirName+"/"] {
-					// Add directory with trailing slash
-					items = append(items, subDirName+"/")
-					itemSet[subDirName+"/"] = true
+			// If there's a subdirectory that matches the prefix
+			if relDir != "" && relDir != "." {
+				// Get the first component of the relative path
+				parts := strings.Split(relDir, "/")
+				if len(parts) > 0 && parts[0] != "" {
+					subDirName := parts[0]
+					// Directories use HasPrefix for predictable Tab completion
+					if strings.HasPrefix(strings.ToLower(subDirName), prefix) && !itemSet[subDirName+"/"] {
+						// Add directory with trailing slash
+						items = append(items, subDirName+"/")
+						itemSet[subDirName+"/"] = true
+					}
 				}
 			}
 		}
-	}
 	}
 
 	return items, nil

@@ -12,6 +12,7 @@
 
 import { apiClient } from './client';
 import type { ArticleListResponse, ArticleDetailResponse, CommitInfo, VersionInfo } from '@/types';
+import { encodePathForUrl } from '@/lib/utils/path';
 
 /** Sort field options */
 export type SortField = 'created' | 'edited' | 'name';
@@ -20,27 +21,13 @@ export type SortField = 'created' | 'edited' | 'name';
 export type SortOrder = 'asc' | 'desc';
 
 /**
- * Encode a path for use in URL path segments.
- * Preserves "/" separators but encodes special characters in each segment.
- * 
- * Note: encodeURIComponent() does not encode () which are unsafe in URL paths.
- * We manually encode parentheses as %28 and %29 to ensure proper URL handling.
- */
-function encodePath(path: string): string {
-  return path
-    .split("/")
-    .map(segment => encodeURIComponent(segment).replace(/\(/g, '%28').replace(/\)/g, '%29'))
-    .join("/");
-}
-
-/**
  * Get directory listing (root or subdirectory)
  * GET /api/v1/articles or GET /api/v1/articles/{dirPath}
  * Returns both directories and files in the given path.
  * Optional sort/order query parameters control listing order.
  */
 export async function getArticles(dir?: string, sort?: SortField, order?: SortOrder): Promise<ArticleListResponse> {
-  let path = dir ? `/api/v1/articles/${encodePath(dir)}` : '/api/v1/articles';
+  let path = dir ? `/api/v1/articles/${encodePathForUrl(dir)}` : '/api/v1/articles';
   
   // Append sort/order query parameters if provided
   const params = new URLSearchParams();
@@ -57,7 +44,7 @@ export async function getArticles(dir?: string, sort?: SortField, order?: SortOr
  * GET /api/v1/articles/{path}
  */
 export async function getArticleContent(path: string): Promise<ArticleDetailResponse> {
-  return apiClient.get<ArticleDetailResponse>(`/api/v1/articles/${encodePath(path)}`);
+  return apiClient.get<ArticleDetailResponse>(`/api/v1/articles/${encodePathForUrl(path)}`);
 }
 
 /**
@@ -65,7 +52,7 @@ export async function getArticleContent(path: string): Promise<ArticleDetailResp
  * GET /api/v1/articles/{path}
  */
 export async function getArticleRaw(path: string): Promise<string> {
-  return apiClient.getText(`/api/v1/articles/${encodePath(path)}`);
+  return apiClient.getText(`/api/v1/articles/${encodePathForUrl(path)}`);
 }
 
 /**
@@ -73,7 +60,7 @@ export async function getArticleRaw(path: string): Promise<string> {
  * GET /api/v1/articles/{path}/timeline
  */
 export async function getArticleTimeline(path: string): Promise<{ commits: CommitInfo[] }> {
-  return apiClient.get(`/api/v1/articles/${encodePath(path)}/timeline`);
+  return apiClient.get(`/api/v1/articles/${encodePathForUrl(path)}/timeline`);
 }
 
 /**
@@ -81,5 +68,5 @@ export async function getArticleTimeline(path: string): Promise<{ commits: Commi
  * GET /api/v1/articles/{path}/version
  */
 export async function getArticleVersion(path: string): Promise<VersionInfo> {
-  return apiClient.get<VersionInfo>(`/api/v1/articles/${encodePath(path)}/version`);
+  return apiClient.get<VersionInfo>(`/api/v1/articles/${encodePathForUrl(path)}/version`);
 }

@@ -14,6 +14,7 @@
 
 import type { Article } from "@/types";
 import type { SortField, SortOrder } from "@/lib/api/articles";
+import { encodePathForUrl } from "@/lib/utils/path";
 import Link from "next/link";
 
 interface ArticleTableProps {
@@ -21,17 +22,6 @@ interface ArticleTableProps {
   sortField?: SortField;
   sortOrder?: SortOrder;
   onSort?: (field: SortField) => void;
-}
-
-/**
- * Encode a path for use in URL path segments.
- * Encodes parentheses as %28 and %29 which are unsafe in URL paths.
- */
-function encodePathForUrl(path: string): string {
-  return path
-    .split("/")
-    .map(segment => encodeURIComponent(segment).replace(/\(/g, '%28').replace(/\)/g, '%29'))
-    .join("/");
 }
 
 /**

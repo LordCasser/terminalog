@@ -409,36 +409,14 @@ export function CommandPrompt() {
       const query = cmd.trim().slice(7);
       if (!query) return;
       
-      // If query looks like a path (contains / or ends with .md), treat as direct navigation
-      // Path-style queries are absolute from root, not relative to currentDir
-      if (query.includes("/") || query.endsWith(".md")) {
-        // Use the query as-is (it's an absolute path from root)
-        // Only resolve relative paths if query doesn't start with /
-        const resolvedPath = query.startsWith("/") ? query.slice(1) : query;
-        
-        // Determine if it's a directory or article by checking if it ends with .md
-        if (query.endsWith(".md")) {
-          // Looks like an article - navigate directly
-          router.push(`/article/${encodePathForUrl(resolvedPath)}`);
-        } else {
-          // Could be a directory - validate by fetching listing
-          try {
-            await getArticles(resolvedPath);
-            router.push(`/dir/${encodePathForUrl(resolvedPath)}`);
-          } catch {
-            // Not a directory - might be an article without .md extension
-            router.push(`/article/${encodePathForUrl(resolvedPath)}`);
-          }
-        }
-        return;
-      }
-      
-      // Keyword search via REST API (more reliable than WebSocket)
+      // Always perform keyword search via REST API
+      // Path-style queries like "linux/Qemu的安装和配置(MIPS).md" are also
+      // valid search terms — the search will match against file paths and titles.
       try {
         const searchResponse = await searchArticles({ q: query });
 
         if (searchResponse.results.length > 0) {
-          // Always show modal for selection (v1.7: no single-result auto-navigation)
+          // Always show modal for selection (no single-result auto-navigation)
           const event = new CustomEvent<SearchResultsEventDetail>(
             SHOW_SEARCH_RESULTS_MODAL,
             {

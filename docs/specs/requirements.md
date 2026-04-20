@@ -634,6 +634,7 @@ password = "custom-password-123"
 | v1.5 | 2026-04-17 | **UI改进 v1.5**：导航栏选中状态（下划线不影响字体对齐，使用after伪元素）、Markdown渲染样式对齐原型HTML、EDITORS字体增大(10px→12px) |
 | v1.6 | 2026-04-18 | **API统一前缀 v1.6**：Git Smart HTTP移至`/api/v1/git/`，健康检查移至`/api/v1/healthz`等，所有API统一`/api/v1/`前缀 |
 | v1.7 | 2026-04-20 | **搜索与补全修复 v1.7**：search 不可补全（Tab 时显示提示而非触发补全）、搜索结果统一模态框（不区分单个多个）、搜索支持中文子串匹配、版本号计算使用真实 git diff 数据替代估算、URL路径括号编码修复（%28%29） |
+| v1.8 | 2026-04-20 | **代码质量与行为统一 v1.8**：encodePathForUrl 统一到 lib/utils/path.ts（消除DRY违反+编码所有不安全URL字符）、classifyChange/formatVersion 测试直接调用生产代码（消除重复实现）、GetFileCommitDiffs 添加 diffCache（push时清缓存）、目录级补全恢复 HasPrefix 匹配（全局搜索仍用 Contains）、search 命令统一走搜索流程（移除路径式快捷跳转避免混淆） |
 
 ---
 

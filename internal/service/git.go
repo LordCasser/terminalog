@@ -32,6 +32,9 @@ type GitService struct {
 
 	// historyCache avoids rescanning the full commit history for the same file.
 	historyCache sync.Map // map[string]*model.FileHistory
+
+	// diffCache avoids recomputing commit diff statistics for the same file.
+	diffCache sync.Map // map[string][]model.CommitDiffInfo
 }
 
 // NewGitService creates a new GitService instance.
@@ -351,12 +354,18 @@ func (s *GitService) GetFileHistories(ctx context.Context, filePaths []string) (
 // GetFileCommitDiffs returns real diff statistics (lines added/removed) for each
 // commit that touched a file. The results are ordered oldest-first.
 // It uses go-git's Patch API to compute accurate add/remove counts per commit.
+// Results are cached and invalidated on git push (via ReloadRepo).
 func (s *GitService) GetFileCommitDiffs(ctx context.Context, filePath string) ([]model.CommitDiffInfo, error) {
 	if s.repo == nil {
 		return nil, model.ErrRepoNotFound
 	}
 
 	filePath = strings.TrimPrefix(filePath, "/")
+
+	// Check cache first
+	if cached, ok := s.diffCache.Load(filePath); ok {
+		return cached.([]model.CommitDiffInfo), nil
+	}
 
 	// Get file history to obtain ordered commit list
 	history, err := s.GetFileHistory(ctx, filePath)
@@ -477,6 +486,8 @@ func (s *GitService) GetFileCommitDiffs(ctx context.Context, filePath string) ([
 		})
 	}
 
+	// Store in cache before returning
+	s.diffCache.Store(filePath, diffs)
 	return diffs, nil
 }
 
@@ -511,6 +522,7 @@ func (s *GitService) GetRepoPath() string {
 }
 
 // ReloadRepo re-opens the git repository to refresh cached state.
+// Called after push operations to ensure caches reflect the latest commits.
 func (s *GitService) ReloadRepo() error {
 	repo, err := git.PlainOpen(s.repoPath)
 	if err != nil {
@@ -518,6 +530,7 @@ func (s *GitService) ReloadRepo() error {
 	}
 	s.repo = repo
 	s.historyCache = sync.Map{}
+	s.diffCache = sync.Map{}
 	return nil
 }
 

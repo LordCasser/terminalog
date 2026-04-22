@@ -24,6 +24,10 @@ type TLSConfig struct {
 
 	// KeyFile is the path to the TLS private key file.
 	KeyFile string
+
+	// HTTPRedirectAddr is the address for the HTTP-to-HTTPS redirect server.
+	// Defaults to ":80" if empty. Set to "-" to disable the redirect server.
+	HTTPRedirectAddr string
 }
 
 // Server represents the HTTP server.
@@ -113,13 +117,22 @@ func (s *Server) Start() error {
 
 // StartRedirect starts an HTTP redirect server that redirects all requests to HTTPS.
 // This should be called in a goroutine when TLS is enabled.
-// The redirect server listens on port 80.
+// The redirect server listens on the address specified by TLSConfig.HTTPRedirectAddr,
+// defaulting to ":80" if empty. Set HTTPRedirectAddr to "-" to disable.
 func (s *Server) StartRedirect() error {
 	if !s.tls.Enabled {
 		return nil
 	}
 
-	redirectAddr := ":80"
+	redirectAddr := s.tls.HTTPRedirectAddr
+	if redirectAddr == "" {
+		redirectAddr = ":80"
+	}
+	if redirectAddr == "-" {
+		s.logger.Info("HTTP redirect server disabled by configuration")
+		return nil
+	}
+
 	s.logger.Info("Starting HTTP redirect server", "addr", redirectAddr)
 
 	s.redirectServer = &http.Server{

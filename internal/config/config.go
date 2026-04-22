@@ -58,6 +58,10 @@ type ServerConfig struct {
 	// KeyFile is the path to the TLS private key file (PEM format).
 	// Required when TLSEnabled is true.
 	KeyFile string `toml:"key_file"`
+
+	// HTTPRedirectAddr is the address for HTTP-to-HTTPS redirect server.
+	// Defaults to ":80" if empty. Set to "-" to disable the redirect server.
+	HTTPRedirectAddr string `toml:"http_redirect_addr"`
 }
 
 // AuthConfig contains authentication settings.

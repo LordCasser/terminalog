@@ -69,6 +69,9 @@ debug = false
 tls_enabled = true
 cert_file = "/etc/terminalog/cert.pem"
 key_file = "/etc/terminalog/key.pem"
+
+# HTTP 重定向地址（可选，默认 ":80"，设为 "-" 禁用）
+# http_redirect_addr = ":80"
 ```
 
 ### 自签名证书生成
@@ -102,9 +105,10 @@ type Server struct {
 
 ```go
 type TLSConfig struct {
-    Enabled  bool   // 是否启用 TLS
-    CertFile string // 证书文件路径
-    KeyFile  string // 私钥文件路径
+    Enabled          bool   // 是否启用 TLS
+    CertFile         string // 证书文件路径
+    KeyFile          string // 私钥文件路径
+    HTTPRedirectAddr string // HTTP→HTTPS 重定向地址（默认 ":80"，"-" 禁用）
 }
 ```
 

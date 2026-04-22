@@ -4,9 +4,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -162,9 +164,10 @@ func main() {
 
 	// Build TLS configuration
 	tlsConfig := server.TLSConfig{
-		Enabled:  cfg.Server.TLSEnabled,
-		CertFile: cfg.Server.CertFile,
-		KeyFile:  cfg.Server.KeyFile,
+		Enabled:          cfg.Server.TLSEnabled,
+		CertFile:         cfg.Server.CertFile,
+		KeyFile:          cfg.Server.KeyFile,
+		HTTPRedirectAddr: cfg.Server.HTTPRedirectAddr,
 	}
 
 	// Create HTTP server
@@ -197,7 +200,7 @@ func main() {
 	if tlsConfig.Enabled {
 		go func() {
 			if err := srv.StartRedirect(); err != nil {
-				if err.Error() != "http: Server closed" {
+				if !errors.Is(err, http.ErrServerClosed) {
 					logger.Warn("Redirect server error", "error", err)
 				}
 			}
@@ -222,7 +225,7 @@ func main() {
 	}
 
 	if err := srv.Start(); err != nil {
-		if err.Error() != "http: Server closed" {
+		if !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("Server error", "error", err)
 			os.Exit(1)
 		}
@@ -290,25 +293,4 @@ func setupLogger(level string) *slog.Logger {
 	handler := slog.NewTextHandler(os.Stdout, opts)
 
 	return slog.New(handler)
-}
-
-// printUsage prints usage information.
-func printUsage() {
-	fmt.Println("Terminalog - Terminal-style Blog System")
-	fmt.Println()
-	fmt.Println("Usage:")
-	fmt.Println("  terminalog [options]")
-	fmt.Println()
-	fmt.Println("Options:")
-	flag.PrintDefaults()
-	fmt.Println()
-	fmt.Println("Example:")
-	fmt.Println("  terminalog --config config.toml --log debug")
-	fmt.Println("  terminalog --port 3000 --content ./my-blog")
-	fmt.Println()
-	fmt.Println("First run:")
-	fmt.Println("  1. terminalog will create a default config.toml")
-	fmt.Println("  2. Edit config.toml to set your content directory")
-	fmt.Println("  3. Git repository will be auto-initialized if not exists")
-	fmt.Println("  4. Restart terminalog")
 }

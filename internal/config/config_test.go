@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -186,7 +187,7 @@ func TestValidateTLSSettings(t *testing.T) {
 				if err == nil {
 					t.Errorf("Validate() expected error but got nil")
 				} else if tt.errMsg != "" {
-					if !contains(err.Error(), tt.errMsg) {
+					if !strings.Contains(err.Error(), tt.errMsg) {
 						t.Errorf("Validate() error = %q, want to contain %q", err.Error(), tt.errMsg)
 					}
 				}
@@ -197,17 +198,4 @@ func TestValidateTLSSettings(t *testing.T) {
 			}
 		})
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

@@ -17,6 +17,9 @@ type Config struct {
 	// Blog configuration section.
 	Blog BlogConfig `toml:"blog"`
 
+	// Site configuration section (metadata, filing, etc.).
+	Site SiteConfig `toml:"site"`
+
 	// Server configuration section.
 	Server ServerConfig `toml:"server"`
 
@@ -32,6 +35,28 @@ type BlogConfig struct {
 	// Owner is the blog owner name displayed in navbar (e.g., ~/lordcasser).
 	// Default value is "lordcasser".
 	Owner string `toml:"owner"`
+}
+
+// SiteConfig contains site-level metadata and regulatory information.
+type SiteConfig struct {
+	// ICPFiling is the ICP filing number (ICP备案号) required for websites in mainland China.
+	// Example: "京ICP备12345678号-1"
+	// When set, the filing info is embedded in the page for crawler/program detection.
+	ICPFiling string `toml:"icp_filing"`
+
+	// ICPFilingURL is the URL for the ICP filing record verification.
+	// Defaults to "https://beian.miit.gov.cn/" if not set when icp_filing is configured.
+	// Example: "https://beian.miit.gov.cn/#/Integrated/recordQuery/京ICP备12345678号-1"
+	ICPFilingURL string `toml:"icp_filing_url"`
+
+	// PoliceFiling is the public security filing number (公安备案号).
+	// Example: "京公网安备11010502012345号"
+	PoliceFiling string `toml:"police_filing"`
+
+	// PoliceFilingURL is the URL for the public security filing record.
+	// Typically points to the MPS filing verification page.
+	// Example: "https://beian.mps.gov.cn/query/verifyQuery/11010502012345"
+	PoliceFilingURL string `toml:"police_filing_url"`
 }
 
 // ServerConfig contains server-related settings.
@@ -281,6 +306,12 @@ func Default() *Config {
 			ContentDir: "./content",
 			Owner:      "lordcasser",
 		},
+		Site: SiteConfig{
+			ICPFiling:       "",
+			ICPFilingURL:    "",
+			PoliceFiling:    "",
+			PoliceFilingURL: "",
+		},
 		Server: ServerConfig{
 			Host:       "0.0.0.0",
 			Port:       0, // Will be resolved: 443 for TLS, 8080 for HTTP
@@ -368,6 +399,21 @@ func (c *Config) GetOwner() string {
 		return "lordcasser"
 	}
 	return c.Blog.Owner
+}
+
+// GetSiteFiling returns the ICP filing number.
+func (c *Config) GetSiteFiling() string {
+	return c.Site.ICPFiling
+}
+
+// GetPoliceFiling returns the public security filing number and URL.
+func (c *Config) GetPoliceFiling() (number, url string) {
+	return c.Site.PoliceFiling, c.Site.PoliceFilingURL
+}
+
+// HasFilingInfo returns true if any filing information is configured.
+func (c *Config) HasFilingInfo() bool {
+	return c.Site.ICPFiling != "" || c.Site.PoliceFiling != ""
 }
 
 // GetAddr returns the server address in host:port format.

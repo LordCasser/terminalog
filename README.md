@@ -104,6 +104,17 @@ cp configs/config.toml.example /srv/terminalog/config.toml
 content_dir = "/srv/terminalog/content"
 owner = "alice"
 
+# 网站备案信息（中国大陆网站需要）
+[site]
+# ICP备案号
+# icp_filing = "京ICP备12345678号-1"
+# ICP备案查询链接（不设置时默认指向 https://beian.miit.gov.cn/）
+# icp_filing_url = "https://beian.miit.gov.cn/#/Integrated/recordQuery/京ICP备12345678号-1"
+# 公安备案号
+# police_filing = "京公网安备11010502012345号"
+# 公安备案查询链接
+# police_filing_url = "https://beian.mps.gov.cn/query/verifyQuery/11010502012345"
+
 [server]
 host = "0.0.0.0"
 port = 8080
@@ -128,6 +139,7 @@ users = [
 说明：
 - `blog.content_dir` 必须指向一个 Git 仓库
 - `blog.owner` 会显示在前端导航路径中
+- `site.icp_filing` / `site.police_filing` 网站备案信息，配置后会以不可见但爬虫可检测的方式嵌入页面
 - `auth.users` 用于 Git push 认证
 - 如果 `auth.users` 为空，首次启动会自动生成默认用户并把随机密码写到配置里
 - `server.tls_enabled` 开启后，服务通过 HTTPS 提供，同时 HTTP(80) 会自动重定向到 HTTPS

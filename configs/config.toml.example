@@ -12,6 +12,28 @@ content_dir = "./content"
 # Owner name displayed in the navbar path, for example ~/alice
 owner = "lordcasser"
 
+[site]
+# ICP filing number (ICP备案号) for websites hosted in mainland China.
+# Required by Chinese regulations for public-facing websites.
+# The filing info is embedded in the page in an invisible but crawler-detectable format.
+# Example: "京ICP备12345678号-1"
+# icp_filing = ""
+
+# ICP filing verification URL (ICP备案查询链接).
+# When icp_filing is set but this is empty, defaults to "https://beian.miit.gov.cn/".
+# Example: "https://beian.miit.gov.cn/#/Integrated/recordQuery/京ICP备12345678号-1"
+# icp_filing_url = ""
+
+# Public security filing number (公安备案号).
+# Required for websites hosted in mainland China with ICP filing.
+# Example: "京公网安备11010502012345号"
+# police_filing = ""
+
+# Public security filing verification URL (公安备案查询链接).
+# Points to the MPS (Ministry of Public Security) verification page.
+# Example: "https://beian.mps.gov.cn/query/verifyQuery/11010502012345"
+# police_filing_url = ""
+
 [server]
 # Server host address (default: 0.0.0.0 for all interfaces)
 host = "0.0.0.0"

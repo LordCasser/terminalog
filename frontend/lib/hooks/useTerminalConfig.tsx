@@ -20,6 +20,10 @@ import { apiClient } from "@/lib/api/client";
 // Frontend config response from /api/v1/settings
 interface FrontendConfig {
   owner: string;
+  icp_filing?: string;
+  icp_filing_url?: string;
+  police_filing?: string;
+  police_filing_url?: string;
 }
 
 // Context value interface
@@ -28,6 +32,10 @@ interface TerminalConfigValue {
   currentDir: string;
   setCurrentDir: (dir: string) => void;
   isLoading: boolean;
+  icpFiling: string;
+  icpFilingURL: string;
+  policeFiling: string;
+  policeFilingURL: string;
 }
 
 // Default values
@@ -60,11 +68,19 @@ const TerminalConfigContext = createContext<TerminalConfigValue>({
   currentDir: "",
   setCurrentDir: () => {},
   isLoading: true,
+  icpFiling: "",
+  icpFilingURL: "",
+  policeFiling: "",
+  policeFilingURL: "",
 });
 
 // Provider component
 export function TerminalConfigProvider({ children }: { children: ReactNode }) {
   const [owner, setOwner] = useState(DEFAULT_OWNER);
+  const [icpFiling, setIcpFiling] = useState("");
+  const [icpFilingURL, setIcpFilingURL] = useState("");
+  const [policeFiling, setPoliceFiling] = useState("");
+  const [policeFilingURL, setPoliceFilingURL] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const pathname = usePathname();
   const currentDir = extractDirFromPathname(pathname);
@@ -75,6 +91,10 @@ export function TerminalConfigProvider({ children }: { children: ReactNode }) {
       try {
         const config = await apiClient.get<FrontendConfig>("/api/v1/settings");
         setOwner(config.owner || DEFAULT_OWNER);
+        setIcpFiling(config.icp_filing || "");
+        setIcpFilingURL(config.icp_filing_url || "");
+        setPoliceFiling(config.police_filing || "");
+        setPoliceFilingURL(config.police_filing_url || "");
       } catch (error) {
         console.error("Failed to fetch config:", error);
         // Use default owner on error
@@ -98,6 +118,10 @@ export function TerminalConfigProvider({ children }: { children: ReactNode }) {
         currentDir,
         setCurrentDir: handleSetCurrentDir,
         isLoading,
+        icpFiling,
+        icpFilingURL,
+        policeFiling,
+        policeFilingURL,
       }}
     >
       {children}

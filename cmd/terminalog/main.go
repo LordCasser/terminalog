@@ -157,7 +157,12 @@ func main() {
 		Tree:      handler.NewTreeHandler(articleSvc),
 		Health:    healthHandler,
 		AboutMe:   handler.NewAboutMeHandler(fileSvc),                                  // v1.2
-		Config:    handler.NewConfigHandler(cfg.GetOwner()),                            // v1.5
+		Config: handler.NewConfigHandler(cfg.GetOwner(), handler.FilingInfo{
+			ICPFiling:       cfg.Site.ICPFiling,
+			ICPFilingURL:    cfg.Site.ICPFilingURL,
+			PoliceFiling:    cfg.Site.PoliceFiling,
+			PoliceFilingURL: cfg.Site.PoliceFilingURL,
+		}),
 		WebSocket: server.NewWebSocketHandler(completionSvc, logger, cfg.Server.Debug), // v1.4
 	}
 

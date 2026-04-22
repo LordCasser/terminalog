@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"embed"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"

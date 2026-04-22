@@ -160,8 +160,15 @@ func main() {
 		WebSocket: server.NewWebSocketHandler(completionSvc, logger, cfg.Server.Debug), // v1.4
 	}
 
+	// Build TLS configuration
+	tlsConfig := server.TLSConfig{
+		Enabled:  cfg.Server.TLSEnabled,
+		CertFile: cfg.Server.CertFile,
+		KeyFile:  cfg.Server.KeyFile,
+	}
+
 	// Create HTTP server
-	srv := server.NewServer(cfg.GetAddr(), handlers, logger, embed.StaticFS, cfg.Server.Debug)
+	srv := server.NewServer(cfg.GetAddr(), handlers, logger, embed.StaticFS, cfg.Server.Debug, tlsConfig)
 
 	// Mark server as ready
 	healthHandler.SetReady()
@@ -186,11 +193,33 @@ func main() {
 		}
 	}()
 
+	// Start HTTP redirect server if TLS is enabled
+	if tlsConfig.Enabled {
+		go func() {
+			if err := srv.StartRedirect(); err != nil {
+				if err.Error() != "http: Server closed" {
+					logger.Warn("Redirect server error", "error", err)
+				}
+			}
+		}()
+	}
+
 	// Start server
-	logger.Info("Server started", "addr", cfg.GetAddr())
-	logger.Info("Access the blog at http://" + cfg.GetAddr())
-	logger.Info("Git clone URL: http://" + cfg.GetAddr() + "/api/v1/git/")
-	logger.Info("Health check: http://" + cfg.GetAddr() + "/api/v1/healthz")
+	protocol := "http"
+	if tlsConfig.Enabled {
+		protocol = "https"
+	}
+
+	logger.Info("Server started", "addr", cfg.GetAddr(), "tls", tlsConfig.Enabled)
+	logger.Info("Access the blog at "+protocol+"://"+cfg.GetAddr())
+	logger.Info("Git clone URL: "+protocol+"://"+cfg.GetAddr()+"/api/v1/git/")
+	logger.Info("Health check: "+protocol+"://"+cfg.GetAddr()+"/api/v1/healthz")
+
+	// Console reminder for self-signed certificate
+	if tlsConfig.Enabled {
+		logger.Warn("TLS is enabled. If using a self-signed certificate, your browser will show a security warning.")
+		logger.Warn("To generate a self-signed certificate: openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj \"/CN=localhost\"")
+	}
 
 	if err := srv.Start(); err != nil {
 		if err.Error() != "http: Server closed" {

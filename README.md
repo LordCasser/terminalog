@@ -109,6 +109,11 @@ host = "0.0.0.0"
 port = 8080
 debug = false
 
+# TLS/HTTPS 配置（可选，默认关闭）
+# tls_enabled = true
+# cert_file = "/srv/terminalog/cert.pem"
+# key_file = "/srv/terminalog/key.pem"
+
 [auth]
 users = [
   { username = "writer", password = "change-this-password" },
@@ -120,6 +125,7 @@ users = [
 - `blog.owner` 会显示在前端导航路径中
 - `auth.users` 用于 Git push 认证
 - 如果 `auth.users` 为空，首次启动会自动生成默认用户并把随机密码写到配置里
+- `server.tls_enabled` 开启后，服务通过 HTTPS 提供，同时 HTTP(80) 会自动重定向到 HTTPS
 
 ### 4. 启动服务
 
@@ -136,9 +142,15 @@ http://127.0.0.1:8080
 ### 5. 验证服务
 
 ```bash
+# HTTP 模式
 curl http://127.0.0.1:8080/api/v1/healthz
 curl http://127.0.0.1:8080/api/v1/articles
 curl "http://127.0.0.1:8080/api/v1/search?q=hello"
+
+# HTTPS 模式（自签名证书需加 -k）
+curl -k https://127.0.0.1:8443/api/v1/healthz
+curl -k https://127.0.0.1:8443/api/v1/articles
+curl -k "https://127.0.0.1:8443/api/v1/search?q=hello"
 ```
 
 ## 完整部署指南
@@ -220,9 +232,44 @@ sudo systemctl enable --now terminalog
 sudo systemctl status terminalog
 ```
 
-### 步骤 4：接入反向代理
+### 步骤 4：HTTPS 配置
 
-Terminalog 自己提供 HTTP 服务。生产环境建议放在 Nginx 或 Caddy 后面做 HTTPS。
+Terminalog 支持两种 HTTPS 方案，根据你的环境选择：
+
+#### 方案 A：原生 HTTPS（推荐个人/内部使用）
+
+直接在 Terminalog 中启用 TLS，无需额外反向代理。
+
+1. 生成自签名证书（或准备正式证书）：
+
+```bash
+openssl req -x509 -newkey rsa:4096 \
+    -keyout /srv/terminalog/key.pem \
+    -out /srv/terminalog/cert.pem \
+    -days 365 -nodes \
+    -subj "/CN=localhost"
+```
+
+2. 修改 `config.toml`：
+
+```toml
+[server]
+host = "0.0.0.0"
+port = 8443
+tls_enabled = true
+cert_file = "/srv/terminalog/cert.pem"
+key_file = "/srv/terminalog/key.pem"
+```
+
+3. 启动后，Terminalog 会：
+   - 在 `8443` 端口提供 HTTPS 服务
+   - 在 `80` 端口启动 HTTP 自动重定向到 HTTPS
+
+> 注意：自签名证书会导致浏览器显示安全警告，内部使用可接受。生产环境建议使用 Let's Encrypt 或商业证书。
+
+#### 方案 B：反向代理（推荐生产环境）
+
+将 Terminalog 放在 Nginx 或 Caddy 后面，由反向代理处理 HTTPS。
 
 Nginx 示例：
 
@@ -252,7 +299,11 @@ server {
 添加远端：
 
 ```bash
+# HTTP 模式
 git remote add blog http://blog.example.com/api/v1/git/
+
+# HTTPS 模式（需配置用户名密码）
+git remote add blog https://<username>:<password>@blog.example.com/api/v1/git/
 ```
 
 推送内容：

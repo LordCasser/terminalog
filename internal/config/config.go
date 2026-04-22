@@ -46,6 +46,18 @@ type ServerConfig struct {
 	// When true, frontend static files are not embedded, allowing separate frontend dev server.
 	// CORS is enabled to allow cross-origin requests from frontend dev server.
 	Debug bool `toml:"debug"`
+
+	// TLSEnabled enables HTTPS/TLS.
+	// When true, the server serves HTTPS and redirects HTTP to HTTPS.
+	TLSEnabled bool `toml:"tls_enabled"`
+
+	// CertFile is the path to the TLS certificate file (PEM format).
+	// Required when TLSEnabled is true.
+	CertFile string `toml:"cert_file"`
+
+	// KeyFile is the path to the TLS private key file (PEM format).
+	// Required when TLSEnabled is true.
+	KeyFile string `toml:"key_file"`
 }
 
 // AuthConfig contains authentication settings.
@@ -131,9 +143,10 @@ func Default() *Config {
 			Owner:      "lordcasser",
 		},
 		Server: ServerConfig{
-			Host:  "0.0.0.0",
-			Port:  8080,
-			Debug: false, // Debug mode disabled by default
+			Host:       "0.0.0.0",
+			Port:       8080,
+			Debug:      false, // Debug mode disabled by default
+			TLSEnabled: false, // TLS disabled by default
 		},
 		Auth: AuthConfig{
 			Users: []UserConfig{},
@@ -182,6 +195,22 @@ func (c *Config) Validate() error {
 	// Validate server settings
 	if c.Server.Port < 1 || c.Server.Port > 65535 {
 		return fmt.Errorf("server.port must be between 1 and 65535")
+	}
+
+	// Validate TLS settings
+	if c.Server.TLSEnabled {
+		if c.Server.CertFile == "" {
+			return fmt.Errorf("server.cert_file is required when tls_enabled is true")
+		}
+		if c.Server.KeyFile == "" {
+			return fmt.Errorf("server.key_file is required when tls_enabled is true")
+		}
+		if _, err := os.Stat(c.Server.CertFile); err != nil {
+			return fmt.Errorf("server.cert_file not found: %w", err)
+		}
+		if _, err := os.Stat(c.Server.KeyFile); err != nil {
+			return fmt.Errorf("server.key_file not found: %w", err)
+		}
 	}
 
 	return nil

@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"embed"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -13,6 +14,18 @@ import (
 
 	"terminalog/internal/handler"
 )
+
+// TLSConfig holds TLS configuration for HTTPS.
+type TLSConfig struct {
+	// Enabled indicates whether TLS is enabled.
+	Enabled bool
+
+	// CertFile is the path to the TLS certificate file.
+	CertFile string
+
+	// KeyFile is the path to the TLS private key file.
+	KeyFile string
+}
 
 // Server represents the HTTP server.
 type Server struct {
@@ -34,6 +47,13 @@ type Server struct {
 	// debug enables debug mode.
 	// When true, static files are not embedded and CORS is enabled.
 	debug bool
+
+	// tls holds TLS configuration. When Enabled is true, the server serves HTTPS.
+	tls TLSConfig
+
+	// redirectServer is an optional HTTP server that redirects to HTTPS.
+	// Only used when TLS is enabled.
+	redirectServer *http.Server
 }
 
 // Handlers contains all HTTP handlers for the server.
@@ -51,7 +71,7 @@ type Handlers struct {
 }
 
 // NewServer creates a new Server instance.
-func NewServer(addr string, handlers *Handlers, logger *slog.Logger, embedFS embed.FS, debug bool) *Server {
+func NewServer(addr string, handlers *Handlers, logger *slog.Logger, embedFS embed.FS, debug bool, tls TLSConfig) *Server {
 	// Initialize static handler with embedded files (if not in debug mode)
 	if !debug {
 		handlers.Static = handler.NewStaticHandler(embedFS)
@@ -63,6 +83,7 @@ func NewServer(addr string, handlers *Handlers, logger *slog.Logger, embedFS emb
 		logger:   logger,
 		Handlers: handlers,
 		debug:    debug,
+		tls:      tls,
 	}
 
 	// Setup routes
@@ -81,14 +102,55 @@ func NewServer(addr string, handlers *Handlers, logger *slog.Logger, embedFS emb
 }
 
 // Start starts the HTTP server.
+// When TLS is enabled, it starts the HTTPS server and optionally an HTTP redirect server.
 func (s *Server) Start() error {
-	s.logger.Info("Server starting", "addr", s.addr)
+	if s.tls.Enabled {
+		s.logger.Info("Server starting (HTTPS)", "addr", s.addr)
+		return s.server.ListenAndServeTLS(s.tls.CertFile, s.tls.KeyFile)
+	}
+	s.logger.Info("Server starting (HTTP)", "addr", s.addr)
 	return s.server.ListenAndServe()
 }
 
-// Stop gracefully stops the HTTP server.
+// StartRedirect starts an HTTP redirect server that redirects all requests to HTTPS.
+// This should be called in a goroutine when TLS is enabled.
+// The redirect server listens on port 80.
+func (s *Server) StartRedirect() error {
+	if !s.tls.Enabled {
+		return nil
+	}
+
+	redirectAddr := ":80"
+	s.logger.Info("Starting HTTP redirect server", "addr", redirectAddr)
+
+	s.redirectServer = &http.Server{
+		Addr: redirectAddr,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			target := "https://" + r.Host + r.URL.Path
+			if r.URL.RawQuery != "" {
+				target += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, target, http.StatusMovedPermanently)
+		}),
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 5 * time.Second,
+		IdleTimeout:  10 * time.Second,
+	}
+
+	return s.redirectServer.ListenAndServe()
+}
+
+// Stop gracefully stops the HTTP server and the redirect server if running.
 func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info("Server shutting down")
+
+	// Shutdown redirect server if it exists
+	if s.redirectServer != nil {
+		if err := s.redirectServer.Shutdown(ctx); err != nil {
+			s.logger.Warn("Redirect server shutdown error", "error", err)
+		}
+	}
+
 	return s.server.Shutdown(ctx)
 }
 

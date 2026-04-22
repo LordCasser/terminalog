@@ -26,8 +26,18 @@ type TLSConfig struct {
 	KeyFile string
 
 	// HTTPRedirectAddr is the address for the HTTP-to-HTTPS redirect server.
-	// Defaults to ":80" if empty. Set to "-" to disable the redirect server.
+	// Defaults to ":80" if empty and serving on standard HTTPS port.
+	// Set to "-" to disable the redirect server.
 	HTTPRedirectAddr string
+
+	// HSTS enables the Strict-Transport-Security header.
+	// When true, the server sends HSTS header on HTTPS responses.
+	// Only effective when Enabled is true.
+	HSTS bool
+
+	// AutoCert indicates that the certificate was auto-generated for development.
+	// When true, the server logs a warning about self-signed certificates.
+	AutoCert bool
 }
 
 // Server represents the HTTP server.
@@ -118,7 +128,10 @@ func (s *Server) Start() error {
 // StartRedirect starts an HTTP redirect server that redirects all requests to HTTPS.
 // This should be called in a goroutine when TLS is enabled.
 // The redirect server listens on the address specified by TLSConfig.HTTPRedirectAddr,
-// defaulting to ":80" if empty. Set HTTPRedirectAddr to "-" to disable.
+// defaulting to ":80" if empty and serving on standard HTTPS port.
+// Set HTTPRedirectAddr to "-" to disable.
+// Uses 307 Temporary Redirect (like multifile) to preserve HTTP method and avoid
+// aggressive browser caching of 301 redirects.
 func (s *Server) StartRedirect() error {
 	if !s.tls.Enabled {
 		return nil
@@ -142,7 +155,9 @@ func (s *Server) StartRedirect() error {
 			if r.URL.RawQuery != "" {
 				target += "?" + r.URL.RawQuery
 			}
-			http.Redirect(w, r, target, http.StatusMovedPermanently)
+			// Use 307 Temporary Redirect (preserves HTTP method, not cached aggressively)
+			// Reference: multifile uses http.StatusTemporaryRedirect
+			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		}),
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
@@ -181,6 +196,11 @@ func (s *Server) setupRoutes() {
 	// Enable CORS in debug mode
 	if s.debug {
 		r.Use(s.corsMiddleware)
+	}
+
+	// Enable HSTS middleware when TLS is enabled
+	if s.tls.Enabled && s.tls.HSTS {
+		r.Use(s.hstsMiddleware)
 	}
 
 	// API routes (RESTful v1)
@@ -304,6 +324,19 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Process request
+		next.ServeHTTP(w, r)
+	})
+}
+
+// hstsMiddleware adds the Strict-Transport-Security header to HTTPS responses.
+// This tells browsers to only use HTTPS for future requests to this domain.
+// Only active when TLS is enabled and HSTS is configured.
+func (s *Server) hstsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only set HSTS header on HTTPS responses
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

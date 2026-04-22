@@ -40,6 +40,8 @@ type ServerConfig struct {
 	Host string `toml:"host"`
 
 	// Port is the server port.
+	// When TLS is enabled and Port is 0, defaults to 443.
+	// When TLS is disabled and Port is 0, defaults to 8080.
 	Port int `toml:"port"`
 
 	// Debug enables debug mode for development.
@@ -49,19 +51,34 @@ type ServerConfig struct {
 
 	// TLSEnabled enables HTTPS/TLS.
 	// When true, the server serves HTTPS and redirects HTTP to HTTPS.
+	// If CertFile/KeyFile are not set, auto-detection searches default paths.
 	TLSEnabled bool `toml:"tls_enabled"`
 
 	// CertFile is the path to the TLS certificate file (PEM format).
-	// Required when TLSEnabled is true.
+	// When empty and TLSEnabled is true, auto-detected from default paths:
+	//   - resources/https.crt
+	//   - resources/cert.pem
+	//   - cert.pem
 	CertFile string `toml:"cert_file"`
 
 	// KeyFile is the path to the TLS private key file (PEM format).
-	// Required when TLSEnabled is true.
+	// When empty and TLSEnabled is true, auto-detected from default paths:
+	//   - resources/https.key
+	//   - resources/key.pem
+	//   - key.pem
 	KeyFile string `toml:"key_file"`
 
 	// HTTPRedirectAddr is the address for HTTP-to-HTTPS redirect server.
-	// Defaults to ":80" if empty. Set to "-" to disable the redirect server.
+	// When empty and TLS is enabled on standard port 443, defaults to ":80".
+	// When empty and TLS is on non-standard port, redirect server is not started.
+	// Set to "-" to explicitly disable the redirect server.
 	HTTPRedirectAddr string `toml:"http_redirect_addr"`
+
+	// AutoCert enables auto-generation of self-signed certificates for development.
+	// When true and TLSEnabled is true but no cert files are found,
+	// a self-signed certificate will be generated to the default cert path.
+	// This should ONLY be used for development/testing, never in production.
+	AutoCert bool `toml:"auto_cert"`
 }
 
 // AuthConfig contains authentication settings.
@@ -120,6 +137,118 @@ func ResolveContentDir(contentDir, configPath string) (string, error) {
 	return filepath.Abs(filepath.Join(baseDir, contentDir))
 }
 
+// DefaultCertPaths lists default certificate file paths for auto-detection.
+// Searched in order; first existing file is used.
+var DefaultCertPaths = []string{
+	"resources/https.crt",
+	"resources/cert.pem",
+	"cert.pem",
+}
+
+// DefaultKeyPaths lists default private key file paths for auto-detection.
+// Searched in order; first existing file is used.
+var DefaultKeyPaths = []string{
+	"resources/https.key",
+	"resources/key.pem",
+	"key.pem",
+}
+
+// DefaultAutoCertDir is the directory where auto-generated certificates are saved.
+const DefaultAutoCertDir = "resources"
+
+// DefaultAutoCertName is the filename for auto-generated certificate.
+const DefaultAutoCertName = "https.crt"
+
+// DefaultAutoKeyName is the filename for auto-generated private key.
+const DefaultAutoKeyName = "https.key"
+
+// ResolveTLSSettings resolves TLS configuration with auto-detection and smart defaults.
+// It performs the following:
+//  1. Auto-detects cert/key from default paths when not explicitly configured.
+//  2. Adjusts the default port (443 for TLS, 8080 for HTTP) when port is 0.
+//  3. Determines the HTTP redirect address based on the resolved port.
+//
+// Returns the resolved TLS config and any resolution errors.
+func (c *Config) ResolveTLSSettings() (certFile, keyFile string, err error) {
+	if !c.Server.TLSEnabled {
+		return "", "", nil
+	}
+
+	// Auto-detect cert file if not explicitly set
+	certFile = c.Server.CertFile
+	if certFile == "" {
+		certFile, err = findFirstExisting(DefaultCertPaths)
+		if err != nil {
+			return "", "", fmt.Errorf("tls_enabled is true but no cert_file configured and none found in default paths: %w", err)
+		}
+		c.Server.CertFile = certFile
+	}
+
+	// Auto-detect key file if not explicitly set
+	keyFile = c.Server.KeyFile
+	if keyFile == "" {
+		keyFile, err = findFirstExisting(DefaultKeyPaths)
+		if err != nil {
+			return "", "", fmt.Errorf("tls_enabled is true but no key_file configured and none found in default paths: %w", err)
+		}
+		c.Server.KeyFile = keyFile
+	}
+
+	return certFile, keyFile, nil
+}
+
+// ResolveDefaultPort adjusts the default server port based on TLS status.
+// If the current port is 0, it sets 443 for TLS or 8080 for HTTP.
+func (c *Config) ResolveDefaultPort() {
+	if c.Server.Port == 0 {
+		if c.Server.TLSEnabled {
+			c.Server.Port = 443
+		} else {
+			c.Server.Port = 8080
+		}
+	}
+}
+
+// ResolveHTTPRedirectAddr determines the HTTP redirect address.
+// When TLS is enabled on standard port 443 and no explicit redirect addr is set,
+// it defaults to ":80". For non-standard TLS ports, the redirect server
+// is disabled unless explicitly configured.
+func (c *Config) ResolveHTTPRedirectAddr() {
+	if !c.Server.TLSEnabled {
+		return
+	}
+
+	if c.Server.HTTPRedirectAddr != "" {
+		return // Already explicitly configured
+	}
+
+	// Standard HTTPS port → auto-enable redirect on :80
+	if c.Server.Port == 443 {
+		c.Server.HTTPRedirectAddr = ":80"
+	}
+	// Non-standard port → no redirect by default (user must opt-in)
+}
+
+// GetTLSCertAndKey returns the resolved TLS certificate and key file paths.
+// This should be called after ResolveTLSSettings.
+func (c *Config) GetTLSCertAndKey() (certFile, keyFile string) {
+	return c.Server.CertFile, c.Server.KeyFile
+}
+
+// findFirstExisting returns the first path that exists from the given list.
+func findFirstExisting(paths []string) (string, error) {
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			abs, err := filepath.Abs(p)
+			if err != nil {
+				return p, nil
+			}
+			return abs, nil
+		}
+	}
+	return "", fmt.Errorf("no file found in paths: %v", paths)
+}
+
 // LoadOrCreate reads the configuration file, or creates a default one if it doesn't exist.
 func LoadOrCreate(path string) (*Config, bool, error) {
 	cfg, err := Load(path)
@@ -148,9 +277,10 @@ func Default() *Config {
 		},
 		Server: ServerConfig{
 			Host:       "0.0.0.0",
-			Port:       8080,
-			Debug:      false, // Debug mode disabled by default
-			TLSEnabled: false, // TLS disabled by default
+			Port:       0, // Will be resolved: 443 for TLS, 8080 for HTTP
+			Debug:      false,
+			TLSEnabled: false,
+			AutoCert:   false,
 		},
 		Auth: AuthConfig{
 			Users: []UserConfig{},
@@ -201,19 +331,19 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("server.port must be between 1 and 65535")
 	}
 
-	// Validate TLS settings
+	// Validate TLS settings (after auto-detection, cert/key should be resolved)
 	if c.Server.TLSEnabled {
 		if c.Server.CertFile == "" {
-			return fmt.Errorf("server.cert_file is required when tls_enabled is true")
+			return fmt.Errorf("server.cert_file is required when tls_enabled is true (auto-detection found no default cert)")
 		}
 		if c.Server.KeyFile == "" {
-			return fmt.Errorf("server.key_file is required when tls_enabled is true")
+			return fmt.Errorf("server.key_file is required when tls_enabled is true (auto-detection found no default key)")
 		}
 		if _, err := os.Stat(c.Server.CertFile); err != nil {
-			return fmt.Errorf("server.cert_file not found: %w", err)
+			return fmt.Errorf("server.cert_file not found: %s: %w", c.Server.CertFile, err)
 		}
 		if _, err := os.Stat(c.Server.KeyFile); err != nil {
-			return fmt.Errorf("server.key_file not found: %w", err)
+			return fmt.Errorf("server.key_file not found: %s: %w", c.Server.KeyFile, err)
 		}
 	}
 

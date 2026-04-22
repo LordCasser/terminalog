@@ -57,6 +57,10 @@ content/
 # Articles directory (user specific, for testing)
 articles/
 
+# TLS certificates (auto-generated for development, should not be committed)
+resources/https.crt
+resources/https.key
+
 # GoReleaser dist
 dist/
 

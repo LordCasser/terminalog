@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"terminalog/internal/server"
 	"terminalog/internal/service"
 	"terminalog/pkg/embed"
+	"terminalog/pkg/utils"
 )
 
 // Version information (can be set at build time).
@@ -53,15 +55,12 @@ func main() {
 		logger.Info("Please edit config.toml and set your content directory")
 	}
 
-	// Apply command-line overrides
+	// Apply command-line overrides (host, content dir, debug)
 	if flags.host != "" {
 		cfg.Server.Host = flags.host
 		logger.Info("Overriding server host from command line", "host", flags.host)
 	}
-	if flags.port != 0 {
-		cfg.Server.Port = flags.port
-		logger.Info("Overriding server port from command line", "port", flags.port)
-	}
+	// Note: port override is handled after ResolveDefaultPort() in TLS section below
 	if flags.contentDir != "" {
 		cfg.Blog.ContentDir = flags.contentDir
 		logger.Info("Overriding content directory from command line", "contentDir", flags.contentDir)
@@ -162,12 +161,56 @@ func main() {
 		WebSocket: server.NewWebSocketHandler(completionSvc, logger, cfg.Server.Debug), // v1.4
 	}
 
+	// Resolve TLS configuration with auto-detection and smart defaults
+	// 1. Resolve default port (443 for TLS, 8080 for HTTP) when port is 0
+	cfg.ResolveDefaultPort()
+
+	// Apply command-line port override after default resolution
+	if flags.port != 0 {
+		cfg.Server.Port = flags.port
+		logger.Info("Overriding server port from command line", "port", flags.port)
+	}
+
+	// 2. Auto-detect cert/key from default paths when not explicitly configured
+	if cfg.Server.TLSEnabled {
+		certFile, keyFile, err := cfg.ResolveTLSSettings()
+		if err != nil {
+			// If auto-detection failed and AutoCert is enabled, generate self-signed cert
+			if cfg.Server.AutoCert {
+				logger.Info("Auto-generating self-signed TLS certificate for development")
+				certPath := filepath.Join(config.DefaultAutoCertDir, config.DefaultAutoCertName)
+				keyPath := filepath.Join(config.DefaultAutoCertDir, config.DefaultAutoKeyName)
+				if err := utils.GenerateSelfSignedCert(certPath, keyPath, "localhost"); err != nil {
+					logger.Error("Failed to auto-generate TLS certificate", "error", err)
+					os.Exit(1)
+				}
+				cfg.Server.CertFile = certPath
+				cfg.Server.KeyFile = keyPath
+				certFile = certPath
+				keyFile = keyPath
+				logger.Info("Self-signed certificate generated", "cert", certPath, "key", keyPath)
+			} else {
+				logger.Error("TLS configuration error", "error", err)
+				logger.Info("Tip: Set auto_cert = true in [server] section to auto-generate a development certificate")
+				os.Exit(1)
+			}
+		} else {
+			logger.Info("TLS certificate auto-detected", "cert", certFile, "key", keyFile)
+		}
+	}
+
+	// 3. Resolve HTTP redirect address (auto-enable :80 redirect on standard HTTPS port)
+	cfg.ResolveHTTPRedirectAddr()
+
 	// Build TLS configuration
+	autoCert := cfg.Server.AutoCert && cfg.Server.TLSEnabled
 	tlsConfig := server.TLSConfig{
 		Enabled:          cfg.Server.TLSEnabled,
 		CertFile:         cfg.Server.CertFile,
 		KeyFile:          cfg.Server.KeyFile,
 		HTTPRedirectAddr: cfg.Server.HTTPRedirectAddr,
+		HSTS:             cfg.Server.TLSEnabled, // Enable HSTS when TLS is on
+		AutoCert:         autoCert,
 	}
 
 	// Create HTTP server
@@ -218,10 +261,18 @@ func main() {
 	logger.Info("Git clone URL: "+protocol+"://"+cfg.GetAddr()+"/api/v1/git/")
 	logger.Info("Health check: "+protocol+"://"+cfg.GetAddr()+"/api/v1/healthz")
 
-	// Console reminder for self-signed certificate
+	// Console reminder for TLS certificate
 	if tlsConfig.Enabled {
-		logger.Warn("TLS is enabled. If using a self-signed certificate, your browser will show a security warning.")
-		logger.Warn("To generate a self-signed certificate: openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj \"/CN=localhost\"")
+		if tlsConfig.AutoCert {
+			logger.Warn("Using AUTO-GENERATED self-signed certificate — for development only!")
+			logger.Warn("Browsers will show security warnings. Do NOT use in production.")
+		} else {
+			logger.Info("TLS enabled with certificate", "cert", tlsConfig.CertFile)
+			logger.Info("HSTS header enabled (Strict-Transport-Security)")
+		}
+		if cfg.Server.Port == 443 && cfg.Server.HTTPRedirectAddr != "-" {
+			logger.Info("HTTP→HTTPS redirect enabled", "redirect_addr", cfg.Server.HTTPRedirectAddr, "status", "307 Temporary Redirect")
+		}
 	}
 
 	if err := srv.Start(); err != nil {

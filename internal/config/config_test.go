@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestResolveContentDirRelativeToConfig(t *testing.T) {
@@ -195,6 +197,181 @@ func TestValidateTLSSettings(t *testing.T) {
 				if err != nil {
 					t.Errorf("Validate() unexpected error: %v", err)
 				}
+			}
+		})
+	}
+}
+
+func TestResolveDefaultPort(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		tlsEnabled bool
+		port       int
+		wantPort   int
+	}{
+		{"TLS disabled, port 0 → 8080", false, 0, 8080},
+		{"TLS enabled, port 0 → 443", true, 0, 443},
+		{"TLS disabled, explicit port → unchanged", false, 3000, 3000},
+		{"TLS enabled, explicit port → unchanged", true, 8443, 8443},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &Config{
+				Server: ServerConfig{
+					Port:       tt.port,
+					TLSEnabled: tt.tlsEnabled,
+				},
+			}
+			cfg.ResolveDefaultPort()
+			assert.Equal(t, tt.wantPort, cfg.Server.Port)
+		})
+	}
+}
+
+func TestResolveHTTPRedirectAddr(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		tlsEnabled     bool
+		port           int
+		explicitAddr   string
+		wantRedirectAddr string
+	}{
+		{"TLS disabled → no redirect", false, 443, "", ""},
+		{"TLS + port 443, no explicit → :80", true, 443, "", ":80"},
+		{"TLS + port 8443, no explicit → empty", true, 8443, "", ""},
+		{"TLS + port 443, explicit - → -", true, 443, "-", "-"},
+		{"TLS + port 8443, explicit :8080 → :8080", true, 8443, ":8080", ":8080"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &Config{
+				Server: ServerConfig{
+					Port:             tt.port,
+					TLSEnabled:       tt.tlsEnabled,
+					HTTPRedirectAddr: tt.explicitAddr,
+				},
+			}
+			cfg.ResolveHTTPRedirectAddr()
+			assert.Equal(t, tt.wantRedirectAddr, cfg.Server.HTTPRedirectAddr)
+		})
+	}
+}
+
+func TestResolveTLSSettingsAutoDetection(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create cert/key in a "resources" subdirectory
+	resDir := filepath.Join(tmpDir, "resources")
+	if err := os.MkdirAll(resDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	certFile := filepath.Join(resDir, "https.crt")
+	keyFile := filepath.Join(resDir, "https.key")
+	if err := os.WriteFile(certFile, []byte("cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, []byte("key"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Override default paths to point to tmpDir
+	origCertPaths := DefaultCertPaths
+	origKeyPaths := DefaultKeyPaths
+	defer func() {
+		DefaultCertPaths = origCertPaths
+		DefaultKeyPaths = origKeyPaths
+	}()
+
+	DefaultCertPaths = []string{certFile}
+	DefaultKeyPaths = []string{keyFile}
+
+	cfg := &Config{
+		Server: ServerConfig{
+			TLSEnabled: true,
+			CertFile:   "", // Not explicitly set → auto-detect
+			KeyFile:    "", // Not explicitly set → auto-detect
+		},
+	}
+
+	resolvedCert, resolvedKey, err := cfg.ResolveTLSSettings()
+	assert.NoError(t, err)
+	assert.Equal(t, certFile, resolvedCert)
+	assert.Equal(t, keyFile, resolvedKey)
+}
+
+func TestResolveTLSSettingsNoAutoDetectionWhenExplicit(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Server: ServerConfig{
+			TLSEnabled: true,
+			CertFile:   "/explicit/cert.pem",
+			KeyFile:    "/explicit/key.pem",
+		},
+	}
+
+	cert, key, err := cfg.ResolveTLSSettings()
+	assert.NoError(t, err)
+	assert.Equal(t, "/explicit/cert.pem", cert)
+	assert.Equal(t, "/explicit/key.pem", key)
+}
+
+func TestResolveTLSSettingsFailsWhenNoCertFound(t *testing.T) {
+	t.Parallel()
+
+	origCertPaths := DefaultCertPaths
+	defer func() { DefaultCertPaths = origCertPaths }()
+
+	DefaultCertPaths = []string{"/nonexistent/path/cert.pem"}
+
+	cfg := &Config{
+		Server: ServerConfig{
+			TLSEnabled: true,
+			CertFile:   "",
+			KeyFile:    "",
+		},
+	}
+
+	_, _, err := cfg.ResolveTLSSettings()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no cert_file configured")
+}
+
+func TestFindFirstExisting(t *testing.T) {
+	t.Parallel()
+
+	tmpFile := filepath.Join(t.TempDir(), "found.txt")
+	if err := os.WriteFile(tmpFile, []byte("test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		paths  []string
+		wantOK bool
+	}{
+		{"existing file", []string{tmpFile}, true},
+		{"non-existing files", []string{"/no/such/file/a", "/no/such/file/b"}, false},
+		{"empty list", []string{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := findFirstExisting(tt.paths)
+			if tt.wantOK {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
 			}
 		})
 	}

@@ -16,11 +16,37 @@ owner = "lordcasser"
 # Server host address (default: 0.0.0.0 for all interfaces)
 host = "0.0.0.0"
 
-# Server port (default: 8080)
+# Server port (default: 8080 for HTTP, 443 for HTTPS)
 port = 8080
 
 # Enable debug mode for local frontend/backend split development
 debug = false
+
+# Enable HTTPS/TLS (default: false)
+# When enabled, the server serves HTTPS and can auto-redirect HTTP to HTTPS.
+tls_enabled = false
+
+# TLS certificate file path (PEM format).
+# When tls_enabled is true and not set, auto-detected from default paths:
+#   - resources/https.crt, resources/cert.pem, cert.pem
+# cert_file = "/etc/terminalog/cert.pem"
+
+# TLS private key file path (PEM format).
+# When tls_enabled is true and not set, auto-detected from default paths:
+#   - resources/https.key, resources/key.pem, key.pem
+# key_file = "/etc/terminalog/key.pem"
+
+# HTTP→HTTPS redirect server address.
+# When tls_enabled on standard port 443, defaults to ":80".
+# For non-standard HTTPS ports, no redirect by default (opt-in).
+# Set to "-" to explicitly disable redirect.
+# http_redirect_addr = ":80"
+
+# Auto-generate self-signed certificate for development.
+# When true and tls_enabled is true but no cert files are found,
+# a self-signed certificate will be auto-generated.
+# WARNING: For development/testing ONLY! Never use in production.
+# auto_cert = false
 
 [auth]
 # Users for Git push authentication.

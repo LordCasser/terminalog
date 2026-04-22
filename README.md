@@ -111,8 +111,13 @@ debug = false
 
 # TLS/HTTPS 配置（可选，默认关闭）
 # tls_enabled = true
+
+# 证书路径（不设置时自动检测 resources/ 下的默认文件）
+# 云厂商证书映射：
+#   腾讯云 Nginx: xxx_bundle.crt → cert_file, xxx.key → key_file
+#   阿里云 Nginx: xxx.pem        → cert_file, xxx.key → key_file
 # cert_file = "/srv/terminalog/cert.pem"
-# key_file = "/srv/terminalog/key.pem"
+# key_file  = "/srv/terminalog/key.pem"
 
 [auth]
 users = [
@@ -240,32 +245,73 @@ Terminalog 支持两种 HTTPS 方案，根据你的环境选择：
 
 直接在 Terminalog 中启用 TLS，无需额外反向代理。
 
-1. 生成自签名证书（或准备正式证书）：
+**方式一：使用云厂商证书（推荐生产）**
+
+从云厂商下载 Nginx 类型的证书后，将证书文件放入 `resources/` 目录：
 
 ```bash
-openssl req -x509 -newkey rsa:4096 \
-    -keyout /srv/terminalog/key.pem \
-    -out /srv/terminalog/cert.pem \
-    -days 365 -nodes \
-    -subj "/CN=localhost"
+# 腾讯云示例（下载的 Nginx 类型证书）
+mkdir -p /srv/terminalog/resources
+cp ~/Downloads/your_domain_nginx/your_domain_bundle.crt /srv/terminalog/resources/https.crt
+cp ~/Downloads/your_domain_nginx/your_domain.key         /srv/terminalog/resources/https.key
 ```
 
-2. 修改 `config.toml`：
+```bash
+# 阿里云示例（下载的 Nginx 类型证书）
+mkdir -p /srv/terminalog/resources
+cp ~/Downloads/your_domain_nginx/your_domain.pem  /srv/terminalog/resources/https.crt
+cp ~/Downloads/your_domain_nginx/your_domain.key  /srv/terminalog/resources/https.key
+```
+
+修改 `config.toml`：
 
 ```toml
 [server]
 host = "0.0.0.0"
-port = 8443
+port = 443            # 标准 HTTPS 端口（HTTP :80 自动重定向）
 tls_enabled = true
-cert_file = "/srv/terminalog/cert.pem"
-key_file = "/srv/terminalog/key.pem"
+# cert_file / key_file 可省略，系统自动检测 resources/ 目录
+# 也可显式指定：
+# cert_file = "resources/https.crt"
+# key_file  = "resources/https.key"
 ```
 
-3. 启动后，Terminalog 会：
-   - 在 `8443` 端口提供 HTTPS 服务
-   - 在 `80` 端口启动 HTTP 自动重定向到 HTTPS
+> 💡 **证书文件对应关系**（这是最常见的问题）：
+>
+> | 云厂商下载文件 | Terminalog 用途 | 说明 |
+> |--------------|----------------|------|
+> | `xxx_bundle.crt` | → `cert_file` | 证书链（**必须用 bundle 版本**） |
+> | `xxx_bundle.pem` | → `cert_file`（备选） | 与 .crt 内容相同 |
+> | `xxx.key` | → `key_file` | 私钥 |
+> | `xxx.csr` | ❌ 不需要 | 证书签名请求，仅申请时用 |
+>
+> **关键**：一定要用 `_bundle.crt` 或 `_bundle.pem`（包含中间证书的完整证书链），不要用单独的服务器证书。
 
-> 注意：自签名证书会导致浏览器显示安全警告，内部使用可接受。生产环境建议使用 Let's Encrypt 或商业证书。
+**方式二：自签名证书（开发/测试）**
+
+```bash
+# 手动生成
+openssl req -x509 -newkey rsa:4096 \
+    -keyout /srv/terminalog/resources/https.key \
+    -out /srv/terminalog/resources/https.crt \
+    -days 365 -nodes \
+    -subj "/CN=localhost"
+```
+
+或使用 AutoCert 自动生成（在 `config.toml` 中设置）：
+
+```toml
+[server]
+tls_enabled = true
+auto_cert = true    # 证书不存在时自动生成自签名证书（仅开发用！）
+```
+
+**启动后行为：**
+
+- 标准端口 443 → 自动在 `:80` 启动 HTTP→HTTPS 重定向（307 Temporary Redirect）
+- 非标准端口 → 需手动配置 `http_redirect_addr`
+- 自动启用 HSTS 安全头（`Strict-Transport-Security`）
+- 自签名证书会导致浏览器显示安全警告，仅用于开发
 
 #### 方案 B：反向代理（推荐生产环境）
 

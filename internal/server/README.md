@@ -111,8 +111,75 @@ tls_enabled = true
 
 | 类型 | 搜索路径（按优先级） |
 |------|---------------------|
-| 证书 | `resources/https.crt` → `resources/cert.pem` → `cert.pem` |
-| 私钥 | `resources/https.key` → `resources/key.pem` → `key.pem` |
+| 证书 | `resources/https.crt` → `resources/https.pem` → `resources/server.crt` → `resources/cert.pem` → `cert.pem` |
+| 私钥 | `resources/https.key` → `resources/server.key` → `resources/key.pem` → `key.pem` |
+
+> 💡 搜索路径覆盖了常见命名习惯（https/server/cert），直接将证书文件放入 `resources/` 目录即可自动识别。
+
+### 云厂商证书映射指南
+
+从云厂商（腾讯云、阿里云、华为云等）下载 TLS 证书后，文件名和格式各不相同。
+以下是常见云厂商下载的证书文件到 Terminalog 配置的映射关系：
+
+#### 腾讯云（Nginx 类型）
+
+下载后的文件结构：
+
+```
+example.com_nginx/
+├── example.com_bundle.crt    ← 证书链（服务器证书+中间证书）
+├── example.com_bundle.pem    ← 同上（.pem 格式，内容与 .crt 完全相同）
+├── example.com.csr           ← 证书签名请求（⚠️ 不需要，仅申请时用）
+└── example.com.key           ← 私钥
+```
+
+**映射方式：**
+
+| 云厂商文件 | Terminalog 配置 | 说明 |
+|-----------|----------------|------|
+| `xxx_bundle.crt` | `cert_file` | 证书链（**必须用 bundle 版本**，包含中间证书） |
+| `xxx.key` | `key_file` | 私钥 |
+| `xxx.csr` | — | ❌ 不需要，忽略 |
+| `xxx_bundle.pem` | `cert_file`（备选） | 与 .crt 内容相同，也可使用 |
+
+**配置示例：**
+
+```toml
+[server]
+tls_enabled = true
+cert_file = "resources/lordcasser.com_bundle.crt"
+key_file  = "resources/lordcasser.com.key"
+```
+
+**或者直接复制到自动检测路径：**
+
+```bash
+# 复制到 resources/ 目录，使用自动检测默认文件名
+cp ~/Downloads/lordcasser.com_nginx/lordcasser.com_bundle.crt resources/https.crt
+cp ~/Downloads/lordcasser.com_nginx/lordcasser.com.key         resources/https.key
+```
+
+#### 阿里云（Nginx 类型）
+
+下载后的文件结构：
+
+```
+example.com_nginx/
+├── example.com.pem           ← 证书链
+└── example.com.key           ← 私钥
+```
+
+| 云厂商文件 | Terminalog 配置 |
+|-----------|----------------|
+| `xxx.pem` | `cert_file` |
+| `xxx.key` | `key_file` |
+
+#### 通用规则
+
+- ✅ **证书文件**（cert_file）：包含 `BEGIN CERTIFICATE` 的文件，优先使用 **bundle/链式** 版本
+- ✅ **私钥文件**（key_file）：包含 `BEGIN RSA PRIVATE KEY` 或 `BEGIN EC PRIVATE KEY` 的文件
+- ❌ **CSR 文件**（包含 `BEGIN CERTIFICATE REQUEST`）：**不需要**，仅用于申请证书
+- 💡 **.crt 和 .pem 可互换**：只要内容是 PEM 格式（Base64 编码），扩展名不影响功能
 
 ### 自签名证书生成
 

@@ -192,6 +192,12 @@ func main() {
 			} else {
 				logger.Error("TLS configuration error", "error", err)
 				logger.Info("Tip: Set auto_cert = true in [server] section to auto-generate a development certificate")
+				logger.Info("Tip: Or place your certificate files in the resources/ directory:")
+				logger.Info("       cert_file → resources/https.crt  (or .pem)")
+				logger.Info("       key_file  → resources/https.key")
+				logger.Info("     For cloud provider certificates (Tencent/Aliyun Nginx type):")
+				logger.Info("       cp your_domain_bundle.crt resources/https.crt")
+				logger.Info("       cp your_domain.key         resources/https.key")
 				os.Exit(1)
 			}
 		} else {

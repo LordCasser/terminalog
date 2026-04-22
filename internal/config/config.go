@@ -139,8 +139,13 @@ func ResolveContentDir(contentDir, configPath string) (string, error) {
 
 // DefaultCertPaths lists default certificate file paths for auto-detection.
 // Searched in order; first existing file is used.
+// Covers common naming conventions from cloud providers (Tencent, Aliyun, etc.)
+// and generic names (https, server, cert).
 var DefaultCertPaths = []string{
 	"resources/https.crt",
+	"resources/https.pem",
+	"resources/server.crt",
+	"resources/server.pem",
 	"resources/cert.pem",
 	"cert.pem",
 }
@@ -149,6 +154,7 @@ var DefaultCertPaths = []string{
 // Searched in order; first existing file is used.
 var DefaultKeyPaths = []string{
 	"resources/https.key",
+	"resources/server.key",
 	"resources/key.pem",
 	"key.pem",
 }

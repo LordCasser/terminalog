@@ -28,12 +28,25 @@ tls_enabled = false
 
 # TLS certificate file path (PEM format).
 # When tls_enabled is true and not set, auto-detected from default paths:
-#   - resources/https.crt, resources/cert.pem, cert.pem
+#   resources/https.crt → resources/https.pem → resources/server.crt →
+#   resources/server.pem → resources/cert.pem → cert.pem
+#
+# 💡 Cloud provider certificate mapping:
+#   Tencent Cloud (Nginx):  xxx_bundle.crt → cert_file  (use bundle version!)
+#   Aliyun (Nginx):         xxx.pem        → cert_file
+#   Huawei Cloud (Nginx):   xxx.crt        → cert_file
+#
+# Example: cert_file = "resources/lordcasser.com_bundle.crt"
 # cert_file = "/etc/terminalog/cert.pem"
 
 # TLS private key file path (PEM format).
 # When tls_enabled is true and not set, auto-detected from default paths:
-#   - resources/https.key, resources/key.pem, key.pem
+#   resources/https.key → resources/server.key → resources/key.pem → key.pem
+#
+# 💡 Cloud provider key mapping:
+#   All providers (Nginx):  xxx.key → key_file
+#
+# Example: key_file = "resources/lordcasser.com.key"
 # key_file = "/etc/terminalog/key.pem"
 
 # HTTP→HTTPS redirect server address.

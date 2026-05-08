@@ -26,6 +26,7 @@ const COMMANDS_INFO = [
   { cmd: "open <filename>", desc: "Open article for viewing" },
   { cmd: "search <keyword>", desc: "Search articles by title keyword" },
   { cmd: "help / ?", desc: "Show this help dialog" },
+  { cmd: "top", desc: "Scroll back to top of the page" },
 ];
 
 export function HelpModal() {

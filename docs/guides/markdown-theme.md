@@ -20,7 +20,7 @@ Markdown 渲染系统采用完全模块化的 CSS 变量架构。所有 Markdown
 .markdown-list*       ← 列表组件
 .markdown-table*      ← 表格组件
 .markdown-inline-code ← 行内代码组件
-.markdown-toc         ← 目录列表（由 remark-toc 生成）
+.markdown-toc         ← 目录列表（由 useTocProcessing Hook + github-slugger 生成）
 .anchor-link          ← 标题锚点链接（# 图标）
 .hljs*                ← 语法高亮令牌
 ```
@@ -436,33 +436,68 @@ markdown-theme-monokai.css  ← Monokai 风格
 
 ## 八、目录（TOC）功能
 
-Markdown 渲染支持自动目录生成，基于 `remark-toc` 插件实现。
+Markdown 渲染支持在文章中插入 `[TOC]` 标记自动生成目录。目录会精确显示在标记所在位置（内联渲染），而不是固定在最顶部。
 
 ### 8.1 使用方法
 
-在 Markdown 文章的标题层级之间插入 `[TOC]` 标记即可自动生成目录：
+在 Markdown 中需要显示目录的位置插入 `[TOC]`（大小写不敏感）：
 
 ```markdown
-## 目录
+## 漏洞背景
+
+> 这是一个引用块，说明漏洞的总体情况。
 
 [TOC]
 
-## 漏洞背景
-...
 ## 分析过程
-...
-## 修复建议
 ...
 ```
 
-### 8.2 触发方式
+目录会自动提取文章中的 **h2 及以上标题**（不包含 h1 文章标题），并生成锚点链接。
 
-| 方式 | 示例 | 说明 |
-|------|------|------|
-| `[TOC]` 标记 | `[TOC]`（支持大小写） | 在 Markdown 中直接插入，TOC 会替换该标记 |
-| 标题匹配 | `## 目录` 或 `## Contents` | 插件识别的标题关键词：`目录`、`contents` |
+### 8.2 触发条件
 
-### 8.3 CSS 样式
+| 条件 | 说明 |
+|------|------|
+| 显式 `[TOC]` 标记 | `[TOC]` 或 `[toc]` 必须单独一行存在才触发 |
+| 无标记 | 不生成 TOC，文章原样渲染 |
+
+> 注意：与早期 `remark-toc` 插件不同，当前实现**不会**自动匹配 `## 目录` 等标题来替换内容。只有显式 `[TOC]` 标记才会触发生成。
+
+### 8.3 排除规则
+
+TOC 生成时自动排除以下标题：
+- **h1 标题**：文章主标题不列入目录
+- **TOC 标题本身**：如 `## 目录`、`## Contents` 等，不会在目录中自引用
+- **代码块内标题**：fenced code block 中的 `# Title` 不会被误识别
+
+### 8.4 技术实现
+
+TOC 采用纯前端实现，不依赖第三方 remark 插件：
+
+| 组件 | 职责 |
+|------|------|
+| `useTocProcessing` Hook | 检测 `[TOC]` 标记，切分内容为 `beforeContent` + `afterContent` |
+| `extractHeadings()` | 从 markdown 中提取标题（排除 h1、代码块内标题、TOC 标题自身） |
+| `github-slugger` (`{ slug }`) | 生成与 `rehype-slug` 完全一致的标题 `id`，确保 TOC 链接精确匹配 |
+| `stripInlineMarkdown()` | 去除标题中的行内格式（反引号、粗体、斜体、链接），保证 TOC 文字干净 |
+
+**渲染流程**：
+
+```
+[原始 Markdown]
+       │
+       ▼
+  useTocProcessing()
+       │
+       ├── beforeContent ──▶ <ReactMarkdown>{beforeContent}</ReactMarkdown>
+       ├── TOC <ul>       ──▶ 独立渲染的 <ul className="markdown-toc">
+       └── afterContent  ──▶ <ReactMarkdown>{afterContent}</ReactMarkdown>
+```
+
+**Slug 匹配**：TOC 链接通过 `github-slugger`（即 `rehype-slug` 的底层依赖）生成与标题 `id` 完全一致的 slug。中英文混合标题（如 `步骤 2.1 — Netlink 消息构造`）的锚点跳转精确可靠。
+
+### 8.5 CSS 样式
 
 TOC 列表使用 `.markdown-toc` 类，与普通列表样式隔离：
 
@@ -475,18 +510,14 @@ TOC 列表使用 `.markdown-toc` 类，与普通列表样式隔离：
   border-left: 4px solid var(--color-primary-container);
   font-family: var(--font-mono);
   font-size: 0.875rem;
+  line-height: 1.75;
 }
 ```
 
 - 左侧紫色边框与警告框（Alert）风格统一
 - 等宽字体（JetBrains Mono）与代码块保持一致
 - 子项使用 `>` 箭头符号（tertiary 颜色）作为列表标记
-
-### 8.4 技术实现
-
-- **插件**：`remark-toc`（remark 插件），在 `remarkPlugins` 中配置
-- **标题 ID 生成**：由 `rehype-slug` 自动为每个标题添加 `id` 属性（支持中文）
-- **TOC 检测**：前端 `isTocList()` 函数检测 `<ul>` 中是否均为锚点链接，自动应用 `.markdown-toc` 类
+- 支持嵌套层级缩进（通过 `paddingLeft` 控制）
 
 ---
 
@@ -525,11 +556,16 @@ TOC 列表使用 `.markdown-toc` 类，与普通列表样式隔离：
 
 ### 9.3 标题 ID 生成
 
-标题 `id` 由 `rehype-slug` 插件自动生成，支持中文字符。作为后备方案，`generateSlug()` 函数将文本转为 URL 安全格式：
+标题 `id` 由 `rehype-slug` 插件自动生成（底层使用 `github-slugger` 算法）。前端同时直接导入 `github-slugger` 的 `slug` 函数，确保 TOC 链接中的所有锚点 href 与标题 `id` 精确一致。
 
+Slug 生成规则（与 `rehype-slug` / `github-slugger` 一致）：
 - 转为小写
-- 非单词字符（含中文）转为连字符 `-`
+- 删除标点符号（如 `.`、`—`、`(`、`)` 等）
+- 空格转为连字符 `-`
+- 连续多个连字符合并为一个
 - 去除首尾连字符
+
+例如 `步骤 2.1 — Netlink 消息构造` → `步骤-21--netlink-消息构造`。
 
 ---
 
@@ -561,6 +597,6 @@ Markdown 中的相对链接会通过 `next/link` 进行 SPA 导航，避免整�
 
 ## 十一、相关文档
 
-- [Frontend Architecture](./architecture.md) — 前端架构设计
-- [Frontend Implementation](./implementation.md) — 前端实现笔记
-- [Architecture Refactoring](./architecture-refactoring.md) — 前端重构记录
+- [System Architecture](../design/architecture.md) — 系统架构总览
+- [Frontend Architecture](../design/frontend-design.md) — 前端架构设计
+- [Frontend Refactoring History](../history/frontend-refactoring.md) — 前端重构记录

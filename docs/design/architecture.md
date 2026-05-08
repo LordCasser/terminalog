@@ -359,7 +359,7 @@ make release     # 跨平台构建
 - ✅ About Me 页面（从 `_ABOUTME.md` 读取）
 - ✅ 特殊文件处理（`_` 开头文件不参与列表展示）
 - ✅ 鼠标交互（顶部导航 + 底部单行 prompt）
-- ✅ 命令行交互（cd, open, search, help，支持 `cd ..`/`cd .`/`cd` 空）
+- ✅ 命令行交互（cd, open, search, help, ?, top，支持 `cd ..`/`cd .`/`cd` 空）
 - ❌ 移除命令：ls、view、clear、exit
 - ✅ 文章列表 5 列表格（Created/Updated/Editors/Filename/Latest Commit）
 - ✅ 表头点击排序（与命令行排序共用逻辑）

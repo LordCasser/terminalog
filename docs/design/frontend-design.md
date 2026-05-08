@@ -58,7 +58,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 | **Brutalist UI** | 前端 | Brutalist 风格 UI 容器，Dracula Spectrum 配色实现，0px 圆角，Glass 效果，三字体系统 | shadcn/ui, Tailwind CSS |
 | **Command Parser** | 前端 | 命令行输入解析与执行（**无 clear 命令**） | Brutalist UI |
 | **Sort Manager** | 前端 | 排序状态管理（表头点击排序 + 命令行排序共用） | Brutalist UI, API Client |
-| **Markdown Renderer** | 前端 | Markdown 内容渲染（代码高亮、公式、Mermaid、[TOC] 目录、标题锚点、内部链接路由） | Markdown 解析库，rehype-slug，remark-toc，next/link |
+| **Markdown Renderer** | 前端 | Markdown 内容渲染（代码高亮、公式、Mermaid、[TOC] 目录、标题锚点、内部链接路由） | Markdown 解析库，rehype-slug，github-slugger，useTocProcessing Hook，next/link |
 | **Article Viewer** | 前端 | 文章详情页展示（版本号、折叠式历史、EOF、标签） | Markdown Renderer |
 | **About Me** | 前端 | About Me 页面展示（从 `_ABOUTME.md` 渲染） | Markdown Renderer, API Client |
 | **API Client** | 前端 | 与后端 API 通信 | Fetch API |
@@ -159,6 +159,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 | `open <file>` | 打开文章 | `file`: 文件名 |
 | `search <keyword>` | 搜索 | `keyword`: 搜索词 |
 | `help` 或 `?` | 显示命令帮助模态框 | 无 |
+| `top` | 回到页面顶部 | 无 |
 
 > **v1.3 变更**：移除`view`命令，改为`open`命令。新增`help`和`?`命令弹出模态框展示可用命令。移除 `clear`、`ls`、`exit` 命令。排序仅通过表头点击实现。Tab键用于命令自动补全，不再作为焦点切换键。
 
@@ -180,8 +181,8 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 - 代码语法高亮（rehype-highlight + highlight.js）
 - 数学公式渲染（remark-math + rehype-katex）
 - 图片路径转换（相对路径 → `/api/v1/assets/`）
-- `[TOC]` 目录自动生成（remark-toc）
-- 标题锚点链接（rehype-slug 自动生成 id，hover 显示 `#` 图标）
+- `[TOC]` 目录自动生成（useTocProcessing Hook + github-slugger，内联渲染在标记位置）
+- 标题锚点链接（rehype-slug + github-slugger 统一 slug 生成，hover 显示 `#` 图标）
 - 内部文章链接 SPA 路由（next/link，支持 `.md` 后缀和 `./` `../` 路径）
 - 三种链接路由：外部链接 → 新标签页、锚点链接 → 平滑滚动、内部链接 → SPA 导航
 

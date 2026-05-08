@@ -2,7 +2,7 @@ import { encodePathForUrl } from '@/lib/utils/path';
 
 export { encodePathForUrl };
 
-export const COMMANDS = ["search", "open", "cd", "help"] as const;
+export const COMMANDS = ["search", "open", "cd", "help", "top"] as const;
 export const HISTORY_KEY = "terminalog_command_history";
 export const MAX_HISTORY_SIZE = 100;
 

@@ -405,6 +405,7 @@ git push blog HEAD
 - `search <keyword>`
 - `help`
 - `?`
+- `top`（回到页面顶部）
 
 当前不支持：
 - `ls`

@@ -492,6 +492,12 @@ export function CommandPrompt() {
       return;
     }
     
+    // Top command - scroll to top of page
+    if (trimmedCmd === "top") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    
     // Unknown command
     if (trimmedCmd !== "") {
       console.log(`Unknown command: ${cmd}`);

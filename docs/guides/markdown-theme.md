@@ -20,6 +20,8 @@ Markdown 渲染系统采用完全模块化的 CSS 变量架构。所有 Markdown
 .markdown-list*       ← 列表组件
 .markdown-table*      ← 表格组件
 .markdown-inline-code ← 行内代码组件
+.markdown-toc         ← 目录列表（由 remark-toc 生成）
+.anchor-link          ← 标题锚点链接（# 图标）
 .hljs*                ← 语法高亮令牌
 ```
 
@@ -34,6 +36,8 @@ Markdown 渲染系统采用完全模块化的 CSS 变量架构。所有 Markdown
 | Alert / Callout | `.markdown-alert` | GitHub 风格警告框 |
 | List | `.markdown-list` | 有序/无序列表 |
 | Table | `.markdown-table-shell` | 表格容器 |
+| TOC | `.markdown-toc` | 目录列表（由 `[TOC]` 标记触发生成） |
+| Anchor Link | `.anchor-link` | 标题悬停时显示的 `#` 锚点链接 |
 
 ---
 
@@ -430,7 +434,132 @@ markdown-theme-monokai.css  ← Monokai 风格
 
 ---
 
-## 八、相关文档
+## 八、目录（TOC）功能
+
+Markdown 渲染支持自动目录生成，基于 `remark-toc` 插件实现。
+
+### 8.1 使用方法
+
+在 Markdown 文章的标题层级之间插入 `[TOC]` 标记即可自动生成目录：
+
+```markdown
+## 目录
+
+[TOC]
+
+## 漏洞背景
+...
+## 分析过程
+...
+## 修复建议
+...
+```
+
+### 8.2 触发方式
+
+| 方式 | 示例 | 说明 |
+|------|------|------|
+| `[TOC]` 标记 | `[TOC]`（支持大小写） | 在 Markdown 中直接插入，TOC 会替换该标记 |
+| 标题匹配 | `## 目录` 或 `## Contents` | 插件识别的标题关键词：`目录`、`contents` |
+
+### 8.3 CSS 样式
+
+TOC 列表使用 `.markdown-toc` 类，与普通列表样式隔离：
+
+```css
+.markdown-toc {
+  list-style: none;
+  padding: 1.25rem 1.5rem;
+  margin: 2rem 0;
+  background-color: var(--color-surface-container);
+  border-left: 4px solid var(--color-primary-container);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+```
+
+- 左侧紫色边框与警告框（Alert）风格统一
+- 等宽字体（JetBrains Mono）与代码块保持一致
+- 子项使用 `>` 箭头符号（tertiary 颜色）作为列表标记
+
+### 8.4 技术实现
+
+- **插件**：`remark-toc`（remark 插件），在 `remarkPlugins` 中配置
+- **标题 ID 生成**：由 `rehype-slug` 自动为每个标题添加 `id` 属性（支持中文）
+- **TOC 检测**：前端 `isTocList()` 函数检测 `<ul>` 中是否均为锚点链接，自动应用 `.markdown-toc` 类
+
+---
+
+## 九、标题锚点链接
+
+每个 Markdown 标题（h1~h6）在悬停时显示 `#` 锚点图标，点击可快速复制锚点链接。
+
+### 9.1 交互行为
+
+| 操作 | 行为 |
+|------|------|
+| 鼠标悬停标题 | 标题左侧出现 `#` 图标（0.15s 透明度过渡） |
+| 点击 `#` 图标 | 平滑滚动至该标题位置（`scrollIntoView({ behavior: 'smooth' })`） |
+| 键盘 Tab 聚焦 | `#` 图标显示紫色聚焦环（无障碍支持） |
+| URL Hash 更新 | 点击后地址栏更新为 `#slug`，支持直接分享链接 |
+
+### 9.2 滚动偏移补偿
+
+由于导航栏为 `fixed` 定位，锚点滚动时通过 `::before` 伪元素补偿偏移：
+
+```css
+.markdown-body h1[id]::before,
+.markdown-body h2[id]::before,
+.markdown-body h3[id]::before,
+.markdown-body h4[id]::before,
+.markdown-body h5[id]::before,
+.markdown-body h6[id]::before {
+  content: "";
+  display: block;
+  height: 5rem;     /* 导航栏高度补偿 */
+  margin-top: -5rem;
+  visibility: hidden;
+  pointer-events: none;
+}
+```
+
+### 9.3 标题 ID 生成
+
+标题 `id` 由 `rehype-slug` 插件自动生成，支持中文字符。作为后备方案，`generateSlug()` 函数将文本转为 URL 安全格式：
+
+- 转为小写
+- 非单词字符（含中文）转为连字符 `-`
+- 去除首尾连字符
+
+---
+
+## 十、内部文章链接
+
+Markdown 中的相对链接会通过 `next/link` 进行 SPA 导航，避免整页刷新。
+
+### 10.1 三种链接路由
+
+| 链接类型 | 示例 | 行为 |
+|---------|------|------|
+| 外部链接 | `https://example.com` | `target="_blank"` 新标签页打开 |
+| 锚点链接 | `#section-1` | `scrollIntoView` 平滑滚动 |
+| 内部文章链接 | `./other-article.md` 或 `../guide.md` | SPA 导航到 `/article/...` 路径 |
+
+### 10.2 路径转换规则
+
+```
+./guide.md              →  /article/guide
+../guides/tips.md       →  /article/tips
+../tech/golang/basics   →  /article/tech/golang/basics
+```
+
+- 自动去除 `.md` 后缀
+- 自动解析 `./` 和 `../` 前缀
+- 使用 `encodePathForUrl` 工具函数进行 URL 编码（特殊字符如 `!` `*` 等已转义）
+
+---
+
+## 十一、相关文档
 
 - [Frontend Architecture](./architecture.md) — 前端架构设计
 - [Frontend Implementation](./implementation.md) — 前端实现笔记

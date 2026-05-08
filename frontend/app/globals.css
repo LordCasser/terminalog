@@ -951,3 +951,74 @@ body {
 .tag-outline {
   color: var(--color-outline);
 }
+
+/* ============================================
+   Table of Contents (TOC) Styles
+   ============================================ */
+.markdown-toc {
+  list-style: none;
+  padding: 1.25rem 1.5rem;
+  margin: 2rem 0;
+  background-color: var(--color-surface-container);
+  border-left: 4px solid var(--color-primary-container);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.75;
+}
+
+.markdown-toc .markdown-list__item {
+  padding: 0.125rem 0;
+}
+
+.markdown-toc .markdown-list__item::before {
+  content: ">";
+  color: var(--color-tertiary);
+  margin-right: 0.75rem;
+  font-weight: bold;
+}
+
+.markdown-toc .markdown-list__content {
+  display: inline;
+}
+
+.markdown-toc a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.markdown-toc a:hover {
+  color: var(--color-secondary);
+  text-decoration: underline;
+}
+
+/* ============================================
+   Anchor Link (#) Styles
+   ============================================ */
+.anchor-link {
+  font-size: 0.85em;
+  text-decoration: none !important;
+  transition: opacity 0.15s ease;
+}
+
+.anchor-link:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--color-primary-container);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Scroll offset for anchor targets (compensate for fixed navbar) */
+.markdown-body h1[id]::before,
+.markdown-body h2[id]::before,
+.markdown-body h3[id]::before,
+.markdown-body h4[id]::before,
+.markdown-body h5[id]::before,
+.markdown-body h6[id]::before {
+  content: "";
+  display: block;
+  height: 5rem;   /* navbar height approximation */
+  margin-top: -5rem;
+  visibility: hidden;
+  pointer-events: none;
+}

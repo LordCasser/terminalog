@@ -14,6 +14,8 @@ Terminalog 是一个用 Go 和 Next.js 构建的终端风格博客系统。内�
 - 终端式博客 UI，支持鼠标点击和命令输入两种交互
 - 支持 `cd`、`open`、`search`、`help`、`?`
 - Markdown 渲染支持 GFM、GitHub Alerts、代码高亮、KaTeX
+- `[TOC]` 自动目录生成 + 标题锚点链接（hover 显示 `#` 图标）
+- 内部文章链接自动转换为 SPA 导航（`next/link`）
 - 文章创建时间、更新时间、贡献者、时间线来自 Git 提交历史
 - `_ABOUTME.md` 作为 About Me 页面内容
 - `.assets/` 可存放文章引用图片等资源

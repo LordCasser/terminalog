@@ -58,7 +58,7 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 | **Brutalist UI** | 前端 | Brutalist 风格 UI 容器，Dracula Spectrum 配色实现，0px 圆角，Glass 效果，三字体系统 | shadcn/ui, Tailwind CSS |
 | **Command Parser** | 前端 | 命令行输入解析与执行（**无 clear 命令**） | Brutalist UI |
 | **Sort Manager** | 前端 | 排序状态管理（表头点击排序 + 命令行排序共用） | Brutalist UI, API Client |
-| **Markdown Renderer** | 前端 | Markdown 内容渲染（代码高亮、公式、Mermaid，Inter 字体） | Markdown 解析库 |
+| **Markdown Renderer** | 前端 | Markdown 内容渲染（代码高亮、公式、Mermaid、[TOC] 目录、标题锚点、内部链接路由） | Markdown 解析库，rehype-slug，remark-toc，next/link |
 | **Article Viewer** | 前端 | 文章详情页展示（版本号、折叠式历史、EOF、标签） | Markdown Renderer |
 | **About Me** | 前端 | About Me 页面展示（从 `_ABOUTME.md` 渲染） | Markdown Renderer, API Client |
 | **API Client** | 前端 | 与后端 API 通信 | Fetch API |
@@ -177,10 +177,13 @@ Terminalog 前端采用 **Next.js 静态导出** 模式，生成纯静态 HTML/C
 
 **职责**：
 - 渲染 Markdown 内容
-- 代码语法高亮
-- 数学公式渲染
-- Mermaid 流程图渲染
-- 图片路径转换
+- 代码语法高亮（rehype-highlight + highlight.js）
+- 数学公式渲染（remark-math + rehype-katex）
+- 图片路径转换（相对路径 → `/api/v1/assets/`）
+- `[TOC]` 目录自动生成（remark-toc）
+- 标题锚点链接（rehype-slug 自动生成 id，hover 显示 `#` 图标）
+- 内部文章链接 SPA 路由（next/link，支持 `.md` 后缀和 `./` `../` 路径）
+- 三种链接路由：外部链接 → 新标签页、锚点链接 → 平滑滚动、内部链接 → SPA 导航
 
 **Markdown渲染样式约束（v1.3新增，v1.5对齐原型HTML）**：
 - 正文文本使用Inter字体，text-lg大小，text-on-surface-variant颜色，leading-relaxed行间距
@@ -1347,7 +1350,7 @@ cp -r frontend/out/* ../pkg/embed/static/
 - ✅ 终端风格 UI（Dracula 配色）
 - ✅ 命令行交互（cd, open, search, help, ?）
 - ✅ 鼠标点击导航
-- ✅ Markdown 渲染（代码高亮、公式、Mermaid、图片）
+- ✅ Markdown 渲染（代码高亮、公式、Mermaid、图片、[TOC] 目录、标题锚点、内部链接路由）
 - ✅ 编辑时间线展示
 - ✅ 光标闪烁效果
 
@@ -1358,7 +1361,6 @@ cp -r frontend/out/* ../pkg/embed/static/
 | 命令历史上下键 | 中 | 支持 ↑↓ 浏览历史命令 |
 | 命令自动补全 | 低 | Tab 补全路径和命令 |
 | 更多终端命令 | 低 | pwd, cat, tree 等 |
-| 文章目录 TOC | 低 | 长文章目录导航 |
 | 深色/浅色主题切换 | 低 | 支持非终端风格模式 |
 
 ---

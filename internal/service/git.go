@@ -523,14 +523,35 @@ func (s *GitService) GetRepoPath() string {
 
 // ReloadRepo re-opens the git repository to refresh cached state.
 // Called after push operations to ensure caches reflect the latest commits.
+//
+// IMPORTANT: go-git's PlainOpen may internally cache packfile indices that
+// survive across calls to PlainOpen within the same process. To work around
+// this, we explicitly set s.repo = nil before re-opening to allow the old
+// Repository and its associated storage caches to be garbage collected.
 func (s *GitService) ReloadRepo() error {
+	// Clear the old repository reference first. This allows the previous
+	// go-git Repository's internal packfile index caches to be GC'd, so
+	// the subsequent PlainOpen reads fresh data from disk.
+	s.repo = nil
+
+	// Clear all caches
+	s.historyCache = sync.Map{}
+	s.diffCache = sync.Map{}
+
+	// Re-open the repository with fresh storage
 	repo, err := git.PlainOpen(s.repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to re-open git repository: %w", err)
 	}
 	s.repo = repo
-	s.historyCache = sync.Map{}
-	s.diffCache = sync.Map{}
+
+	// Verify the repository is accessible by resolving HEAD.
+	// This also serves as a smoke test that PlainOpen succeeded.
+	if _, err := repo.Head(); err != nil {
+		return fmt.Errorf("failed to verify repository HEAD after reload: %w", err)
+	}
+
+	log.Printf("ReloadRepo: repository reloaded successfully at %s", s.repoPath)
 	return nil
 }
 
@@ -538,6 +559,10 @@ func (s *GitService) ReloadRepo() error {
 // synchronize the working directory with the current HEAD.
 // This is needed after push operations because `git receive-pack` only
 // updates refs and objects, not the working tree.
+//
+// After checkout, it also runs `git gc --auto --quiet` to compact any
+// loose objects created by the push. This ensures that go-git's
+// subsequent PlainOpen can reliably discover all objects.
 func (s *GitService) CheckoutWorkingTree() error {
 	cmd := exec.Command("git", "checkout", "--force")
 	cmd.Dir = s.repoPath
@@ -551,6 +576,16 @@ func (s *GitService) CheckoutWorkingTree() error {
 	}
 
 	log.Printf("CheckoutWorkingTree: working directory updated to match HEAD")
+
+	// Compact loose objects to ensure go-git discoverability.
+	// git gc --auto is a no-op when not needed, so this is cheap.
+	gcCmd := exec.Command("git", "gc", "--auto", "--quiet")
+	gcCmd.Dir = s.repoPath
+	if err := gcCmd.Run(); err != nil {
+		// Non-fatal: gc --auto errors are advisory (e.g., lock contention)
+		log.Printf("CheckoutWorkingTree: git gc --auto: %v (non-fatal)", err)
+	}
+
 	return nil
 }
 

@@ -165,13 +165,21 @@ func (h *GitHandler) ReceivePack(w http.ResponseWriter, r *http.Request) {
 	// After push completes:
 	// 1. Checkout working directory to reflect pushed content
 	//    (git receive-pack only updates refs/objects, not working tree)
-	// 2. Reload go-git repo to refresh cached state for read operations
+	// 2. Compact objects to ensure go-git discoverability
+	// 3. Reload go-git repo to refresh cached state for read operations
+	// 4. Invalidate article cache so next request serves fresh content
+
 	if checkoutErr := h.gitSvc.CheckoutWorkingTree(); checkoutErr != nil {
-		log.Printf("ReceivePack: checkout failed: %v", checkoutErr)
+		log.Printf("ReceivePack: WARNING - checkout failed, content may be stale until next push: %v", checkoutErr)
 	}
+
 	if reloadErr := h.gitSvc.ReloadRepo(); reloadErr != nil {
-		log.Printf("ReceivePack: failed to reload repo: %v", reloadErr)
+		log.Printf("ReceivePack: WARNING - failed to reload git repo, article listing may not reflect latest push: %v", reloadErr)
 	}
+
+	// Always invalidate article cache after push, even if checkout/reload had
+	// issues. This ensures that if the underlying issue is transient (e.g.,
+	// filesystem cache delay), the next page request will trigger a fresh scan.
 	if h.onRepoUpdate != nil {
 		h.onRepoUpdate()
 	}

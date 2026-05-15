@@ -163,14 +163,14 @@ func (h *GitHandler) ReceivePack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// After push completes:
-	// 1. Checkout working directory to reflect pushed content
+	// 1. Synchronize working directory to reflect pushed content
 	//    (git receive-pack only updates refs/objects, not working tree)
 	// 2. Compact objects to ensure go-git discoverability
 	// 3. Reload go-git repo to refresh cached state for read operations
 	// 4. Invalidate article cache so next request serves fresh content
 
 	if checkoutErr := h.gitSvc.CheckoutWorkingTree(); checkoutErr != nil {
-		log.Printf("ReceivePack: WARNING - checkout failed, content may be stale until next push: %v", checkoutErr)
+		log.Printf("ReceivePack: WARNING - worktree sync failed, content may be stale until next push: %v", checkoutErr)
 	}
 
 	if reloadErr := h.gitSvc.ReloadRepo(); reloadErr != nil {

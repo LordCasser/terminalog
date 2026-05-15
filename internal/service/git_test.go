@@ -2,6 +2,10 @@ package service_test
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -201,4 +205,60 @@ func TestGitService_GetRepoPath(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, repo.Path, gitSvc.GetRepoPath())
+}
+
+func TestGitService_CheckoutWorkingTreeAfterPushToCheckedOutBranch(t *testing.T) {
+	repo, err := testutil.NewTestRepo()
+	require.NoError(t, err)
+	defer repo.Cleanup()
+
+	require.NoError(t, repo.CreateMarkdownFile("existing.md", "# Existing", "Add existing", "author"))
+
+	gitSvc, err := service.NewGitService(repo.Path)
+	require.NoError(t, err)
+
+	clientDir := filepath.Join(t.TempDir(), "client")
+	runGit(t, "", "clone", repo.Path, clientDir)
+	runGit(t, clientDir, "config", "user.email", "push@example.com")
+	runGit(t, clientDir, "config", "user.name", "Pusher")
+
+	require.NoError(t, os.WriteFile(filepath.Join(clientDir, "new-article.md"), []byte("# New Article\n"), 0644))
+	runGit(t, clientDir, "add", "new-article.md")
+	runGit(t, clientDir, "commit", "-m", "Add new article")
+
+	branch := currentBranch(t, repo.Path)
+	runGit(t, clientDir, "push", "origin", "HEAD:"+branch)
+
+	// Pushing into a checked-out non-bare repository updates refs/objects but
+	// deliberately leaves the worktree stale. This is the production symptom:
+	// file scanning cannot see the new article until the worktree is synced.
+	_, statErr := os.Stat(filepath.Join(repo.Path, "new-article.md"))
+	require.True(t, os.IsNotExist(statErr), "test setup expected pushed file to be absent before worktree sync")
+
+	require.NoError(t, gitSvc.CheckoutWorkingTree())
+
+	content, err := os.ReadFile(filepath.Join(repo.Path, "new-article.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "# New Article\n", string(content))
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, output)
+}
+
+func currentBranch(t *testing.T, dir string) string {
+	t.Helper()
+
+	cmd := exec.Command("git", "branch", "--show-current")
+	cmd.Dir = dir
+	output, err := cmd.Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(output))
 }

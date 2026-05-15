@@ -48,7 +48,7 @@ func NewGitService(repoPath string) (*GitService, error) {
 
 	// Configure repository to allow pushing to the checked-out branch.
 	// By default, git rejects pushes to the current branch in non-bare repos.
-	// We handle working directory updates ourselves via checkout after push.
+	// We handle working directory updates ourselves via reset after push.
 	cmd := exec.Command("git", "config", "receive.denyCurrentBranch", "ignore")
 	cmd.Dir = repoPath
 	if err := cmd.Run(); err != nil {
@@ -555,24 +555,32 @@ func (s *GitService) ReloadRepo() error {
 	return nil
 }
 
-// CheckoutWorkingTree runs `git checkout --force` in the repository to
+// CheckoutWorkingTree runs `git reset --hard HEAD` in the repository to
 // synchronize the working directory with the current HEAD.
 // This is needed after push operations because `git receive-pack` only
 // updates refs and objects, not the working tree.
 //
-// After checkout, it also runs `git gc --auto --quiet` to compact any
+// After reset, it also runs `git gc --auto --quiet` to compact any
 // loose objects created by the push. This ensures that go-git's
 // subsequent PlainOpen can reliably discover all objects.
 func (s *GitService) CheckoutWorkingTree() error {
-	cmd := exec.Command("git", "checkout", "--force")
+	// Do not use `git checkout --force` here. After receiving a push into the
+	// currently checked-out branch with receive.denyCurrentBranch=ignore, HEAD
+	// already points at the new commit, but the index and worktree still point
+	// at the old contents. `git checkout --force` can short-circuit because the
+	// branch is "already checked out", leaving newly pushed files invisible to
+	// FileService scans until some external reset/restart workflow fixes the
+	// worktree. `reset --hard HEAD` explicitly rewrites both index and worktree
+	// to the pushed commit.
+	cmd := exec.Command("git", "reset", "--hard", "HEAD")
 	cmd.Dir = s.repoPath
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		log.Printf("CheckoutWorkingTree: git checkout failed: %v, stderr: %s", err, stderr.String())
-		return fmt.Errorf("git checkout failed: %w", err)
+		log.Printf("CheckoutWorkingTree: git reset --hard failed: %v, stderr: %s", err, stderr.String())
+		return fmt.Errorf("git reset --hard failed: %w", err)
 	}
 
 	log.Printf("CheckoutWorkingTree: working directory updated to match HEAD")

@@ -531,7 +531,7 @@ export function CommandPrompt() {
 
   return (
     <footer className="fixed bottom-0 left-0 w-full z-50 bg-surface shadow-[0_-4px_20px_rgba(0,0,0,0.4)] border-t border-surface-container-highest">
-      <form onSubmit={handleSubmit} className="flex items-center gap-3 px-6 h-16 font-mono text-sm">
+      <form onSubmit={handleSubmit} className="flex items-center gap-3 px-6 h-16 font-terminal text-sm">
         {/* Path Display */}
         <span className="text-tertiary font-bold">guest@blog:</span>
         <span className="text-secondary font-bold ml-1">~/{owner}{currentDir ? `/${currentDir}` : ""}</span>
@@ -555,7 +555,7 @@ export function CommandPrompt() {
           {/* Hidden span to measure input text width for cursor positioning */}
           <span
             ref={cursorMeasureRef}
-            className="absolute invisible whitespace-pre font-mono text-sm left-0 top-0"
+            className="absolute invisible whitespace-pre font-terminal text-sm left-0 top-0"
             aria-hidden="true"
           >
             {input}
@@ -564,7 +564,7 @@ export function CommandPrompt() {
           {/* No Match Hint (above input at cursor position, shows for 1 second) */}
           {showNoMatchHint && (
             <span 
-              className="absolute bottom-full mb-2 px-2 py-1 bg-surface-container-high text-error font-mono text-xs rounded"
+              className="absolute bottom-full mb-2 px-2 py-1 bg-surface-container-high text-error font-terminal text-xs rounded"
               style={{ left: `${cursorPosition}px` }}
             >
               {noMatchHintType === "searchTab"

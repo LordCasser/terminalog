@@ -138,19 +138,19 @@ export function ArticleContent() {
           </div>
           
           {/* Title */}
-          <h1 className="font-headline font-bold text-5xl leading-none text-on-surface tracking-tighter mb-8">
+          <h1 className="font-article font-bold text-5xl leading-none text-on-surface tracking-tighter mb-8">
             {articleHeading}
           </h1>
         </section>
         
         {/* Content - Use MarkdownRenderer */}
-        <article className="space-y-12 text-on-surface-variant leading-relaxed">
+        <article className="font-article space-y-12 text-on-surface-variant leading-relaxed">
           <MarkdownRenderer content={renderedContent} basePath={basePath} />
           
           {/* EOF Section */}
           <section className="border-t border-surface-container pt-12">
-            <div className="font-mono text-sm space-y-4">
-              <p className="text-sm font-mono text-outline uppercase tracking-[0.2em] mb-6">
+            <div className="font-article text-sm space-y-4">
+              <p className="text-sm font-article text-outline uppercase tracking-[0.2em] mb-6">
                 EOF (END OF FILE)
               </p>
               

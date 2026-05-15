@@ -72,3 +72,9 @@ dist/
 
 # Root binary (build output)
 /terminalog
+
+# Screenshots / reference images (should not be committed)
+*.png
+*.jpg
+*.jpeg
+*.gif

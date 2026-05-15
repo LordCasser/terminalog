@@ -74,7 +74,9 @@
   /* Font Families */
   --font-headline: "Space Grotesk", sans-serif;
   --font-body: "Inter", sans-serif;
-  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-article: "Fira Code", monospace;
+  --font-terminal: "Fira Code", monospace;
   --font-label: "Space Grotesk", sans-serif;
   
   /* Border Radius - Brutalist 0px */
@@ -103,9 +105,9 @@
   /* --- Typography --- */
   --md-font-size: 1.05rem;
   --md-line-height: 1.9;
-  --md-font-body: var(--font-body);
-  --md-font-headline: var(--font-headline);
-  --md-font-mono: var(--font-mono);
+  --md-font-body: var(--font-article);
+  --md-font-headline: var(--font-article);
+  --md-font-mono: var(--font-article);
   
   /* --- Colors: Body Text --- */
   --md-color-text: var(--color-on-surface-variant);
@@ -235,6 +237,14 @@ body {
   min-height: 100vh;
 }
 
+.font-article {
+  font-family: var(--font-article);
+}
+
+.font-terminal {
+  font-family: var(--font-terminal);
+}
+
 /* Selection */
 ::selection {
   background-color: var(--color-primary-container);
@@ -343,6 +353,7 @@ body {
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
+  font-family: var(--md-font-headline);
   line-height: 1.25;
   margin-top: 2rem;
   margin-bottom: 0.75rem;
@@ -961,7 +972,7 @@ body {
   margin: 2rem 0;
   background-color: var(--color-surface-container);
   border-left: 4px solid var(--color-primary-container);
-  font-family: var(--font-mono);
+  font-family: var(--font-article);
   font-size: 0.875rem;
   line-height: 1.75;
 }

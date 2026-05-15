@@ -8,8 +8,7 @@
  * - Code syntax highlighting (rehype-highlight)
  * - Math formula rendering (remark-math + rehype-katex)
  * - [TOC] / Table of Contents generation (remark-toc)
- * - Visible heading level markers (#, ##, ###, …) in muted monospace
- * - Heading anchor links (¶) with smooth scroll on hover (rehype-slug)
+ * - Heading anchor links with smooth scroll (rehype-slug)
  * - Internal article link routing (next/link)
  * - External links open in new tab
  * - Image path transformation (relative -> /api/v1/assets/ paths)
@@ -247,21 +246,19 @@ function handleAnchorClick(e: React.MouseEvent, href: string) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function markdownComponents(basePath?: string): any {
   return {
-    // ----- Headings with anchor links & visible level markers -----
+    // ----- Headings with anchor links -----
     h1: ({ children, id }: { children: ReactNode; id?: string }) => {
       const slug = id || generateSlug(children);
       return (
         <h1 id={slug}
             className="group font-headline text-4xl md:text-5xl font-bold leading-none
                        text-on-surface tracking-tighter mb-8 mt-12 first:mt-0">
-          <span className="select-none text-outline-variant font-mono mr-2"
-                aria-hidden="true">#</span>
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
-             className="anchor-link opacity-0 group-hover:opacity-100 focus-visible:opacity-100
-                        mr-1 text-outline no-underline select-none
+             className="anchor-link focus-visible:opacity-100
+                        mr-2 text-secondary no-underline select-none
                         transition-opacity duration-150"
-             aria-hidden="true">¶</a>
+             aria-hidden="true">#</a>
           {children}
         </h1>
       );
@@ -272,14 +269,12 @@ function markdownComponents(basePath?: string): any {
       return (
         <h2 id={slug}
             className="group font-headline text-3xl font-bold text-secondary-fixed-dim">
-          <span className="select-none text-outline-variant font-mono mr-2"
-                aria-hidden="true">##</span>
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
-             className="anchor-link opacity-0 group-hover:opacity-100 focus-visible:opacity-100
-                        mr-1 text-outline no-underline select-none
+             className="anchor-link focus-visible:opacity-100
+                        mr-2 text-secondary no-underline select-none
                         transition-opacity duration-150"
-             aria-hidden="true">¶</a>
+             aria-hidden="true">#</a>
           {children}
         </h2>
       );
@@ -290,14 +285,12 @@ function markdownComponents(basePath?: string): any {
       return (
         <h3 id={slug}
             className="group font-headline text-2xl font-bold text-secondary-fixed mb-4">
-          <span className="select-none text-outline-variant font-mono mr-2"
-                aria-hidden="true">###</span>
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
-             className="anchor-link opacity-0 group-hover:opacity-100 focus-visible:opacity-100
-                        mr-1 text-outline no-underline select-none
+             className="anchor-link focus-visible:opacity-100
+                        mr-2 text-secondary no-underline select-none
                         transition-opacity duration-150"
-             aria-hidden="true">¶</a>
+             aria-hidden="true">#</a>
           {children}
         </h3>
       );
@@ -308,14 +301,12 @@ function markdownComponents(basePath?: string): any {
       return (
         <h4 id={slug}
             className="group font-headline text-xl font-bold text-on-surface mb-4">
-          <span className="select-none text-outline-variant font-mono mr-2"
-                aria-hidden="true">####</span>
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
-             className="anchor-link opacity-0 group-hover:opacity-100 focus-visible:opacity-100
-                        mr-1 text-outline no-underline select-none
+             className="anchor-link focus-visible:opacity-100
+                        mr-2 text-secondary no-underline select-none
                         transition-opacity duration-150"
-             aria-hidden="true">¶</a>
+             aria-hidden="true">#</a>
           {children}
         </h4>
       );
@@ -326,14 +317,12 @@ function markdownComponents(basePath?: string): any {
       return (
         <h5 id={slug}
             className="group font-headline text-lg font-bold text-on-surface mb-3">
-          <span className="select-none text-outline-variant font-mono mr-2"
-                aria-hidden="true">#####</span>
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
-             className="anchor-link opacity-0 group-hover:opacity-100 focus-visible:opacity-100
-                        mr-1 text-outline no-underline select-none
+             className="anchor-link focus-visible:opacity-100
+                        mr-2 text-secondary no-underline select-none
                         transition-opacity duration-150"
-             aria-hidden="true">¶</a>
+             aria-hidden="true">#</a>
           {children}
         </h5>
       );
@@ -344,14 +333,12 @@ function markdownComponents(basePath?: string): any {
       return (
         <h6 id={slug}
             className="group font-headline text-base font-bold text-on-surface mb-2">
-          <span className="select-none text-outline-variant font-mono mr-2"
-                aria-hidden="true">######</span>
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
-             className="anchor-link opacity-0 group-hover:opacity-100 focus-visible:opacity-100
-                        mr-1 text-outline no-underline select-none
+             className="anchor-link focus-visible:opacity-100
+                        mr-2 text-secondary no-underline select-none
                         transition-opacity duration-150"
-             aria-hidden="true">¶</a>
+             aria-hidden="true">#</a>
           {children}
         </h6>
       );

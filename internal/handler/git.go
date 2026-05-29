@@ -169,12 +169,26 @@ func (h *GitHandler) ReceivePack(w http.ResponseWriter, r *http.Request) {
 	// 3. Reload go-git repo to refresh cached state for read operations
 	// 4. Invalidate article cache so next request serves fresh content
 
+	// Post-push synchronization: ensure the working tree and go-git
+	// caches reflect the newly pushed commits before the next page
+	// request.
+	//
+	// The HTTP response has already been committed (ServiceRPC streams
+	// the git protocol response), so we cannot report errors to the git
+	// client here.  Instead, failures are logged at high severity so the
+	// operator can investigate.
+	var syncErrors []string
+
 	if checkoutErr := h.gitSvc.CheckoutWorkingTree(); checkoutErr != nil {
-		log.Printf("ReceivePack: WARNING - worktree sync failed, content may be stale until next push: %v", checkoutErr)
+		syncErrors = append(syncErrors, fmt.Sprintf("worktree sync: %v", checkoutErr))
 	}
 
 	if reloadErr := h.gitSvc.ReloadRepo(); reloadErr != nil {
-		log.Printf("ReceivePack: WARNING - failed to reload git repo, article listing may not reflect latest push: %v", reloadErr)
+		syncErrors = append(syncErrors, fmt.Sprintf("repo reload: %v", reloadErr))
+	}
+
+	if len(syncErrors) > 0 {
+		log.Printf("ReceivePack: post-push sync FAILED — new articles may not be visible until server restart or next push: %s", strings.Join(syncErrors, "; "))
 	}
 
 	// Always invalidate article cache after push, even if checkout/reload had

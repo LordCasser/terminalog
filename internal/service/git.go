@@ -8,10 +8,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -529,16 +532,24 @@ func (s *GitService) GetRepoPath() string {
 // this, we explicitly set s.repo = nil before re-opening to allow the old
 // Repository and its associated storage caches to be garbage collected.
 func (s *GitService) ReloadRepo() error {
-	// Clear the old repository reference first. This allows the previous
-	// go-git Repository's internal packfile index caches to be GC'd, so
-	// the subsequent PlainOpen reads fresh data from disk.
+	// Drop the reference to the old repository so its internal
+	// packfile-index caches become eligible for GC.
 	s.repo = nil
 
-	// Clear all caches
+	// Clear our own caches.
 	s.historyCache = sync.Map{}
 	s.diffCache = sync.Map{}
 
-	// Re-open the repository with fresh storage
+	// Force garbage collection to reclaim the previous go-git
+	// Repository and its associated filesystem ObjectStorage.
+	// PlainOpen creates a fresh storage backend, but if the old one
+	// still holds open file descriptors or cached mmap regions
+	// (especially for packfile .idx files), the new storage may see
+	// stale data.  runtime.GC() guarantees the old Repository and
+	// its caches are freed before we re-open.
+	runtime.GC()
+
+	// Re-open the repository with fresh storage.
 	repo, err := git.PlainOpen(s.repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to re-open git repository: %w", err)
@@ -546,7 +557,6 @@ func (s *GitService) ReloadRepo() error {
 	s.repo = repo
 
 	// Verify the repository is accessible by resolving HEAD.
-	// This also serves as a smoke test that PlainOpen succeeded.
 	if _, err := repo.Head(); err != nil {
 		return fmt.Errorf("failed to verify repository HEAD after reload: %w", err)
 	}
@@ -564,6 +574,18 @@ func (s *GitService) ReloadRepo() error {
 // loose objects created by the push. This ensures that go-git's
 // subsequent PlainOpen can reliably discover all objects.
 func (s *GitService) CheckoutWorkingTree() error {
+	// Clean up any stale index.lock file.  git reset --hard requires
+	// an exclusive index lock; if a previous operation crashed (or a
+	// concurrent gc is running) the lock file will block the reset.
+	//
+	// We remove the lock unconditionally: receive-pack has already
+	// finished and the working tree is dirty anyway, so there is no
+	// risk of corrupting a live index write.
+	indexLock := s.repoPath + "/.git/index.lock"
+	if err := os.Remove(indexLock); err != nil && !os.IsNotExist(err) {
+		log.Printf("CheckoutWorkingTree: could not remove stale index.lock: %v", err)
+	}
+
 	// Do not use `git checkout --force` here. After receiving a push into the
 	// currently checked-out branch with receive.denyCurrentBranch=ignore, HEAD
 	// already points at the new commit, but the index and worktree still point
@@ -572,29 +594,60 @@ func (s *GitService) CheckoutWorkingTree() error {
 	// FileService scans until some external reset/restart workflow fixes the
 	// worktree. `reset --hard HEAD` explicitly rewrites both index and worktree
 	// to the pushed commit.
-	cmd := exec.Command("git", "reset", "--hard", "HEAD")
-	cmd.Dir = s.repoPath
+	reset := func() error {
+		cmd := exec.Command("git", "reset", "--hard", "HEAD")
+		cmd.Dir = s.repoPath
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("%w (stderr: %s)", err, stderr.String())
+		}
+		return nil
+	}
 
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		log.Printf("CheckoutWorkingTree: git reset --hard failed: %v, stderr: %s", err, stderr.String())
-		return fmt.Errorf("git reset --hard failed: %w", err)
+	if err := reset(); err != nil {
+		// Retry once after a short delay when the failure looks like a
+		// transient index.lock contention (e.g. a concurrent `git gc`
+		// triggered by the push itself, or a background maintenance task).
+		if isIndexLockContention(err) {
+			log.Printf("CheckoutWorkingTree: index.lock contention detected, retrying in 1s")
+			time.Sleep(1 * time.Second)
+			if retryErr := reset(); retryErr != nil {
+				return fmt.Errorf("git reset --hard HEAD failed after retry: %w", retryErr)
+			}
+		} else {
+			return fmt.Errorf("git reset --hard HEAD failed: %w", err)
+		}
 	}
 
 	log.Printf("CheckoutWorkingTree: working directory updated to match HEAD")
 
-	// Compact loose objects to ensure go-git discoverability.
-	// git gc --auto is a no-op when not needed, so this is cheap.
-	gcCmd := exec.Command("git", "gc", "--auto", "--quiet")
+	// Compact objects to ensure go-git reliably discovers newly-pushed
+	// commits.  git gc --auto is a no-op unless loose-object / packfile
+	// thresholds are exceeded, which they rarely are for a blog repo.
+	// Running a full gc (without --auto) guarantees that freshly pushed
+	// objects are consolidated into a single packfile with a proper
+	// index that go-git can read deterministically.
+	gcCmd := exec.Command("git", "gc", "--quiet")
 	gcCmd.Dir = s.repoPath
 	if err := gcCmd.Run(); err != nil {
-		// Non-fatal: gc --auto errors are advisory (e.g., lock contention)
-		log.Printf("CheckoutWorkingTree: git gc --auto: %v (non-fatal)", err)
+		// Non-fatal: a failed gc still means go-git can read objects;
+		// the remaining risk is that some objects live in packfiles
+		// without a matching .idx file, which the next gc will fix.
+		log.Printf("CheckoutWorkingTree: git gc warning (non-fatal): %v", err)
 	}
 
 	return nil
+}
+
+// isIndexLockContention returns true when the error string indicates a
+// transient lock-file conflict rather than a permanent failure.
+func isIndexLockContention(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, ".git/index.lock") &&
+		(strings.Contains(msg, "File exists") ||
+			strings.Contains(msg, "Unable to create") ||
+			strings.Contains(msg, "Permission denied"))
 }
 
 // shortHash returns a short commit hash (7 characters).

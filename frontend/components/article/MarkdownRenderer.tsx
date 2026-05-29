@@ -38,10 +38,14 @@ import { remarkAlert } from 'remark-github-blockquote-alert';
 import rehypeSlug from 'rehype-slug';
 import Link from 'next/link';
 import 'katex/dist/katex.min.css';
-import { isValidElement, Children, useMemo } from 'react';
+import { isValidElement, Children, useMemo, lazy, Suspense } from 'react';
 import { encodePathForUrl } from '@/lib/utils/path';
 import { slug as githubSlug } from 'github-slugger';
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from 'react';
+
+const MermaidBlock = lazy(() =>
+  import('./MermaidBlock').then((m) => ({ default: m.MermaidBlock }))
+);
 
 interface MarkdownRendererProps {
   content: string;
@@ -356,6 +360,12 @@ function markdownComponents(basePath?: string): any {
         ? childCode.props
         : undefined;
       const className = codeProps?.className || '';
+
+      // Mermaid diagrams are self-contained — skip the code-block shell
+      if (className?.includes('language-mermaid')) {
+        return <>{children}</>;
+      }
+
       const language = extractLanguageLabel(className);
 
       return (
@@ -369,6 +379,30 @@ function markdownComponents(basePath?: string): any {
     },
 
     code: ({ className, children, ...props }: ComponentPropsWithoutRef<'code'>) => {
+      // --- Mermaid diagram detection (must precede other code-block logic) ---
+      if (className?.includes('language-mermaid')) {
+        const mermaidCode = typeof children === 'string'
+          ? children
+          : Array.isArray(children)
+            ? children.join('')
+            : '';
+        return (
+          <Suspense fallback={
+            <div style={{
+              padding: '48px 24px',
+              borderRadius: 12,
+              background: 'var(--color-surface-container-low)',
+              color: 'var(--color-outline)',
+              textAlign: 'center',
+            }}>
+              Loading diagram...
+            </div>
+          }>
+            <MermaidBlock code={mermaidCode} />
+          </Suspense>
+        );
+      }
+
       const textContent = typeof children === 'string'
         ? children
         : Array.isArray(children)

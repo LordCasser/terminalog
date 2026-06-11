@@ -33,6 +33,10 @@ type GitService struct {
 	// repo is the opened Git repository (for read-only operations).
 	repo *git.Repository
 
+	// mu protects repo, historyCache, and diffCache fields
+	// from concurrent access during ReloadRepo.
+	mu sync.RWMutex
+
 	// historyCache avoids rescanning the full commit history for the same file.
 	historyCache sync.Map // map[string]*model.FileHistory
 
@@ -120,6 +124,9 @@ func (s *GitService) ServiceRPC(service string, reqBody io.Reader, respWriter io
 // GetFileHistory returns the complete Git history of a file.
 // Only commits where the file was actually modified are included.
 func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*model.FileHistory, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	if s.repo == nil {
 		return nil, model.ErrRepoNotFound
 	}
@@ -229,6 +236,9 @@ func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*mode
 
 // GetFileHistories returns Git history for multiple files using a single commit walk.
 func (s *GitService) GetFileHistories(ctx context.Context, filePaths []string) (map[string]*model.FileHistory, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	if s.repo == nil {
 		return nil, model.ErrRepoNotFound
 	}
@@ -359,6 +369,9 @@ func (s *GitService) GetFileHistories(ctx context.Context, filePaths []string) (
 // It uses go-git's Patch API to compute accurate add/remove counts per commit.
 // Results are cached and invalidated on git push (via ReloadRepo).
 func (s *GitService) GetFileCommitDiffs(ctx context.Context, filePath string) ([]model.CommitDiffInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	if s.repo == nil {
 		return nil, model.ErrRepoNotFound
 	}
@@ -516,6 +529,8 @@ func (s *GitService) IsFileCommitted(ctx context.Context, filePath string) (bool
 
 // GetRepo returns the underlying git repository.
 func (s *GitService) GetRepo() *git.Repository {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return s.repo
 }
 
@@ -532,6 +547,9 @@ func (s *GitService) GetRepoPath() string {
 // this, we explicitly set s.repo = nil before re-opening to allow the old
 // Repository and its associated storage caches to be garbage collected.
 func (s *GitService) ReloadRepo() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Drop the reference to the old repository so its internal
 	// packfile-index caches become eligible for GC.
 	s.repo = nil

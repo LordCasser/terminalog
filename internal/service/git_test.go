@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -261,4 +262,42 @@ func currentBranch(t *testing.T, dir string) string {
 	output, err := cmd.Output()
 	require.NoError(t, err)
 	return strings.TrimSpace(string(output))
+}
+
+func TestGitService_ConcurrentReload(t *testing.T) {
+	// This test verifies that concurrent reads during ReloadRepo do not panic
+	// or produce incorrect results.
+	// Run with: go test -race ./internal/service/ -run TestGitService_ConcurrentReload
+
+	repo, err := testutil.NewTestRepo()
+	require.NoError(t, err)
+	defer repo.Cleanup()
+
+	require.NoError(t, repo.CreateMarkdownFile("test.md", "# Test", "Add test.md", "author"))
+
+	svc, err := service.NewGitService(repo.Path)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	ctx := context.Background()
+
+	// Launch 10 concurrent readers
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = svc.GetFileHistory(ctx, "test.md")
+		}()
+	}
+
+	// Launch 3 concurrent reloads
+	for i := 0; i < 3; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = svc.ReloadRepo()
+		}()
+	}
+
+	wg.Wait()
 }

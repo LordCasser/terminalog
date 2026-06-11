@@ -81,7 +81,7 @@ Terminalog 采用**前后端分离 + 单文件部署**的架构模式：
 
 ### 2.1 前端子系统
 
-详细设计见：[frontend-architecture.md](./frontend-architecture.md)
+详细设计见：[frontend-design.md](./frontend-design.md)
 
 | 模块 | 职责 |
 |------|------|
@@ -96,7 +96,7 @@ Terminalog 采用**前后端分离 + 单文件部署**的架构模式：
 
 ### 2.2 后端子系统
 
-详细设计见：[backend-architecture.md](./backend-architecture.md)
+详细设计见：[backend-design.md](./backend-design.md)
 
 | 模块 | 职责 |
 |------|------|
@@ -160,7 +160,7 @@ Terminalog 采用**前后端分离 + 单文件部署**的架构模式：
 
 ## 四、API 概览
 
-详细接口定义见：[api-spec.md](./api-spec.md)
+详细接口定义见：[api-spec.md](../specs/api-spec.md)
 
 ### 4.1 REST API
 
@@ -223,11 +223,13 @@ terminalog/
 │   └── next.config.js           # Next.js 配置
 │
 ├── docs/                        # 文档
-│   ├── requirements.md          # 需求文档
-│   ├── architecture.md          # 系统架构总览（本文件）
-│   ├── frontend-architecture.md # 前端架构详细设计
-│   ├── backend-architecture.md  # 后端架构详细设计
-│   └── api-spec.md              # API 接口文档
+│   ├── design/                  # 设计文档
+│   │   ├── architecture.md      # 系统架构总览（本文件）
+│   │   ├── frontend-design.md   # 前端架构详细设计
+│   │   └── backend-design.md    # 后端架构详细设计
+│   └── specs/                   # 规格文档
+│       ├── requirements.md      # 需求文档
+│       └── api-spec.md          # API 接口文档
 │
 ├── configs/
 │   └ config.toml.example        # 配置示例
@@ -387,10 +389,10 @@ make release     # 跨平台构建
 
 | 文档 | 说明 |
 |------|------|
-| [requirements.md](./requirements.md) | 原始需求文档 |
-| [frontend-architecture.md](./frontend-architecture.md) | 前端架构详细设计 |
-| [backend-architecture.md](./backend-architecture.md) | 后端架构详细设计 |
-| [api-spec.md](./api-spec.md) | API 接口文档 |
+| [requirements.md](../specs/requirements.md) | 原始需求文档 |
+| [frontend-design.md](./frontend-design.md) | 前端架构详细设计 |
+| [backend-design.md](./backend-design.md) | 后端架构详细设计 |
+| [api-spec.md](../specs/api-spec.md) | API 接口文档 |
 
 ---
 

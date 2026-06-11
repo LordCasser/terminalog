@@ -1,14 +1,14 @@
 /**
  * CommandPrompt Component
- * 
+ *
  * Terminal-style command input bar at bottom of page.
  * Features (v1.6):
- * - WebSocket connection for path completion and search
+ * - WebSocket connection for path completion (Tab key file/directory completion)
+ * - Search via REST API (GET /api/v1/search)
  * - localStorage command history (terminalog_command_history, max 100)
  * - ArrowUp/ArrowDown for history navigation
  * - Tab key: command auto-completion, path completion modal for multiple matches
- * - Search command via WebSocket
- * - Pure frontend routing
+ * - Pure frontend routing (no page reload)
  * - Path sync with Navbar via TerminalConfig context
  */
 
@@ -28,10 +28,9 @@ import {
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
 import { getArticles } from "@/lib/api/articles";
 import { searchArticles } from "@/lib/api/search";
+import { useCommandHistory } from "./useCommandHistory";
 import {
   COMMANDS,
-  HISTORY_KEY,
-  MAX_HISTORY_SIZE,
   encodePathForUrl,
   navigateToPath,
   resolveCdPath,
@@ -72,24 +71,7 @@ export function CommandPrompt() {
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [showNoMatchHint, setShowNoMatchHint] = useState(false);
   const [noMatchHintType, setNoMatchHintType] = useState<"completion" | "search" | "command" | "searchTab">("completion");
-  // Initialize history from localStorage (lazy initialization)
-  const [history, setHistory] = useState<string[]>(() => {
-    try {
-      if (typeof window !== "undefined") {
-        const stored = localStorage.getItem(HISTORY_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) {
-            return parsed;
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Failed to load command history:", e);
-    }
-    return [];
-  });
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const history = useCommandHistory();
   const [cursorPosition, setCursorPosition] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const cursorMeasureRef = useRef<HTMLSpanElement>(null);
@@ -117,14 +99,8 @@ export function CommandPrompt() {
     setTimeout(() => setShowNoMatchHint(false), 1000);
   }, []);
 
-  // Save history to localStorage
-  const saveHistory = useCallback((newHistory: string[]) => {
-    try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
-    } catch (e) {
-      console.error("Failed to save command history:", e);
-    }
-  }, []);
+  // Save input before starting history navigation for ArrowDown restore
+  const savedInputRef = useRef("");
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -372,26 +348,25 @@ export function CommandPrompt() {
   const handleHistoryNavigation = useCallback((e: React.KeyboardEvent) => {
     // Don't navigate history when search modal is open
     if (searchModalVisible) return;
-    
+
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      if (history.length > 0 && historyIndex < history.length - 1) {
-        const newIndex = historyIndex + 1;
-        setHistoryIndex(newIndex);
-        setInput(history[history.length - 1 - newIndex]);
+      // Save original input when starting navigation
+      if (history.index === -1) {
+        savedInputRef.current = input;
       }
+      const entry = history.previous(input);
+      if (entry !== null) setInput(entry);
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      if (historyIndex > 0) {
-        const newIndex = historyIndex - 1;
-        setHistoryIndex(newIndex);
-        setInput(history[history.length - 1 - newIndex]);
-      } else if (historyIndex === 0) {
-        setHistoryIndex(-1);
-        setInput("");
+      const entry = history.next(input);
+      if (entry !== null) {
+        setInput(entry);
+      } else {
+        setInput(savedInputRef.current);
       }
     }
-  }, [history, historyIndex, searchModalVisible]);
+  }, [history, input, searchModalVisible]);
 
   // Handle keyboard events
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -511,14 +486,8 @@ export function CommandPrompt() {
     
     const cmd = input.trim();
     if (cmd) {
-      // Add to history
-      const newHistory = [...history, cmd];
-      if (newHistory.length > MAX_HISTORY_SIZE) {
-        newHistory.shift();
-      }
-      setHistory(newHistory);
-      saveHistory(newHistory);
-      setHistoryIndex(-1); // Reset history index
+      // Add to history (hook handles dedup, max size, persistence, and index reset)
+      history.add(input);
       
       executeCommand(input);
     }

@@ -12,18 +12,19 @@ import (
 // ValidatePath checks if the requested path is safe (no directory traversal).
 // It returns the absolute validated path or an error.
 func ValidatePath(baseDir, requestedPath string) (string, error) {
-	// Clean the requested path to remove any .. or other dangerous components
+	// Clean the requested path to resolve .. and redundant separators.
 	cleanedPath := filepath.Clean(requestedPath)
 
-	// Check for path traversal attempts
-	if strings.Contains(cleanedPath, "..") {
+	// Reject explicitly absolute paths — filepath.Join would strip the
+	// leading separator, making them appear to be inside baseDir.
+	if filepath.IsAbs(cleanedPath) {
 		return "", model.ErrInvalidPath
 	}
 
-	// Construct the full path
+	// Construct the full path relative to base directory.
 	fullPath := filepath.Join(baseDir, cleanedPath)
 
-	// Get absolute paths for comparison
+	// Resolve both paths to absolute form.
 	absBase, err := filepath.Abs(baseDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to get absolute base path: %w", err)
@@ -34,14 +35,24 @@ func ValidatePath(baseDir, requestedPath string) (string, error) {
 		return "", fmt.Errorf("failed to get absolute full path: %w", err)
 	}
 
-	// Ensure the full path is within the base directory
-	if !strings.HasPrefix(absFull, absBase) {
+	// Use filepath.Rel to verify the resolved path does not escape baseDir.
+	// If absFull is outside absBase, Rel returns a path starting with "..".
+	relPath, err := filepath.Rel(absBase, absFull)
+	if err != nil {
+		return "", fmt.Errorf("failed to compute relative path: %w", err)
+	}
+	if strings.HasPrefix(relPath, "..") {
 		return "", model.ErrInvalidPath
 	}
 
-	// Protect .git directory
-	if strings.Contains(absFull, "/.git/") || strings.HasSuffix(absFull, "/.git") {
-		return "", model.ErrInvalidPath
+	// Protect .git directory from access.
+	// Check each path segment individually — avoids false positives from
+	// filenames containing ".git" as a substring.
+	segments := strings.Split(filepath.ToSlash(relPath), "/")
+	for _, seg := range segments {
+		if seg == ".git" {
+			return "", model.ErrInvalidPath
+		}
 	}
 
 	return absFull, nil

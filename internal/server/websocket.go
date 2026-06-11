@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,24 +33,45 @@ type WebSocketHandler struct {
 }
 
 // NewWebSocketHandler creates a new WebSocketHandler instance.
-func NewWebSocketHandler(completionSvc *service.CompletionService, logger *slog.Logger, debug bool) *WebSocketHandler {
-	// Configure upgrader
+// serverHost is the configured server host (from config), used for origin validation
+// in production mode. May be "localhost", "0.0.0.0", "", or a domain name.
+func NewWebSocketHandler(completionSvc *service.CompletionService, logger *slog.Logger, debug bool, serverHost string) *WebSocketHandler {
+	// Configure upgrader with origin validation
+	// Policy:
+	//   - Debug mode: allow all origins (convenience for development)
+	//   - Production mode:
+	//     1. Same-origin requests (no Origin header) are always allowed
+	//     2. Localhost origins are allowed (local access convenience)
+	//     3. Origin host must match the configured serverHost
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
-		// In debug mode, allow all origins for development
-		// In production, this should be configured properly
 		CheckOrigin: func(r *http.Request) bool {
 			if debug {
 				return true
 			}
-			// In production, check origin properly
 			origin := r.Header.Get("Origin")
+			// Same-origin requests (no Origin header) are always allowed
 			if origin == "" {
-				return true // Allow same-origin requests
+				return true
 			}
-			// Allow localhost and same host connections
-			return true // For now, allow all (can be tightened later)
+			// Parse the origin URL to extract host
+			originURL, err := url.Parse(origin)
+			if err != nil {
+				logger.Warn("WebSocket: invalid Origin header", "origin", origin)
+				return false
+			}
+			originHost := originURL.Host
+			// Allow localhost origins (common for development and local access)
+			if IsLocalhost(originHost) {
+				return true
+			}
+			// Allow if origin matches configured server host
+			if originHost == serverHost {
+				return true
+			}
+			logger.Warn("WebSocket: rejected Origin", "origin", origin, "serverHost", serverHost)
+			return false
 		},
 	}
 
@@ -184,6 +208,21 @@ func (h *WebSocketHandler) sendError(conn *websocket.Conn, errMsg string) {
 	}
 
 	h.sendMessage(conn, errorMsg)
+}
+
+// IsLocalhost checks if a host string refers to localhost (including port variants).
+// DNS names are case-insensitive per RFC 4343, so "LOCALHOST", "Localhost", etc. all match.
+func IsLocalhost(host string) bool {
+	hostOnly := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		hostOnly = h
+	}
+	// Normalize to lowercase for case-insensitive hostname comparison
+	switch strings.ToLower(hostOnly) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
 }
 
 // generateConnectionID generates a unique connection ID.

@@ -163,7 +163,7 @@ func main() {
 			PoliceFiling:    cfg.Site.PoliceFiling,
 			PoliceFilingURL: cfg.Site.PoliceFilingURL,
 		}),
-		WebSocket: server.NewWebSocketHandler(completionSvc, logger, cfg.Server.Debug), // v1.4
+		WebSocket: server.NewWebSocketHandler(completionSvc, logger, cfg.Server.Debug, cfg.Server.Host), // v1.4
 	}
 
 	// Resolve TLS configuration with auto-detection and smart defaults

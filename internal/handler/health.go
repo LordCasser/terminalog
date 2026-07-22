@@ -28,6 +28,11 @@ type HealthHandler struct {
 	cacheStats func() service.CacheStats
 }
 
+func setHealthHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+}
+
 // NewHealthHandler creates a new HealthHandler.
 func NewHealthHandler(gitSvc *service.GitService, cacheStats func() service.CacheStats) *HealthHandler {
 	return &HealthHandler{
@@ -61,7 +66,7 @@ func (h *HealthHandler) IsReady() bool {
 
 // Healthz handles GET /healthz - basic health check.
 func (h *HealthHandler) Healthz(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	setHealthHeaders(w)
 	w.WriteHeader(http.StatusOK)
 
 	response := map[string]interface{}{
@@ -78,8 +83,13 @@ func (h *HealthHandler) Readyz(w http.ResponseWriter, r *http.Request) {
 	h.mutex.RLock()
 	ready := h.ready
 	h.mutex.RUnlock()
+	if h.gitSvc == nil {
+		ready = false
+	} else if _, err := h.gitSvc.CurrentHead(); err != nil {
+		ready = false
+	}
 
-	w.Header().Set("Content-Type", "application/json")
+	setHealthHeaders(w)
 
 	if ready {
 		w.WriteHeader(http.StatusOK)
@@ -100,7 +110,7 @@ func (h *HealthHandler) Readyz(w http.ResponseWriter, r *http.Request) {
 
 // Livez handles GET /livez - liveness check.
 func (h *HealthHandler) Livez(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	setHealthHeaders(w)
 	w.WriteHeader(http.StatusOK)
 
 	response := map[string]interface{}{
@@ -113,10 +123,15 @@ func (h *HealthHandler) Livez(w http.ResponseWriter, r *http.Request) {
 
 // Status handles GET /status - detailed status check.
 func (h *HealthHandler) Status(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	setHealthHeaders(w)
 
-	// Check if Git service is available (repo opened successfully)
-	gitAvailable := h.gitSvc != nil && h.gitSvc.GetRepo() != nil
+	gitHead := ""
+	gitAvailable := false
+	if h.gitSvc != nil {
+		var err error
+		gitHead, err = h.gitSvc.CurrentHead()
+		gitAvailable = err == nil
+	}
 
 	cacheStats := service.CacheStats{}
 	if h.cacheStats != nil {
@@ -129,6 +144,7 @@ func (h *HealthHandler) Status(w http.ResponseWriter, r *http.Request) {
 		"uptime":       time.Since(h.startTime).Seconds(),
 		"ready":        h.IsReady(),
 		"gitAvailable": gitAvailable,
+		"gitHead":      gitHead,
 		"cacheStats":   cacheStats,
 		"startTime":    h.startTime.UTC().Format(time.RFC3339),
 	}

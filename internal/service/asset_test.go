@@ -57,6 +57,17 @@ func TestAssetService_GetAsset(t *testing.T) {
 			wantErr: model.ErrNotFound,
 		},
 		{
+			name: "uncommitted asset",
+			setup: func(repo *testutil.TestRepo) error {
+				if err := repo.CreateMarkdownFile("article.md", "# Article", "Add", "author"); err != nil {
+					return err
+				}
+				return repo.CreateImageFile(".assets/images/draft.png", []byte("draft"))
+			},
+			path:    "images/draft.png",
+			wantErr: model.ErrNotFound,
+		},
+		{
 			name: "path traversal attack",
 			setup: func(repo *testutil.TestRepo) error {
 				pngData := []byte{0x89, 0x50, 0x4E, 0x47}
@@ -85,10 +96,9 @@ func TestAssetService_GetAsset(t *testing.T) {
 				require.NoError(t, tt.setup(repo))
 			}
 
-			fileSvc, err := service.NewFileService(repo.Path)
+			gitSvc, err := service.NewGitService(repo.Path)
 			require.NoError(t, err)
-
-			assetSvc := service.NewAssetService(fileSvc)
+			assetSvc := service.NewAssetService(gitSvc)
 
 			asset, err := assetSvc.GetAsset(context.Background(), tt.path)
 

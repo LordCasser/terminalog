@@ -8,6 +8,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +38,6 @@ type ScenarioEnv struct {
 	Repo       *testutil.TestRepo
 	Server     *httptest.Server
 	Router     *chi.Mux
-	FileSvc    *service.FileService
 	GitSvc     *service.GitService
 	ArticleSvc *service.ArticleService
 	AuthSvc    *service.AuthService
@@ -53,15 +56,13 @@ func SetupScenario(t *testing.T, setup func(repo *testutil.TestRepo) error) *Sce
 	}
 
 	// Create services
-	fileSvc, err := service.NewFileService(repo.Path)
-	require.NoError(t, err)
 
 	gitSvc, err := service.NewGitService(repo.Path)
 	require.NoError(t, err)
 
-	articleSvc := service.NewArticleService(fileSvc, gitSvc)
-	assetSvc := service.NewAssetService(fileSvc)
-	versionSvc := service.NewVersionService(articleSvc, gitSvc, fileSvc) // v1.2
+	articleSvc := service.NewArticleService(gitSvc)
+	assetSvc := service.NewAssetService(gitSvc)
+	versionSvc := service.NewVersionService(gitSvc)
 
 	// Create test auth config with multiple users
 	hashedPass1, _ := bcrypt.GenerateFromPassword([]byte("password1"), bcrypt.DefaultCost)
@@ -81,10 +82,10 @@ func SetupScenario(t *testing.T, setup func(repo *testutil.TestRepo) error) *Sce
 	authSvc := service.NewAuthService(cfg)
 
 	// Create handlers
-	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc, fileSvc)
+	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc)
 	assetHandler := handler.NewAssetHandler(assetSvc)
 	searchHandler := handler.NewSearchHandler(articleSvc)
-	gitHandler := handler.NewGitHandler(gitSvc, authSvc, nil)
+	gitHandler := handler.NewGitHandler(gitSvc, authSvc, articleSvc.InvalidateCache)
 	treeHandler := handler.NewTreeHandler(articleSvc)
 
 	// Create router with all endpoints (RESTful v1)
@@ -106,7 +107,6 @@ func SetupScenario(t *testing.T, setup func(repo *testutil.TestRepo) error) *Sce
 		Repo:       repo,
 		Server:     server,
 		Router:     router,
-		FileSvc:    fileSvc,
 		GitSvc:     gitSvc,
 		ArticleSvc: articleSvc,
 		AuthSvc:    authSvc,
@@ -409,16 +409,16 @@ func TestScenario06_UncommittedFilesNotVisible(t *testing.T) {
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
-	// Verify: Returns 400 for uncommitted file
-	assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
+	// Verify: unpublished paths are indistinguishable from missing paths
+	assert.Equal(t, http.StatusNotFound, resp2.StatusCode)
 
 	// Test: Direct access to draft file
 	resp3, err := http.Get(env.Server.URL + "/api/v1/articles/draft.md")
 	require.NoError(t, err)
 	defer resp3.Body.Close()
 
-	// Verify: Returns 400 for draft file
-	assert.Equal(t, http.StatusBadRequest, resp3.StatusCode)
+	// Verify: unpublished paths are indistinguishable from missing paths
+	assert.Equal(t, http.StatusNotFound, resp3.StatusCode)
 
 	// Test: Uncommitted file not in tree
 	resp4, err := http.Get(env.Server.URL + "/api/v1/tree")
@@ -713,6 +713,77 @@ func TestScenario10_GitPushAuthentication(t *testing.T) {
 
 	// Verify: Returns 401 for unknown user
 	assert.Equal(t, http.StatusUnauthorized, resp4.StatusCode)
+}
+
+func TestScenario10_GitPushIsVisibleWhenClientReturns(t *testing.T) {
+	env := SetupScenario(t, func(repo *testutil.TestRepo) error {
+		return repo.CreateMarkdownFile("initial.md", "# Initial", "Initial commit", "admin")
+	})
+	defer env.Cleanup()
+
+	// Prime the directory cache with the pre-push snapshot.
+	prime, err := http.Get(env.Server.URL + "/api/v1/articles")
+	require.NoError(t, err)
+	prime.Body.Close()
+
+	clientDir := filepath.Join(t.TempDir(), "client")
+	runScenarioGit(t, "", "clone", env.Server.URL+"/api/v1/git", clientDir)
+	runScenarioGit(t, clientDir, "config", "user.email", "push@example.com")
+	runScenarioGit(t, clientDir, "config", "user.name", "Pusher")
+	require.NoError(t, os.MkdirAll(filepath.Join(clientDir, "notes"), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Join(clientDir, ".assets"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(clientDir, "notes", "published.md"), []byte("# Published\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(clientDir, ".assets", "published.png"), []byte("published-image"), 0644))
+	runScenarioGit(t, clientDir, "add", "notes/published.md", ".assets/published.png")
+	runScenarioGit(t, clientDir, "commit", "-m", "Publish article")
+
+	authenticatedRemote := strings.Replace(env.Server.URL, "http://", "http://admin:password1@", 1) + "/api/v1/git"
+	runScenarioGit(t, clientDir, "remote", "set-url", "origin", authenticatedRemote)
+	runScenarioGit(t, clientDir, "push", "origin", "HEAD")
+
+	// The Git client only returns after worktree publication, repository reload,
+	// and cache invalidation have completed.
+	resp, err := http.Get(env.Server.URL + "/api/v1/articles")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var listing model.ArticleListResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&listing))
+	assert.Equal(t, 2, listing.Total)
+	assert.Condition(t, func() bool {
+		for _, article := range listing.Articles {
+			if article.Path == "notes" && article.Type == model.NodeTypeDir {
+				return true
+			}
+		}
+		return false
+	})
+
+	articleResp, err := http.Get(env.Server.URL + "/api/v1/articles/notes/published.md")
+	require.NoError(t, err)
+	defer articleResp.Body.Close()
+	require.Equal(t, http.StatusOK, articleResp.StatusCode)
+	var article model.ArticleResponse
+	require.NoError(t, json.NewDecoder(articleResp.Body).Decode(&article))
+	assert.Equal(t, "# Published\n", article.Content)
+
+	assetResp, err := http.Get(env.Server.URL + "/api/v1/assets/published.png")
+	require.NoError(t, err)
+	defer assetResp.Body.Close()
+	require.Equal(t, http.StatusOK, assetResp.StatusCode)
+	assetBody, err := io.ReadAll(assetResp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "published-image", string(assetBody))
+	assert.NotEmpty(t, assetResp.Header.Get("ETag"))
+}
+
+func runScenarioGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, output)
 }
 
 // =============================================================================

@@ -7,20 +7,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
-	"os"
 	"os/exec"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"terminalog/internal/model"
+	"terminalog/pkg/utils"
 )
 
 // GitService provides Git operations.
@@ -37,6 +35,9 @@ type GitService struct {
 	// from concurrent access during ReloadRepo.
 	mu sync.RWMutex
 
+	// updateMu serializes complete receive-pack publication transactions.
+	updateMu sync.Mutex
+
 	// historyCache avoids rescanning the full commit history for the same file.
 	historyCache sync.Map // map[string]*model.FileHistory
 
@@ -44,23 +45,28 @@ type GitService struct {
 	diffCache sync.Map // map[string][]model.CommitDiffInfo
 }
 
+const (
+	specialFilePrefix = "_"
+	assetsDirName     = ".assets"
+)
+
 // NewGitService creates a new GitService instance.
 // It opens the repository and configures it for push operations:
-// - Sets receive.denyCurrentBranch=ignore to allow pushing to the checked-out branch
+//   - Sets receive.denyCurrentBranch=updateInstead so Git updates the worktree
+//     before reporting a successful push.
 func NewGitService(repoPath string) (*GitService, error) {
 	repo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository: %w", err)
 	}
 
-	// Configure repository to allow pushing to the checked-out branch.
-	// By default, git rejects pushes to the current branch in non-bare repos.
-	// We handle working directory updates ourselves via reset after push.
-	cmd := exec.Command("git", "config", "receive.denyCurrentBranch", "ignore")
+	// Git is the authority for both the ref and worktree update. updateInstead
+	// rejects pushes when the worktree is dirty and only reports success after
+	// the checked-out files have been updated.
+	cmd := exec.Command("git", "config", "receive.denyCurrentBranch", "updateInstead")
 	cmd.Dir = repoPath
 	if err := cmd.Run(); err != nil {
-		log.Printf("NewGitService: failed to set receive.denyCurrentBranch: %v", err)
-		// Non-critical - push may fail later if this isn't set
+		return nil, fmt.Errorf("configure receive.denyCurrentBranch: %w", err)
 	}
 
 	return &GitService{
@@ -112,11 +118,31 @@ func (s *GitService) ServiceRPC(service string, reqBody io.Reader, respWriter io
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		log.Printf("ServiceRPC: git %s --stateless-rpc failed: %v, stderr: %s", service, err, stderr.String())
-		return fmt.Errorf("git %s --stateless-rpc failed: %w", service, err)
+		return fmt.Errorf("git %s --stateless-rpc failed: %w (stderr: %s)", service, err, strings.TrimSpace(stderr.String()))
 	}
 
 	return nil
+}
+
+// ReceivePack applies one push as a publication transaction. The protocol
+// response is buffered so the client cannot observe success before the
+// worktree, go-git reader, and dependent caches represent the same commit.
+func (s *GitService) ReceivePack(reqBody io.Reader, onRepoUpdate func()) ([]byte, error) {
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
+
+	var response bytes.Buffer
+	if err := s.ServiceRPC(ServiceTypeReceivePack, reqBody, &response); err != nil {
+		return nil, err
+	}
+	if err := s.ReloadRepo(); err != nil {
+		return nil, fmt.Errorf("refresh repository after receive-pack: %w", err)
+	}
+	if onRepoUpdate != nil {
+		onRepoUpdate()
+	}
+
+	return response.Bytes(), nil
 }
 
 // ----- Read-only operations (go-git) -----
@@ -126,13 +152,22 @@ func (s *GitService) ServiceRPC(service string, reqBody io.Reader, respWriter io
 func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*model.FileHistory, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.getFileHistoryLocked(ctx, filePath)
+}
+
+// getFileHistoryLocked requires s.mu to be held for reading. Keeping the
+// implementation separate avoids recursively acquiring an RWMutex when
+// version calculation needs history and diffs from the same repository view.
+func (s *GitService) getFileHistoryLocked(_ context.Context, filePath string) (*model.FileHistory, error) {
 
 	if s.repo == nil {
 		return nil, model.ErrRepoNotFound
 	}
 
-	// Normalize path
-	filePath = strings.TrimPrefix(filePath, "/")
+	filePath, err := utils.ValidateContentPath(filePath)
+	if err != nil || filePath == "" {
+		return nil, model.ErrInvalidPath
+	}
 
 	if cached, ok := s.historyCache.Load(filePath); ok {
 		return cached.(*model.FileHistory), nil
@@ -211,8 +246,10 @@ func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*mode
 		fileExists = true
 	}
 
-	// Check if we have any history
-	if len(fileCommits) == 0 {
+	// Historical existence is not public visibility. A path deleted from the
+	// current HEAD must remain invisible even if it is recreated in the raw
+	// worktree without a commit.
+	if len(fileCommits) == 0 || !fileExists {
 		return nil, model.ErrNotCommitted
 	}
 
@@ -248,9 +285,9 @@ func (s *GitService) GetFileHistories(ctx context.Context, filePaths []string) (
 	pending := make([]string, 0, len(filePaths))
 
 	for _, filePath := range filePaths {
-		normalized := strings.TrimPrefix(filePath, "/")
-		if normalized == "" {
-			continue
+		normalized, err := utils.ValidateContentPath(filePath)
+		if err != nil || normalized == "" {
+			return nil, model.ErrInvalidPath
 		}
 		if _, seen := targets[normalized]; seen {
 			continue
@@ -342,7 +379,7 @@ func (s *GitService) GetFileHistories(ctx context.Context, filePaths []string) (
 	}
 
 	for filePath, builder := range builders {
-		if len(builder.commits) == 0 {
+		if len(builder.commits) == 0 || !builder.fileExists {
 			continue
 		}
 
@@ -376,7 +413,10 @@ func (s *GitService) GetFileCommitDiffs(ctx context.Context, filePath string) ([
 		return nil, model.ErrRepoNotFound
 	}
 
-	filePath = strings.TrimPrefix(filePath, "/")
+	filePath, err := utils.ValidateContentPath(filePath)
+	if err != nil || filePath == "" {
+		return nil, model.ErrInvalidPath
+	}
 
 	// Check cache first
 	if cached, ok := s.diffCache.Load(filePath); ok {
@@ -384,7 +424,7 @@ func (s *GitService) GetFileCommitDiffs(ctx context.Context, filePath string) ([
 	}
 
 	// Get file history to obtain ordered commit list
-	history, err := s.GetFileHistory(ctx, filePath)
+	history, err := s.getFileHistoryLocked(ctx, filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -515,157 +555,179 @@ func countLines(content string) int {
 	return len(strings.Split(content, "\n"))
 }
 
-// IsFileCommitted checks if a file has been committed to Git.
-func (s *GitService) IsFileCommitted(ctx context.Context, filePath string) (bool, error) {
-	history, err := s.GetFileHistory(ctx, filePath)
+// NodeTypeAtHead resolves a path against the published commit tree.
+func (s *GitService) NodeTypeAtHead(filePath string) (model.NodeType, error) {
+	filePath, err := utils.ValidateContentPath(filePath)
 	if err != nil {
-		if errors.Is(err, model.ErrNotCommitted) {
-			return false, nil
-		}
-		return false, err
+		return "", err
 	}
-	return len(history.AllCommits) > 0, nil
-}
+	if filePath == "" {
+		return model.NodeTypeDir, nil
+	}
 
-// GetRepo returns the underlying git repository.
-func (s *GitService) GetRepo() *git.Repository {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.repo
+
+	commit, err := s.headCommitLocked()
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return "", model.ErrNotFound
+		}
+		return "", err
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return "", err
+	}
+	entry, err := tree.FindEntry(filePath)
+	if err != nil {
+		if errors.Is(err, object.ErrEntryNotFound) || errors.Is(err, object.ErrDirectoryNotFound) {
+			return "", model.ErrNotFound
+		}
+		return "", err
+	}
+	if entry.Mode == filemode.Dir {
+		return model.NodeTypeDir, nil
+	}
+	return model.NodeTypeFile, nil
 }
 
-// GetRepoPath returns the repository path.
-func (s *GitService) GetRepoPath() string {
-	return s.repoPath
+// ReadFileAtHead reads the exact blob published by the current HEAD, never the
+// mutable server worktree.
+func (s *GitService) ReadFileAtHead(filePath string) ([]byte, error) {
+	filePath, err := utils.ValidateContentPath(filePath)
+	if err != nil || filePath == "" {
+		return nil, model.ErrInvalidPath
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	commit, err := s.headCommitLocked()
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+	file, err := commit.File(filePath)
+	if err != nil {
+		if errors.Is(err, object.ErrFileNotFound) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+	reader, err := file.Reader()
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
 }
 
-// ReloadRepo re-opens the git repository to refresh cached state.
-// Called after push operations to ensure caches reflect the latest commits.
-//
-// IMPORTANT: go-git's PlainOpen may internally cache packfile indices that
-// survive across calls to PlainOpen within the same process. To work around
-// this, we explicitly set s.repo = nil before re-opening to allow the old
-// Repository and its associated storage caches to be garbage collected.
+// ListMarkdownFilesAtHead returns recursively visible articles below dir.
+func (s *GitService) ListMarkdownFilesAtHead(dir string) ([]string, error) {
+	dir, err := utils.ValidateContentPath(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	commit, err := s.headCommitLocked()
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) && dir == "" {
+			return []string{}, nil
+		}
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+	tree, err := commit.Tree()
+	if err != nil {
+		return nil, err
+	}
+	if dir != "" {
+		tree, err = tree.Tree(dir)
+		if err != nil {
+			if errors.Is(err, object.ErrDirectoryNotFound) {
+				return nil, model.ErrNotFound
+			}
+			return nil, err
+		}
+	}
+
+	files := make([]string, 0)
+	err = tree.Files().ForEach(func(file *object.File) error {
+		filePath := utils.NormalizePath(file.Name)
+		segments := strings.Split(filePath, "/")
+		for _, segment := range segments {
+			if segment == assetsDirName || strings.HasPrefix(segment, specialFilePrefix) {
+				return nil
+			}
+		}
+		if !utils.IsMarkdownFile(filePath) {
+			return nil
+		}
+		if dir != "" {
+			filePath = dir + "/" + filePath
+		}
+		files = append(files, filePath)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func (s *GitService) headCommitLocked() (*object.Commit, error) {
+	if s.repo == nil {
+		return nil, model.ErrRepoNotFound
+	}
+	ref, err := s.repo.Head()
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.CommitObject(ref.Hash())
+}
+
+// CurrentHead returns the commit currently published by the read view. An
+// unborn but valid repository returns an empty hash.
+func (s *GitService) CurrentHead() (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.repo == nil {
+		return "", model.ErrRepoNotFound
+	}
+	ref, err := s.repo.Head()
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	return ref.Hash().String(), nil
+}
+
+// ReloadRepo re-opens the git repository to refresh cached read state after a
+// push. The replacement is verified before it is published to readers.
 func (s *GitService) ReloadRepo() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Drop the reference to the old repository so its internal
-	// packfile-index caches become eligible for GC.
-	s.repo = nil
-
-	// Clear our own caches.
-	s.historyCache = sync.Map{}
-	s.diffCache = sync.Map{}
-
-	// Force garbage collection to reclaim the previous go-git
-	// Repository and its associated filesystem ObjectStorage.
-	// PlainOpen creates a fresh storage backend, but if the old one
-	// still holds open file descriptors or cached mmap regions
-	// (especially for packfile .idx files), the new storage may see
-	// stale data.  runtime.GC() guarantees the old Repository and
-	// its caches are freed before we re-open.
-	runtime.GC()
-
-	// Re-open the repository with fresh storage.
 	repo, err := git.PlainOpen(s.repoPath)
 	if err != nil {
 		return fmt.Errorf("failed to re-open git repository: %w", err)
 	}
-	s.repo = repo
-
-	// Verify the repository is accessible by resolving HEAD.
 	if _, err := repo.Head(); err != nil {
 		return fmt.Errorf("failed to verify repository HEAD after reload: %w", err)
 	}
 
-	log.Printf("ReloadRepo: repository reloaded successfully at %s", s.repoPath)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.repo = repo
+	s.historyCache = sync.Map{}
+	s.diffCache = sync.Map{}
 	return nil
-}
-
-// CheckoutWorkingTree runs `git reset --hard HEAD` in the repository to
-// synchronize the working directory with the current HEAD.
-// This is needed after push operations because `git receive-pack` only
-// updates refs and objects, not the working tree.
-//
-// After reset, it also runs `git gc --auto --quiet` to compact any
-// loose objects created by the push. This ensures that go-git's
-// subsequent PlainOpen can reliably discover all objects.
-func (s *GitService) CheckoutWorkingTree() error {
-	// Clean up any stale index.lock file.  git reset --hard requires
-	// an exclusive index lock; if a previous operation crashed (or a
-	// concurrent gc is running) the lock file will block the reset.
-	//
-	// We remove the lock unconditionally: receive-pack has already
-	// finished and the working tree is dirty anyway, so there is no
-	// risk of corrupting a live index write.
-	indexLock := s.repoPath + "/.git/index.lock"
-	if err := os.Remove(indexLock); err != nil && !os.IsNotExist(err) {
-		log.Printf("CheckoutWorkingTree: could not remove stale index.lock: %v", err)
-	}
-
-	// Do not use `git checkout --force` here. After receiving a push into the
-	// currently checked-out branch with receive.denyCurrentBranch=ignore, HEAD
-	// already points at the new commit, but the index and worktree still point
-	// at the old contents. `git checkout --force` can short-circuit because the
-	// branch is "already checked out", leaving newly pushed files invisible to
-	// FileService scans until some external reset/restart workflow fixes the
-	// worktree. `reset --hard HEAD` explicitly rewrites both index and worktree
-	// to the pushed commit.
-	reset := func() error {
-		cmd := exec.Command("git", "reset", "--hard", "HEAD")
-		cmd.Dir = s.repoPath
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("%w (stderr: %s)", err, stderr.String())
-		}
-		return nil
-	}
-
-	if err := reset(); err != nil {
-		// Retry once after a short delay when the failure looks like a
-		// transient index.lock contention (e.g. a concurrent `git gc`
-		// triggered by the push itself, or a background maintenance task).
-		if isIndexLockContention(err) {
-			log.Printf("CheckoutWorkingTree: index.lock contention detected, retrying in 1s")
-			time.Sleep(1 * time.Second)
-			if retryErr := reset(); retryErr != nil {
-				return fmt.Errorf("git reset --hard HEAD failed after retry: %w", retryErr)
-			}
-		} else {
-			return fmt.Errorf("git reset --hard HEAD failed: %w", err)
-		}
-	}
-
-	log.Printf("CheckoutWorkingTree: working directory updated to match HEAD")
-
-	// Compact objects to ensure go-git reliably discovers newly-pushed
-	// commits.  git gc --auto is a no-op unless loose-object / packfile
-	// thresholds are exceeded, which they rarely are for a blog repo.
-	// Running a full gc (without --auto) guarantees that freshly pushed
-	// objects are consolidated into a single packfile with a proper
-	// index that go-git can read deterministically.
-	gcCmd := exec.Command("git", "gc", "--quiet")
-	gcCmd.Dir = s.repoPath
-	if err := gcCmd.Run(); err != nil {
-		// Non-fatal: a failed gc still means go-git can read objects;
-		// the remaining risk is that some objects live in packfiles
-		// without a matching .idx file, which the next gc will fix.
-		log.Printf("CheckoutWorkingTree: git gc warning (non-fatal): %v", err)
-	}
-
-	return nil
-}
-
-// isIndexLockContention returns true when the error string indicates a
-// transient lock-file conflict rather than a permanent failure.
-func isIndexLockContention(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, ".git/index.lock") &&
-		(strings.Contains(msg, "File exists") ||
-			strings.Contains(msg, "Unable to create") ||
-			strings.Contains(msg, "Permission denied"))
 }
 
 // shortHash returns a short commit hash (7 characters).

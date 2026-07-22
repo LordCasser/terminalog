@@ -3,13 +3,9 @@ package service
 
 import (
 	"context"
-	"errors"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
-	"time"
 
 	"terminalog/internal/model"
 	"terminalog/pkg/utils"
@@ -17,221 +13,160 @@ import (
 
 // ArticleService provides article-related operations.
 type ArticleService struct {
-	fileSvc *FileService
-	gitSvc  *GitService
-	cache   *ArticleCache
+	gitSvc *GitService
+	cache  *ArticleCache
 }
 
 // NewArticleService creates a new ArticleService instance.
-func NewArticleService(fileSvc *FileService, gitSvc *GitService) *ArticleService {
+func NewArticleService(gitSvc *GitService) *ArticleService {
 	return &ArticleService{
-		fileSvc: fileSvc,
-		gitSvc:  gitSvc,
-		cache:   NewArticleCache(DefaultCacheTTL),
+		gitSvc: gitSvc,
+		cache:  NewArticleCache(DefaultCacheTTL),
 	}
 }
 
 // NewArticleServiceWithCache creates a new ArticleService with custom cache.
-func NewArticleServiceWithCache(fileSvc *FileService, gitSvc *GitService, cache *ArticleCache) *ArticleService {
-	return &ArticleService{
-		fileSvc: fileSvc,
-		gitSvc:  gitSvc,
-		cache:   cache,
-	}
+func NewArticleServiceWithCache(gitSvc *GitService, cache *ArticleCache) *ArticleService {
+	return &ArticleService{gitSvc: gitSvc, cache: cache}
 }
 
 // ListOptions contains options for listing articles.
 type ListOptions struct {
-	// Dir is the directory path to scan.
-	Dir string
-
-	// Sort is the field to sort by.
-	Sort model.SortField
-
-	// Order is the sort direction.
-	Order model.SortOrder
-
-	// UseCache indicates whether to use cached results.
+	Dir      string
+	Sort     model.SortField
+	Order    model.SortOrder
 	UseCache bool
-
-	// Parallel indicates whether to use parallel processing.
-	Parallel bool
 }
 
-// ListArticles returns a list of articles in the given directory (recursive).
-// Only committed Markdown files are included.
-// Deprecated: Use ListDirectory for hierarchical browsing.
+// ResolveNodeType resolves a public content path against the current HEAD.
+func (s *ArticleService) ResolveNodeType(ctx context.Context, contentPath string) (model.NodeType, error) {
+	contentPath, err := utils.ValidateContentPath(contentPath)
+	if err != nil {
+		return "", err
+	}
+	nodeType, err := s.gitSvc.NodeTypeAtHead(contentPath)
+	if err != nil {
+		return "", err
+	}
+	if nodeType == model.NodeTypeFile {
+		if !utils.IsMarkdownFile(contentPath) {
+			return "", model.ErrNotFound
+		}
+		return nodeType, nil
+	}
+
+	articles, err := s.ListArticles(ctx, ListOptions{
+		Dir: contentPath, Sort: model.SortName, Order: model.OrderAsc, UseCache: true,
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(articles) == 0 {
+		return "", model.ErrNotFound
+	}
+	return nodeType, nil
+}
+
+// ListArticles returns every published Markdown article below a directory.
 func (s *ArticleService) ListArticles(ctx context.Context, opts ListOptions) ([]model.Article, error) {
-	// Check cache first
-	cacheKey := opts.Dir + ":" + string(opts.Sort) + ":" + string(opts.Order)
+	dir, err := utils.ValidateContentPath(opts.Dir)
+	if err != nil {
+		return nil, err
+	}
+	generation := s.cache.Generation()
+	cacheKey := dir + ":" + string(opts.Sort) + ":" + string(opts.Order)
 	if opts.UseCache {
 		if cached, ok := s.cache.GetArticleList(cacheKey); ok {
 			return cached, nil
 		}
 	}
 
-	// 1. Scan Markdown files
-	files, err := s.fileSvc.ScanMarkdownFiles(ctx, opts.Dir)
+	files, err := s.gitSvc.ListMarkdownFilesAtHead(dir)
+	if err != nil {
+		return nil, err
+	}
+	histories, err := s.gitSvc.GetFileHistories(ctx, files)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Process files (parallel or sequential)
 	articles := make([]model.Article, 0, len(files))
-
-	if opts.Parallel && len(files) > 10 {
-		// Use parallel processing for large file lists
-		articles = s.listArticlesParallel(ctx, files)
-	} else {
-		// Use sequential processing for small file lists
-		articles = s.listArticlesSequential(ctx, files)
+	for _, file := range files {
+		article, err := s.articleFromHistory(generation, file, histories[file])
+		if err == nil {
+			articles = append(articles, article)
+		}
 	}
-
-	// 3. Sort
 	sortArticles(articles, opts.Sort, opts.Order)
-
-	// 4. Cache result
-	s.cache.SetArticleList(cacheKey, articles)
-
+	s.cache.SetArticleList(generation, cacheKey, articles)
 	return articles, nil
 }
 
-// ListDirectory returns the direct children (subdirectories and files) of a directory.
-// This implements hierarchical browsing: directories are shown as navigable items,
-// files are shown as viewable items. Subdirectories are only included if they
-// contain at least one markdown file recursively.
-// Sort controls the order of items within each group (dirs and files separately).
+// ListDirectory derives direct children from the same published article index
+// used by search, tree, and completion.
 func (s *ArticleService) ListDirectory(ctx context.Context, dir string, sortField model.SortField, sortOrder model.SortOrder) ([]model.Article, error) {
+	dir, err := utils.ValidateContentPath(dir)
+	if err != nil {
+		return nil, err
+	}
+	generation := s.cache.Generation()
 	cacheKey := dir + ":" + string(sortField) + ":" + string(sortOrder)
 	if cached, ok := s.cache.GetDirectoryList(cacheKey); ok {
 		return cached, nil
 	}
 
-	// Scan the directory for direct children
-	entries, err := s.fileSvc.ScanDirectory(ctx, dir)
+	published, err := s.ListArticles(ctx, ListOptions{
+		Dir: dir, Sort: model.SortEdited, Order: model.OrderDesc, UseCache: true,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	articles := make([]model.Article, 0, len(entries))
-	dirFiles := make(map[string][]string)
-	allFiles := make([]string, 0)
-	seenFiles := make(map[string]struct{})
-
-	addFile := func(path string) {
-		if _, ok := seenFiles[path]; ok {
-			return
-		}
-		seenFiles[path] = struct{}{}
-		allFiles = append(allFiles, path)
+	articles := make([]model.Article, 0)
+	directories := make(map[string]model.Article)
+	prefix := ""
+	if dir != "" {
+		prefix = dir + "/"
 	}
 
-	for _, entry := range entries {
-		if entry.Type == model.NodeTypeDir {
-			files, err := s.fileSvc.ScanMarkdownFiles(ctx, entry.Path)
-			if err != nil {
-				continue
-			}
-			dirFiles[entry.Path] = files
-			for _, file := range files {
-				addFile(file)
-			}
+	for _, article := range published {
+		relative := strings.TrimPrefix(article.Path, prefix)
+		parts := strings.SplitN(relative, "/", 2)
+		if len(parts) == 1 {
+			articles = append(articles, article)
 			continue
 		}
 
-		addFile(entry.Path)
-	}
-
-	histories, err := s.gitSvc.GetFileHistories(ctx, allFiles)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, entry := range entries {
-		if entry.Type == model.NodeTypeDir {
-			dirArticle, err := s.getDirectoryArticleFromHistories(entry.Path, dirFiles[entry.Path], histories)
-			if err != nil {
-				dirArticle = model.Article{
-					Path:  entry.Path,
-					Name:  entry.Name,
-					Title: entry.Name,
-					Type:  model.NodeTypeDir,
-				}
-			}
-			articles = append(articles, dirArticle)
-		} else {
-			article, err := s.articleFromHistory(entry.Path, histories[entry.Path])
-			if err != nil {
-				continue
-			}
-			articles = append(articles, article)
+		dirPath := parts[0]
+		if dir != "" {
+			dirPath = dir + "/" + dirPath
+		}
+		current, exists := directories[dirPath]
+		if exists && !article.EditedAt.After(current.EditedAt) {
+			continue
+		}
+		directories[dirPath] = model.Article{
+			Path: dirPath, Name: filepath.Base(dirPath), Title: filepath.Base(dirPath),
+			Type: model.NodeTypeDir, CreatedAt: article.CreatedAt, CreatedBy: article.CreatedBy,
+			EditedAt: article.EditedAt, EditedBy: article.EditedBy,
+			Contributors: article.Contributors, LatestCommit: article.LatestCommit,
 		}
 	}
 
-	// Sort: directories first, then files; within each group, apply sort criteria
+	for _, directory := range directories {
+		articles = append(articles, directory)
+	}
 	sortDirectoryListing(articles, sortField, sortOrder)
-	s.cache.SetDirectoryList(cacheKey, articles)
-
+	s.cache.SetDirectoryList(generation, cacheKey, articles)
 	return articles, nil
 }
 
-// getDirectoryArticleFromHistories creates a directory entry from child file histories.
-func (s *ArticleService) getDirectoryArticleFromHistories(dirPath string, files []string, histories map[string]*model.FileHistory) (model.Article, error) {
-	if len(files) == 0 {
-		return model.Article{
-			Path:  dirPath,
-			Name:  filepath.Base(dirPath),
-			Title: filepath.Base(dirPath),
-			Type:  model.NodeTypeDir,
-		}, nil
-	}
-
-	// Process each file and find the one with the latest edit time
-	var latestArticle *model.Article
-	var latestTime time.Time
-
-	for _, file := range files {
-		article, err := s.articleFromHistory(file, histories[file])
-		if err != nil {
-			continue
-		}
-		if article.EditedAt.After(latestTime) {
-			latestTime = article.EditedAt
-			latestArticle = &article
-		}
-	}
-
-	dirName := filepath.Base(dirPath)
-	result := model.Article{
-		Path:  dirPath,
-		Name:  dirName,
-		Title: dirName,
-		Type:  model.NodeTypeDir,
-	}
-
-	// Use metadata from the most recently edited file for the directory
-	if latestArticle != nil {
-		result.CreatedAt = latestArticle.CreatedAt
-		result.CreatedBy = latestArticle.CreatedBy
-		result.EditedAt = latestArticle.EditedAt
-		result.EditedBy = latestArticle.EditedBy
-		result.LatestCommit = latestArticle.LatestCommit
-		result.Contributors = latestArticle.Contributors
-	}
-
-	return result, nil
-}
-
-func (s *ArticleService) articleFromHistory(file string, history *model.FileHistory) (model.Article, error) {
+func (s *ArticleService) articleFromHistory(generation uint64, file string, history *model.FileHistory) (model.Article, error) {
 	if history == nil || len(history.AllCommits) == 0 {
 		return model.Article{}, model.ErrNotCommitted
 	}
-
 	article := model.Article{
-		Path:         file,
-		Name:         filepath.Base(file),
-		Title:        utils.ExtractTitle(file),
-		Type:         model.NodeTypeFile,
+		Path: file, Name: filepath.Base(file), Title: utils.ExtractTitle(file), Type: model.NodeTypeFile,
 		CreatedAt:    history.FirstCommit.Timestamp,
 		CreatedBy:    history.FirstCommit.Author,
 		EditedAt:     history.LastCommit.Timestamp,
@@ -240,113 +175,23 @@ func (s *ArticleService) articleFromHistory(file string, history *model.FileHist
 		LatestCommit: history.LastCommit.Message,
 	}
 
-	s.cache.SetArticle(file, &article)
+	s.cache.SetArticle(generation, file, &article)
 
 	return article, nil
-}
-func (s *ArticleService) listArticlesSequential(ctx context.Context, files []string) []model.Article {
-	articles := make([]model.Article, 0, len(files))
-
-	for _, file := range files {
-		article, err := s.processFile(ctx, file)
-		if err != nil {
-			continue // Skip on error
-		}
-		articles = append(articles, article)
-	}
-
-	return articles
-}
-
-// listArticlesParallel processes files in parallel using goroutines.
-func (s *ArticleService) listArticlesParallel(ctx context.Context, files []string) []model.Article {
-	// Result channel
-	resultCh := make(chan articleResult, len(files))
-
-	// Worker pool (limit concurrent goroutines)
-	const maxWorkers = 10
-	semaphore := make(chan struct{}, maxWorkers)
-
-	var wg sync.WaitGroup
-
-	for _, file := range files {
-		wg.Add(1)
-
-		go func(f string) {
-			defer wg.Done()
-
-			// Acquire semaphore
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			// Process file
-			article, err := s.processFile(ctx, f)
-			resultCh <- articleResult{article: article, err: err}
-		}(file)
-	}
-
-	// Wait for all workers to complete
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	// Collect results
-	articles := make([]model.Article, 0, len(files))
-	for result := range resultCh {
-		if result.err == nil {
-			articles = append(articles, result.article)
-		}
-	}
-
-	return articles
-}
-
-// articleResult represents the result of processing a file.
-type articleResult struct {
-	article model.Article
-	err     error
-}
-
-// processFile processes a single file and returns its article metadata.
-func (s *ArticleService) processFile(ctx context.Context, file string) (model.Article, error) {
-	// Check cache for this file
-	if cached, ok := s.cache.GetArticle(file); ok {
-		return *cached, nil
-	}
-
-	history, err := s.gitSvc.GetFileHistory(ctx, file)
-	if err != nil {
-		return model.Article{}, err
-	}
-	return s.articleFromHistory(file, history)
 }
 
 // GetArticle returns the content and metadata of a specific article.
 func (s *ArticleService) GetArticle(ctx context.Context, path string) (*model.ArticleDetail, error) {
-	// Normalize path
-	path = utils.NormalizePath(path)
-
-	// Validate path
-	if _, err := s.fileSvc.ValidatePath(path); err != nil {
-		return nil, model.ErrInvalidPath
-	}
-
-	// Check if committed
-	committed, err := s.gitSvc.IsFileCommitted(ctx, path)
+	generation := s.cache.Generation()
+	path, err := utils.ValidateContentPath(path)
 	if err != nil {
 		return nil, err
 	}
-	if !committed {
-		return nil, model.ErrNotCommitted
+	if !utils.IsMarkdownFile(path) {
+		return nil, model.ErrNotFound
 	}
-
-	// Read content
-	content, err := s.fileSvc.ReadFile(ctx, path)
+	content, err := s.gitSvc.ReadFileAtHead(path)
 	if err != nil {
-		if errors.Is(err, model.ErrNotFound) {
-			return nil, model.ErrNotFound
-		}
 		return nil, err
 	}
 
@@ -375,7 +220,7 @@ func (s *ArticleService) GetArticle(ctx context.Context, path string) (*model.Ar
 		}
 
 		// Cache
-		s.cache.SetArticle(path, &article)
+		s.cache.SetArticle(generation, path, &article)
 	}
 
 	return &model.ArticleDetail{
@@ -386,7 +231,11 @@ func (s *ArticleService) GetArticle(ctx context.Context, path string) (*model.Ar
 
 // GetTimeline returns the commit timeline for an article.
 func (s *ArticleService) GetTimeline(ctx context.Context, path string) ([]model.CommitInfo, error) {
-	path = utils.NormalizePath(path)
+	generation := s.cache.Generation()
+	path, err := utils.ValidateContentPath(path)
+	if err != nil {
+		return nil, err
+	}
 
 	// Check cache
 	if cached, ok := s.cache.GetTimeline(path); ok {
@@ -400,14 +249,18 @@ func (s *ArticleService) GetTimeline(ctx context.Context, path string) ([]model.
 	}
 
 	// Cache timeline
-	s.cache.SetTimeline(path, history.AllCommits)
+	s.cache.SetTimeline(generation, path, history.AllCommits)
 
 	return history.AllCommits, nil
 }
 
 // GetTree returns the directory tree structure.
 func (s *ArticleService) GetTree(ctx context.Context, dir string) (*model.TreeNode, error) {
-	dir = utils.NormalizePath(dir)
+	generation := s.cache.Generation()
+	dir, err := utils.ValidateContentPath(dir)
+	if err != nil {
+		return nil, err
+	}
 
 	// Check cache
 	if cached, ok := s.cache.GetTree(dir); ok {
@@ -429,7 +282,7 @@ func (s *ArticleService) GetTree(ctx context.Context, dir string) (*model.TreeNo
 	tree := buildTreeFromArticles(articles, dir)
 
 	// Cache tree
-	s.cache.SetTree(dir, tree)
+	s.cache.SetTree(generation, dir, tree)
 
 	return tree, nil
 }
@@ -576,23 +429,43 @@ func (s *ArticleService) Search(ctx context.Context, query string, dir string) (
 	query = strings.ToLower(query)
 	dir = utils.NormalizePath(dir)
 
-	results := make([]model.SearchResult, 0)
-
-	// 1. Search directories by name - walk all directories recursively
-	if err := s.searchDirectories(ctx, query, dir, &results); err != nil {
-		return nil, err
-	}
-
-	// 2. Search articles by title and file name
 	articles, err := s.ListArticles(ctx, ListOptions{
 		Dir:      dir,
 		Sort:     model.SortEdited,
 		Order:    model.OrderDesc,
 		UseCache: true,
-		Parallel: true,
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	results := make([]model.SearchResult, 0)
+	directories := make(map[string]struct{})
+	for _, article := range articles {
+		parent := utils.NormalizePath(filepath.Dir(article.Path))
+		for parent != "" && parent != "." && parent != dir {
+			if dir != "" && !strings.HasPrefix(parent, dir+"/") {
+				break
+			}
+			if strings.Contains(strings.ToLower(filepath.Base(parent)), query) {
+				directories[parent] = struct{}{}
+			}
+			next := utils.NormalizePath(filepath.Dir(parent))
+			if next == parent {
+				break
+			}
+			parent = next
+		}
+	}
+
+	for path := range directories {
+		name := filepath.Base(path)
+		results = append(results, model.SearchResult{
+			Path:         path,
+			Title:        name,
+			MatchedTitle: name,
+			Type:         model.NodeTypeDir,
+		})
 	}
 
 	for _, article := range articles {
@@ -610,71 +483,19 @@ func (s *ArticleService) Search(ctx context.Context, query string, dir string) (
 		}
 	}
 
-	return results, nil
-}
-
-// searchDirectories recursively walks directories and matches directory names against query.
-func (s *ArticleService) searchDirectories(ctx context.Context, query string, baseDir string, results *[]model.SearchResult) error {
-	absDir, err := utils.ValidatePath(s.fileSvc.baseDir, baseDir)
-	if err != nil {
-		return err
-	}
-
-	if baseDir == "" || baseDir == "/" {
-		absDir = s.fileSvc.baseDir
-	}
-
-	return filepath.WalkDir(absDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil // Skip errors
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].Type != results[j].Type {
+			return results[i].Type == model.NodeTypeDir
 		}
-
-		name := d.Name()
-
-		// Skip .git, .assets, and special directories
-		if name == ".git" || name == ".assets" || strings.HasPrefix(name, "_") {
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		if d.IsDir() {
-			// Check if directory name matches query
-			nameLower := strings.ToLower(name)
-			if strings.Contains(nameLower, query) {
-				// Convert absolute path to relative path for the result
-				relPath, err := filepath.Rel(s.fileSvc.baseDir, path)
-				if err != nil {
-					return nil
-				}
-				relPath = utils.NormalizePath(relPath)
-
-				// Check if directory contains markdown files (pass absolute path directly)
-				hasMD, err := s.fileSvc.directoryHasMarkdownAbsPath(path)
-				if err == nil && hasMD {
-					*results = append(*results, model.SearchResult{
-						Path:         relPath,
-						Title:        name,
-						MatchedTitle: name,
-						Type:         model.NodeTypeDir,
-					})
-				}
-			}
-		}
-
-		return nil
+		return results[i].Path < results[j].Path
 	})
+
+	return results, nil
 }
 
 // InvalidateCache invalidates the article cache.
 func (s *ArticleService) InvalidateCache() {
 	s.cache.Invalidate()
-}
-
-// ClearCache clears the article cache.
-func (s *ArticleService) ClearCache() {
-	s.cache.Clear()
 }
 
 // GetCacheStats returns cache statistics.
@@ -693,41 +514,44 @@ func sortDirectoryListing(articles []model.Article, sortField model.SortField, s
 		}
 
 		// Within same type group, sort by field
-		var less bool
+		var comparison int
 		switch sortField {
 		case model.SortCreated:
-			less = articles[i].CreatedAt.Before(articles[j].CreatedAt)
+			comparison = articles[i].CreatedAt.Compare(articles[j].CreatedAt)
 		case model.SortEdited:
-			less = articles[i].EditedAt.Before(articles[j].EditedAt)
+			comparison = articles[i].EditedAt.Compare(articles[j].EditedAt)
 		default:
-			// Default: alphabetical by name
-			less = articles[i].Name < articles[j].Name
+			comparison = strings.Compare(articles[i].Name, articles[j].Name)
 		}
-
+		if comparison == 0 {
+			comparison = strings.Compare(articles[i].Path, articles[j].Path)
+		}
 		if sortOrder == model.OrderDesc {
-			return !less
+			return comparison > 0
 		}
-		return less
+		return comparison < 0
 	})
 }
 
 // Helper function: sortArticles sorts articles by the given field and order.
 func sortArticles(articles []model.Article, sortField model.SortField, order model.SortOrder) {
 	sort.Slice(articles, func(i, j int) bool {
-		var less bool
+		var comparison int
 
 		switch sortField {
 		case model.SortCreated:
-			less = articles[i].CreatedAt.Before(articles[j].CreatedAt)
+			comparison = articles[i].CreatedAt.Compare(articles[j].CreatedAt)
 		case model.SortEdited:
-			less = articles[i].EditedAt.Before(articles[j].EditedAt)
+			comparison = articles[i].EditedAt.Compare(articles[j].EditedAt)
 		default:
-			less = articles[i].EditedAt.Before(articles[j].EditedAt)
+			comparison = articles[i].EditedAt.Compare(articles[j].EditedAt)
 		}
-
+		if comparison == 0 {
+			comparison = strings.Compare(articles[i].Path, articles[j].Path)
+		}
 		if order == model.OrderDesc {
-			return !less
+			return comparison > 0
 		}
-		return less
+		return comparison < 0
 	})
 }

@@ -108,81 +108,27 @@ func TestGitService_GetFileHistory(t *testing.T) {
 	}
 }
 
-func TestGitService_IsFileCommitted(t *testing.T) {
-	tests := []struct {
-		name     string
-		setup    func(repo *testutil.TestRepo) error
-		filePath string
-		want     bool
-		wantErr  bool
-	}{
-		{
-			name: "committed file",
-			setup: func(repo *testutil.TestRepo) error {
-				return repo.CreateMarkdownFile("test.md", "# Test", "Add", "author")
-			},
-			filePath: "test.md",
-			want:     true,
-		},
-		{
-			name: "uncommitted file in initialized repo",
-			setup: func(repo *testutil.TestRepo) error {
-				// First create a committed file to initialize the repo
-				if err := repo.CreateMarkdownFile("dummy.md", "# Dummy", "Init", "author"); err != nil {
-					return err
-				}
-				// Then create an uncommitted file
-				return repo.CreateUncommittedFile("uncommitted.md", "# Uncommitted")
-			},
-			filePath: "uncommitted.md",
-			want:     false,
-		},
-		{
-			name: "non-existent file in initialized repo",
-			setup: func(repo *testutil.TestRepo) error {
-				return repo.CreateMarkdownFile("exists.md", "# Exists", "Add", "author")
-			},
-			filePath: "not-exist.md",
-			want:     false,
-		},
-		{
-			name: "empty repo returns error",
-			setup: func(repo *testutil.TestRepo) error {
-				// Do nothing - leave repo empty
-				return nil
-			},
-			filePath: "any.md",
-			wantErr:  true, // Empty repo has no HEAD reference
-		},
-	}
+func TestGitService_PublishedTreeIgnoresWorktreeChanges(t *testing.T) {
+	repo, err := testutil.NewTestRepo()
+	require.NoError(t, err)
+	defer repo.Cleanup()
+	require.NoError(t, repo.CreateMarkdownFile("published.md", "# Published", "Add", "author"))
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo, err := testutil.NewTestRepo()
-			require.NoError(t, err)
-			defer repo.Cleanup()
+	gitSvc, err := service.NewGitService(repo.Path)
+	require.NoError(t, err)
 
-			if tt.setup != nil {
-				require.NoError(t, tt.setup(repo))
-			}
+	require.NoError(t, os.WriteFile(filepath.Join(repo.Path, "published.md"), []byte("# Draft"), 0644))
+	content, err := gitSvc.ReadFileAtHead("published.md")
+	require.NoError(t, err)
+	assert.Equal(t, "# Published", string(content))
 
-			gitSvc, err := service.NewGitService(repo.Path)
-			require.NoError(t, err)
-
-			committed, err := gitSvc.IsFileCommitted(context.Background(), tt.filePath)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, committed)
-		})
-	}
+	require.NoError(t, os.Remove(filepath.Join(repo.Path, "published.md")))
+	files, err := gitSvc.ListMarkdownFilesAtHead("")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"published.md"}, files)
 }
 
-func TestGitService_GetRepo(t *testing.T) {
+func TestGitService_CurrentHead(t *testing.T) {
 	repo, err := testutil.NewTestRepo()
 	require.NoError(t, err)
 	defer repo.Cleanup()
@@ -192,30 +138,22 @@ func TestGitService_GetRepo(t *testing.T) {
 	gitSvc, err := service.NewGitService(repo.Path)
 	require.NoError(t, err)
 
-	assert.NotNil(t, gitSvc.GetRepo())
+	head, err := gitSvc.CurrentHead()
+	require.NoError(t, err)
+	require.Len(t, head, 40)
+	ref, err := repo.Repo.Head()
+	require.NoError(t, err)
+	assert.Equal(t, ref.Hash().String(), head)
 }
 
-func TestGitService_GetRepoPath(t *testing.T) {
-	repo, err := testutil.NewTestRepo()
-	require.NoError(t, err)
-	defer repo.Cleanup()
-
-	require.NoError(t, repo.CreateMarkdownFile("test.md", "# Test", "Add", "author"))
-
-	gitSvc, err := service.NewGitService(repo.Path)
-	require.NoError(t, err)
-
-	assert.Equal(t, repo.Path, gitSvc.GetRepoPath())
-}
-
-func TestGitService_CheckoutWorkingTreeAfterPushToCheckedOutBranch(t *testing.T) {
+func TestGitService_PushUpdatesCheckedOutWorktree(t *testing.T) {
 	repo, err := testutil.NewTestRepo()
 	require.NoError(t, err)
 	defer repo.Cleanup()
 
 	require.NoError(t, repo.CreateMarkdownFile("existing.md", "# Existing", "Add existing", "author"))
 
-	gitSvc, err := service.NewGitService(repo.Path)
+	_, err = service.NewGitService(repo.Path)
 	require.NoError(t, err)
 
 	clientDir := filepath.Join(t.TempDir(), "client")
@@ -230,14 +168,8 @@ func TestGitService_CheckoutWorkingTreeAfterPushToCheckedOutBranch(t *testing.T)
 	branch := currentBranch(t, repo.Path)
 	runGit(t, clientDir, "push", "origin", "HEAD:"+branch)
 
-	// Pushing into a checked-out non-bare repository updates refs/objects but
-	// deliberately leaves the worktree stale. This is the production symptom:
-	// file scanning cannot see the new article until the worktree is synced.
-	_, statErr := os.Stat(filepath.Join(repo.Path, "new-article.md"))
-	require.True(t, os.IsNotExist(statErr), "test setup expected pushed file to be absent before worktree sync")
-
-	require.NoError(t, gitSvc.CheckoutWorkingTree())
-
+	// receive.denyCurrentBranch=updateInstead makes worktree publication part
+	// of receive-pack; no post-push reset or garbage collection is required.
 	content, err := os.ReadFile(filepath.Join(repo.Path, "new-article.md"))
 	require.NoError(t, err)
 	assert.Equal(t, "# New Article\n", string(content))

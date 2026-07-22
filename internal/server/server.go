@@ -191,7 +191,6 @@ func (s *Server) setupRoutes() {
 	r.Use(s.loggingMiddleware)
 	r.Use(Gzip)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
 
 	// Enable CORS in debug mode
 	if s.debug {

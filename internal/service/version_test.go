@@ -94,14 +94,10 @@ func TestVersionService_GetVersion(t *testing.T) {
 				require.NoError(t, tt.setup(repo))
 			}
 
-			fileSvc, err := service.NewFileService(repo.Path)
-			require.NoError(t, err)
-
 			gitSvc, err := service.NewGitService(repo.Path)
 			require.NoError(t, err)
 
-			articleSvc := service.NewArticleService(fileSvc, gitSvc)
-			versionSvc := service.NewVersionService(articleSvc, gitSvc, fileSvc)
+			versionSvc := service.NewVersionService(gitSvc)
 
 			versionInfo, err := versionSvc.GetVersion(context.Background(), tt.path)
 
@@ -124,4 +120,3 @@ func TestVersionService_GetVersion(t *testing.T) {
 		})
 	}
 }
-

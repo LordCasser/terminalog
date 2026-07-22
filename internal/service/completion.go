@@ -34,17 +34,11 @@ type CompletionResponse struct {
 // CompletionService provides path completion functionality.
 type CompletionService struct {
 	articleSvc *ArticleService
-	fileSvc    *FileService
-	gitSvc     *GitService
 }
 
 // NewCompletionService creates a new CompletionService instance.
-func NewCompletionService(articleSvc *ArticleService, fileSvc *FileService, gitSvc *GitService) *CompletionService {
-	return &CompletionService{
-		articleSvc: articleSvc,
-		fileSvc:    fileSvc,
-		gitSvc:     gitSvc,
-	}
+func NewCompletionService(articleSvc *ArticleService) *CompletionService {
+	return &CompletionService{articleSvc: articleSvc}
 }
 
 // HandleCompletion handles a path completion request.
@@ -89,7 +83,6 @@ func (s *CompletionService) GetMatchingItems(ctx context.Context, dir, prefix st
 		Sort:     model.SortEdited,
 		Order:    model.OrderDesc,
 		UseCache: true,
-		Parallel: false,
 	})
 	if err != nil {
 		return nil, err

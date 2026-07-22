@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -19,12 +18,11 @@ import (
 type ArticleHandler struct {
 	svc        *service.ArticleService
 	versionSvc *service.VersionService
-	fileSvc    *service.FileService
 }
 
 // NewArticleHandler creates a new ArticleHandler instance.
-func NewArticleHandler(svc *service.ArticleService, versionSvc *service.VersionService, fileSvc *service.FileService) *ArticleHandler {
-	return &ArticleHandler{svc: svc, versionSvc: versionSvc, fileSvc: fileSvc}
+func NewArticleHandler(svc *service.ArticleService, versionSvc *service.VersionService) *ArticleHandler {
+	return &ArticleHandler{svc: svc, versionSvc: versionSvc}
 }
 
 // parseSortParams extracts sort and order from query parameters.
@@ -91,23 +89,20 @@ func (h *ArticleHandler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Determine if this is a directory or a file
-	absPath, err := h.fileSvc.ValidatePath(path)
+	nodeType, err := h.svc.ResolveNodeType(r.Context(), path)
 	if err != nil {
-		utils.RespondBadRequest(w, "Invalid path")
-		return
-	}
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
+		switch {
+		case errors.Is(err, model.ErrInvalidPath):
+			utils.RespondBadRequest(w, "Invalid path")
+		case errors.Is(err, model.ErrNotFound):
 			utils.RespondNotFound(w, "Not found")
-			return
+		default:
+			utils.RespondInternalServerError(w, err.Error())
 		}
-		utils.RespondInternalServerError(w, err.Error())
 		return
 	}
 
-	if info.IsDir() {
+	if nodeType == model.NodeTypeDir {
 		// Path is a directory -> return listing
 		h.handleDirectoryListing(w, r, path)
 		return

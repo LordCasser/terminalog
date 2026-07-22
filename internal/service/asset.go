@@ -3,8 +3,9 @@ package service
 
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"crypto/sha256"
+	"errors"
+	"fmt"
 	"strings"
 
 	"terminalog/internal/model"
@@ -21,18 +22,20 @@ type Asset struct {
 
 	// Size is the file size in bytes.
 	Size int64
+
+	// ETag identifies the exact content so mutable Git-backed assets can be
+	// cached by browsers without remaining stale after a push.
+	ETag string
 }
 
 // AssetService provides asset operations.
 type AssetService struct {
-	fileSvc *FileService
+	gitSvc *GitService
 }
 
 // NewAssetService creates a new AssetService instance.
-func NewAssetService(fileSvc *FileService) *AssetService {
-	return &AssetService{
-		fileSvc: fileSvc,
-	}
+func NewAssetService(gitSvc *GitService) *AssetService {
+	return &AssetService{gitSvc: gitSvc}
 }
 
 // GetAsset returns an asset by path.
@@ -40,29 +43,18 @@ func NewAssetService(fileSvc *FileService) *AssetService {
 // For example, requesting "guides/images/photo.jpg" will look for:
 // 1. guides/.assets/images/photo.jpg (assets in article directory)
 // 2. .assets/guides/images/photo.jpg (assets in root directory)
-func (s *AssetService) GetAsset(ctx context.Context, path string) (*Asset, error) {
-	// Normalize path
-	path = utils.NormalizePath(path)
-
-	// Validate path for security (reject .., .git, etc.)
-	baseDir := s.fileSvc.GetBaseDir()
-	if _, err := utils.ValidatePath(baseDir, path); err != nil {
+func (s *AssetService) GetAsset(_ context.Context, path string) (*Asset, error) {
+	path, err := utils.ValidateContentPath(path)
+	if err != nil {
 		return nil, err
 	}
 
 	// Try to find the asset in .assets directories
 	// Strategy: try multiple locations where .assets might exist
-	actualPath, err := s.resolveAssetPath(path)
+	_, content, err := s.resolveAssetPath(path)
 	if err != nil {
 		return nil, err
 	}
-
-	// Read file content
-	content, err := s.fileSvc.ReadFile(ctx, actualPath)
-	if err != nil {
-		return nil, err
-	}
-
 	// Get MIME type
 	contentType := utils.GetMimeType(path)
 
@@ -70,6 +62,7 @@ func (s *AssetService) GetAsset(ctx context.Context, path string) (*Asset, error
 		Data:        content,
 		ContentType: contentType,
 		Size:        int64(len(content)),
+		ETag:        fmt.Sprintf("\"%x\"", sha256.Sum256(content)),
 	}, nil
 }
 
@@ -77,9 +70,7 @@ func (s *AssetService) GetAsset(ctx context.Context, path string) (*Asset, error
 // Input: "guides/images/photo.jpg" (without .assets)
 // Output: "guides/.assets/images/photo.jpg" (if found)
 // Fallback: ".assets/guides/images/photo.jpg" (if found)
-func (s *AssetService) resolveAssetPath(requestPath string) (string, error) {
-	baseDir := s.fileSvc.GetBaseDir()
-
+func (s *AssetService) resolveAssetPath(requestPath string) (string, []byte, error) {
 	// Strategy 1: Check if .assets exists at each directory level
 	// For "guides/images/photo.jpg", try:
 	// - "guides/.assets/images/photo.jpg"
@@ -88,7 +79,7 @@ func (s *AssetService) resolveAssetPath(requestPath string) (string, error) {
 	// Split the path into components
 	parts := strings.Split(requestPath, "/")
 	if len(parts) < 1 {
-		return "", model.ErrNotFound
+		return "", nil, model.ErrNotFound
 	}
 
 	// Try inserting .assets at each level (from deepest to shallowest)
@@ -108,12 +99,14 @@ func (s *AssetService) resolveAssetPath(requestPath string) (string, error) {
 
 		testPath := strings.Join(pathParts, "/")
 
-		// Check if file exists
-		absPath := filepath.Join(baseDir, testPath)
-		if info, err := os.Stat(absPath); err == nil && !info.IsDir() {
-			return testPath, nil
+		content, err := s.gitSvc.ReadFileAtHead(testPath)
+		if err == nil {
+			return testPath, content, nil
+		}
+		if !errors.Is(err, model.ErrNotFound) {
+			return "", nil, err
 		}
 	}
 
-	return "", model.ErrNotFound
+	return "", nil, model.ErrNotFound
 }

@@ -46,8 +46,13 @@ func (h *AssetHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	// Set headers
 	w.Header().Set("Content-Type", asset.ContentType)
+	w.Header().Set("Cache-Control", "public, no-cache")
+	w.Header().Set("ETag", asset.ETag)
+	if r.Header.Get("If-None-Match") == asset.ETag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", asset.Size))
-	w.Header().Set("Cache-Control", "public, max-age=86400") // Cache for 24 hours
 
 	// Write content
 	w.Write(asset.Data)

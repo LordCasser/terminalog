@@ -11,18 +11,12 @@ import (
 
 // VersionService provides version-related operations.
 type VersionService struct {
-	articleSvc *ArticleService
-	gitSvc     *GitService
-	fileSvc    *FileService
+	gitSvc *GitService
 }
 
 // NewVersionService creates a new VersionService instance.
-func NewVersionService(articleSvc *ArticleService, gitSvc *GitService, fileSvc *FileService) *VersionService {
-	return &VersionService{
-		articleSvc: articleSvc,
-		gitSvc:     gitSvc,
-		fileSvc:    fileSvc,
-	}
+func NewVersionService(gitSvc *GitService) *VersionService {
+	return &VersionService{gitSvc: gitSvc}
 }
 
 // VersionRule constants for version number calculation.
@@ -80,19 +74,12 @@ func (s *VersionService) GetVersion(ctx context.Context, path string) (*model.Ve
 
 		if i == 0 {
 			// First commit: file creation
-			if hasDiff {
-				linesAdded = diff.LinesAdded
-				linesRemoved = diff.LinesRemoved
-				fileLinesAfter = diff.FileLinesAfter
-			} else {
-				// Fallback: treat as creation of current file size
-				currentContent, err := s.fileSvc.ReadFile(ctx, path)
-				if err != nil {
-					return nil, err
-				}
-				fileLinesAfter = countLines(string(currentContent))
-				linesAdded = fileLinesAfter
+			if !hasDiff {
+				return nil, fmt.Errorf("missing diff for initial commit %s", commit.Hash)
 			}
+			linesAdded = diff.LinesAdded
+			linesRemoved = diff.LinesRemoved
+			fileLinesAfter = diff.FileLinesAfter
 			linesChanged = linesAdded + linesRemoved
 			changeType = model.ChangeTypeMajor // File creation is always major
 			major = 1
@@ -137,14 +124,14 @@ func (s *VersionService) GetVersion(ctx context.Context, path string) (*model.Ve
 		}
 
 		versionHistory = append(versionHistory, model.VersionHistoryEntry{
-			Version:       formatVersion(major, minor, patch),
-			Hash:          commit.Hash,
-			Author:        commit.Author,
-			Timestamp:     commit.Timestamp,
-			LinesAdded:    linesAdded,
-			LinesRemoved:  linesRemoved,
-			LinesChanged:  linesChanged,
-			ChangeType:    changeType,
+			Version:      formatVersion(major, minor, patch),
+			Hash:         commit.Hash,
+			Author:       commit.Author,
+			Timestamp:    commit.Timestamp,
+			LinesAdded:   linesAdded,
+			LinesRemoved: linesRemoved,
+			LinesChanged: linesChanged,
+			ChangeType:   changeType,
 		})
 	}
 
@@ -193,10 +180,6 @@ func classifyChange(linesChanged, prevFileLines int) model.ChangeType {
 func formatVersion(major, minor, patch int) string {
 	return fmt.Sprintf("v%d.%d.%d", major, minor, patch)
 }
-
-// countLines counts the number of lines in a string.
-// (Defined in git.go; this is a duplicate for the version package's internal use.)
-// If needed, this can be moved to a shared utility.
 
 // reverseCommits reverses a slice of CommitInfo.
 func reverseCommits(commits []model.CommitInfo) []model.CommitInfo {

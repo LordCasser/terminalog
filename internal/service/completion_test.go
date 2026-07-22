@@ -55,9 +55,9 @@ func TestCompletionService_ChineseMatching(t *testing.T) {
 			setup: func(repo *testutil.TestRepo) error {
 				return repo.CreateMarkdownFile("linux/qemu-setup.md", "# QEMU Setup\nContent.", "Add", "author")
 			},
-			dir:      "",
-			prefix:   "qemu",
-			wantMin:  1,
+			dir:     "",
+			prefix:  "qemu",
+			wantMin: 1,
 		},
 		{
 			name: "global: no match for unrelated Chinese query",
@@ -74,9 +74,9 @@ func TestCompletionService_ChineseMatching(t *testing.T) {
 			setup: func(repo *testutil.TestRepo) error {
 				return repo.CreateMarkdownFile("硬件安全/微体系结构攻击.md", "# 微体系结构攻击\nContent.", "Add", "author")
 			},
-			dir:      "硬件安全",
-			prefix:   "攻击",
-			wantMin:  1, // title Contains "攻击" → match
+			dir:     "硬件安全",
+			prefix:  "攻击",
+			wantMin: 1, // title Contains "攻击" → match
 		},
 		{
 			name: "dir-scoped: filename prefix match",
@@ -92,9 +92,9 @@ func TestCompletionService_ChineseMatching(t *testing.T) {
 			setup: func(repo *testutil.TestRepo) error {
 				return repo.CreateMarkdownFile("tech/go-best-practices.md", "# Go Best Practices\nContent.", "Add", "author")
 			},
-			dir:      "tech",
-			prefix:   "best",
-			wantMin:  1, // title "Go Best Practices" Contains "best" → match despite filename HasPrefix failure
+			dir:     "tech",
+			prefix:  "best",
+			wantMin: 1, // title "Go Best Practices" Contains "best" → match despite filename HasPrefix failure
 		},
 		{
 			name: "dir-scoped: subdir prefix match",
@@ -124,14 +124,11 @@ func TestCompletionService_ChineseMatching(t *testing.T) {
 
 			require.NoError(t, tt.setup(repo))
 
-			fileSvc, err := service.NewFileService(repo.Path)
-			require.NoError(t, err)
-
 			gitSvc, err := service.NewGitService(repo.Path)
 			require.NoError(t, err)
 
-			articleSvc := service.NewArticleService(fileSvc, gitSvc)
-			completionSvc := service.NewCompletionService(articleSvc, fileSvc, gitSvc)
+			articleSvc := service.NewArticleService(gitSvc)
+			completionSvc := service.NewCompletionService(articleSvc)
 
 			items, err := completionSvc.GetMatchingItems(context.Background(), tt.dir, tt.prefix)
 			require.NoError(t, err)

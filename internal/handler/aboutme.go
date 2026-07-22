@@ -2,7 +2,6 @@
 package handler
 
 import (
-	"errors"
 	"net/http"
 
 	"terminalog/internal/model"
@@ -10,17 +9,14 @@ import (
 	"terminalog/pkg/utils"
 )
 
-// AboutMeFilename is the filename for the About Me page.
-const AboutMeFilename = "_ABOUTME.md"
-
 // AboutMeHandler handles About Me related HTTP requests.
 type AboutMeHandler struct {
-	fileSvc *service.FileService
+	svc *service.AboutMeService
 }
 
 // NewAboutMeHandler creates a new AboutMeHandler instance.
-func NewAboutMeHandler(fileSvc *service.FileService) *AboutMeHandler {
-	return &AboutMeHandler{fileSvc: fileSvc}
+func NewAboutMeHandler(svc *service.AboutMeService) *AboutMeHandler {
+	return &AboutMeHandler{svc: svc}
 }
 
 // Get handles GET /api/v1/special/aboutme.
@@ -28,31 +24,16 @@ func NewAboutMeHandler(fileSvc *service.FileService) *AboutMeHandler {
 func (h *AboutMeHandler) Get(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Read the special file
-	content, err := h.fileSvc.ReadSpecialFile(ctx, AboutMeFilename)
+	content, exists, err := h.svc.Get(ctx)
 	if err != nil {
-		switch {
-		case errors.Is(err, model.ErrNotFound):
-			utils.RespondJSON(w, http.StatusOK, model.AboutMeResponse{
-				Path:    AboutMeFilename,
-				Title:   "About Me",
-				Content: "",
-				Exists:  false,
-			})
-		default:
-			utils.RespondInternalServerError(w, err.Error())
-		}
+		utils.RespondInternalServerError(w, err.Error())
 		return
 	}
 
-	// Extract title from filename (remove .md extension and _ prefix)
-	title := "About Me"
-
-	// Respond
 	utils.RespondJSON(w, http.StatusOK, model.AboutMeResponse{
-		Path:    AboutMeFilename,
-		Title:   title,
+		Path:    service.AboutMeFilename,
+		Title:   "About Me",
 		Content: string(content),
-		Exists:  true,
+		Exists:  exists,
 	})
 }

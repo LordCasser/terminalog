@@ -38,15 +38,13 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 	}
 
 	// Create services
-	fileSvc, err := service.NewFileService(repo.Path)
-	require.NoError(t, err)
 
 	gitSvc, err := service.NewGitService(repo.Path)
 	require.NoError(t, err)
 
-	articleSvc := service.NewArticleService(fileSvc, gitSvc)
-	assetSvc := service.NewAssetService(fileSvc)
-	versionSvc := service.NewVersionService(articleSvc, gitSvc, fileSvc) // v1.2
+	articleSvc := service.NewArticleService(gitSvc)
+	assetSvc := service.NewAssetService(gitSvc)
+	versionSvc := service.NewVersionService(gitSvc)
 
 	// Create test auth config
 	hashedPass, err := bcrypt.GenerateFromPassword([]byte("testpass"), bcrypt.DefaultCost)
@@ -63,7 +61,7 @@ func SetupIntegrationTest(t *testing.T, setup func(repo *testutil.TestRepo) erro
 	_ = authSvc // unused for now
 
 	// Create handlers
-	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc, fileSvc)
+	articleHandler := handler.NewArticleHandler(articleSvc, versionSvc)
 	assetHandler := handler.NewAssetHandler(assetSvc)
 	searchHandler := handler.NewSearchHandler(articleSvc)
 	treeHandler := handler.NewTreeHandler(articleSvc)
@@ -228,7 +226,7 @@ func TestAPI_Articles_UncommittedNotVisible(t *testing.T) {
 	require.NoError(t, err)
 	defer resp2.Body.Close()
 
-	assert.Equal(t, http.StatusBadRequest, resp2.StatusCode)
+	assert.Equal(t, http.StatusNotFound, resp2.StatusCode)
 }
 
 func TestAPI_DirectoryListingOrder(t *testing.T) {

@@ -3,12 +3,11 @@ package handler
 
 import (
 	"compress/gzip"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"strings"
+	"time"
 
 	"terminalog/internal/service"
 )
@@ -18,6 +17,18 @@ type GitHandler struct {
 	gitSvc       *service.GitService
 	authSvc      *service.AuthService
 	onRepoUpdate func()
+}
+
+const gitRPCDeadline = 15 * time.Minute
+
+// extendGitRPCDeadline overrides the short general HTTP deadline for packfile
+// transfer and the buffered publication phase. ResponseController unwraps the
+// logging and compression writers used by the server.
+func extendGitRPCDeadline(w http.ResponseWriter) {
+	deadline := time.Now().Add(gitRPCDeadline)
+	controller := http.NewResponseController(w)
+	_ = controller.SetReadDeadline(deadline)
+	_ = controller.SetWriteDeadline(deadline)
 }
 
 // NewGitHandler creates a new GitHandler instance.
@@ -91,6 +102,8 @@ func (h *GitHandler) InfoRefs(w http.ResponseWriter, r *http.Request) {
 // This pipes the HTTP request body to `git upload-pack --stateless-rpc .`
 // and streams the response back directly.
 func (h *GitHandler) UploadPack(w http.ResponseWriter, r *http.Request) {
+	extendGitRPCDeadline(w)
+
 	// Validate Content-Type
 	if r.Header.Get("Content-Type") != "application/x-git-upload-pack-request" {
 		http.Error(w, "Invalid Content-Type", http.StatusBadRequest)
@@ -119,10 +132,11 @@ func (h *GitHandler) UploadPack(w http.ResponseWriter, r *http.Request) {
 }
 
 // ReceivePack handles POST /git-receive-pack (Push).
-// This pipes the HTTP request body to `git receive-pack --stateless-rpc .`
-// and streams the response back directly.
+// It buffers the protocol response until the published read view is refreshed.
 // Authentication is required for push operations.
 func (h *GitHandler) ReceivePack(w http.ResponseWriter, r *http.Request) {
+	extendGitRPCDeadline(w)
+
 	// Extract and validate authentication
 	auth := h.extractAuth(r)
 	if auth == nil {
@@ -157,45 +171,17 @@ func (h *GitHandler) ReceivePack(w http.ResponseWriter, r *http.Request) {
 	}
 	defer reqBody.Close()
 
-	// Stream response from git subprocess directly to HTTP response writer
-	if err := h.gitSvc.ServiceRPC(service.ServiceTypeReceivePack, reqBody, w); err != nil {
+	// Do not publish the protocol response until the worktree, Git reader, and
+	// application cache all represent the accepted commit.
+	result, err := h.gitSvc.ReceivePack(reqBody, h.onRepoUpdate)
+	if err != nil {
 		log.Printf("ReceivePack: service RPC failed: %v", err)
+		http.Error(w, "Failed to publish repository update", http.StatusInternalServerError)
+		return
 	}
 
-	// After push completes:
-	// 1. Synchronize working directory to reflect pushed content
-	//    (git receive-pack only updates refs/objects, not working tree)
-	// 2. Compact objects to ensure go-git discoverability
-	// 3. Reload go-git repo to refresh cached state for read operations
-	// 4. Invalidate article cache so next request serves fresh content
-
-	// Post-push synchronization: ensure the working tree and go-git
-	// caches reflect the newly pushed commits before the next page
-	// request.
-	//
-	// The HTTP response has already been committed (ServiceRPC streams
-	// the git protocol response), so we cannot report errors to the git
-	// client here.  Instead, failures are logged at high severity so the
-	// operator can investigate.
-	var syncErrors []string
-
-	if checkoutErr := h.gitSvc.CheckoutWorkingTree(); checkoutErr != nil {
-		syncErrors = append(syncErrors, fmt.Sprintf("worktree sync: %v", checkoutErr))
-	}
-
-	if reloadErr := h.gitSvc.ReloadRepo(); reloadErr != nil {
-		syncErrors = append(syncErrors, fmt.Sprintf("repo reload: %v", reloadErr))
-	}
-
-	if len(syncErrors) > 0 {
-		log.Printf("ReceivePack: post-push sync FAILED — new articles may not be visible until server restart or next push: %s", strings.Join(syncErrors, "; "))
-	}
-
-	// Always invalidate article cache after push, even if checkout/reload had
-	// issues. This ensures that if the underlying issue is transient (e.g.,
-	// filesystem cache delay), the next page request will trigger a fresh scan.
-	if h.onRepoUpdate != nil {
-		h.onRepoUpdate()
+	if _, err := w.Write(result); err != nil {
+		log.Printf("ReceivePack: failed to write protocol response: %v", err)
 	}
 }
 
@@ -206,33 +192,14 @@ type authInfo struct {
 }
 
 func (h *GitHandler) extractAuth(r *http.Request) *authInfo {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return nil
-	}
-
-	// Check for Basic auth
-	if !strings.HasPrefix(authHeader, "Basic ") {
-		return nil
-	}
-
-	// Decode credentials
-	encoded := strings.TrimPrefix(authHeader, "Basic ")
-	decoded, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil
-	}
-
-	// Split username:password
-	credentials := string(decoded)
-	parts := strings.SplitN(credentials, ":", 2)
-	if len(parts) != 2 {
+	username, password, ok := r.BasicAuth()
+	if !ok {
 		return nil
 	}
 
 	return &authInfo{
-		Username: parts[0],
-		Password: parts[1],
+		Username: username,
+		Password: password,
 	}
 }
 

@@ -2,60 +2,40 @@
 package utils
 
 import (
-	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"terminalog/internal/model"
 )
 
-// ValidatePath checks if the requested path is safe (no directory traversal).
-// It returns the absolute validated path or an error.
-func ValidatePath(baseDir, requestedPath string) (string, error) {
-	// Clean the requested path to resolve .. and redundant separators.
-	cleanedPath := filepath.Clean(requestedPath)
-
-	// Reject explicitly absolute paths — filepath.Join would strip the
-	// leading separator, making them appear to be inside baseDir.
-	if filepath.IsAbs(cleanedPath) {
+// ValidateContentPath returns a canonical slash-separated path relative to a
+// Git content root. Absolute paths, traversal, and .git access are rejected.
+func ValidateContentPath(requestedPath string) (string, error) {
+	if filepath.IsAbs(requestedPath) || filepath.VolumeName(requestedPath) != "" {
 		return "", model.ErrInvalidPath
 	}
 
-	// Construct the full path relative to base directory.
-	fullPath := filepath.Join(baseDir, cleanedPath)
-
-	// Resolve both paths to absolute form.
-	absBase, err := filepath.Abs(baseDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute base path: %w", err)
-	}
-
-	absFull, err := filepath.Abs(fullPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute full path: %w", err)
-	}
-
-	// Use filepath.Rel to verify the resolved path does not escape baseDir.
-	// If absFull is outside absBase, Rel returns a path starting with "..".
-	relPath, err := filepath.Rel(absBase, absFull)
-	if err != nil {
-		return "", fmt.Errorf("failed to compute relative path: %w", err)
-	}
-	if strings.HasPrefix(relPath, "..") {
+	normalized := strings.ReplaceAll(requestedPath, "\\", "/")
+	if strings.HasPrefix(normalized, "/") {
 		return "", model.ErrInvalidPath
 	}
 
-	// Protect .git directory from access.
-	// Check each path segment individually — avoids false positives from
-	// filenames containing ".git" as a substring.
-	segments := strings.Split(filepath.ToSlash(relPath), "/")
-	for _, seg := range segments {
-		if seg == ".git" {
+	cleaned := path.Clean(normalized)
+	if cleaned == "." {
+		return "", nil
+	}
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return "", model.ErrInvalidPath
+	}
+
+	for _, segment := range strings.Split(cleaned, "/") {
+		if segment == ".git" {
 			return "", model.ErrInvalidPath
 		}
 	}
 
-	return absFull, nil
+	return cleaned, nil
 }
 
 // ExtractTitle extracts the article title from a file path.

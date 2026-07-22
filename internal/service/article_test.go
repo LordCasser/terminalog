@@ -73,6 +73,29 @@ func TestArticleService_ListArticles(t *testing.T) {
 			},
 		},
 		{
+			name: "deleted file recreated only in worktree not shown",
+			setup: func(repo *testutil.TestRepo) error {
+				if err := repo.CreateMarkdownFile("recreated.md", "# Published", "Add", "author"); err != nil {
+					return err
+				}
+				worktree, err := repo.Repo.Worktree()
+				if err != nil {
+					return err
+				}
+				if _, err := worktree.Remove("recreated.md"); err != nil {
+					return err
+				}
+				if _, err := worktree.Commit("Delete", &git.CommitOptions{Author: &object.Signature{
+					Name: "author", Email: "author@example.com", When: time.Now(),
+				}}); err != nil {
+					return err
+				}
+				return repo.CreateUncommittedFile("recreated.md", "# Draft")
+			},
+			opts:    service.ListOptions{Dir: ""},
+			wantLen: 0,
+		},
+		{
 			name: "non-markdown file not shown",
 			setup: func(repo *testutil.TestRepo) error {
 				if err := repo.CreateFile("test.md", "# Test"); err != nil {
@@ -107,13 +130,10 @@ func TestArticleService_ListArticles(t *testing.T) {
 				require.NoError(t, tt.setup(repo))
 			}
 
-			fileSvc, err := service.NewFileService(repo.Path)
-			require.NoError(t, err)
-
 			gitSvc, err := service.NewGitService(repo.Path)
 			require.NoError(t, err)
 
-			articleSvc := service.NewArticleService(fileSvc, gitSvc)
+			articleSvc := service.NewArticleService(gitSvc)
 
 			articles, err := articleSvc.ListArticles(context.Background(), tt.opts)
 
@@ -164,7 +184,7 @@ func TestArticleService_GetArticle(t *testing.T) {
 				return repo.CreateUncommittedFile("uncommitted.md", "# Uncommitted")
 			},
 			path:    "uncommitted.md",
-			wantErr: model.ErrNotCommitted,
+			wantErr: model.ErrNotFound,
 		},
 		{
 			name: "non-existent article",
@@ -172,7 +192,7 @@ func TestArticleService_GetArticle(t *testing.T) {
 				return repo.CreateMarkdownFile("exists.md", "# Exists", "Add", "author")
 			},
 			path:    "not-exist.md",
-			wantErr: model.ErrNotCommitted,
+			wantErr: model.ErrNotFound,
 		},
 		{
 			name: "multi-author article",
@@ -198,13 +218,10 @@ func TestArticleService_GetArticle(t *testing.T) {
 				require.NoError(t, tt.setup(repo))
 			}
 
-			fileSvc, err := service.NewFileService(repo.Path)
-			require.NoError(t, err)
-
 			gitSvc, err := service.NewGitService(repo.Path)
 			require.NoError(t, err)
 
-			articleSvc := service.NewArticleService(fileSvc, gitSvc)
+			articleSvc := service.NewArticleService(gitSvc)
 
 			article, err := articleSvc.GetArticle(context.Background(), tt.path)
 
@@ -271,13 +288,10 @@ func TestArticleService_GetTimeline(t *testing.T) {
 				require.NoError(t, tt.setup(repo))
 			}
 
-			fileSvc, err := service.NewFileService(repo.Path)
-			require.NoError(t, err)
-
 			gitSvc, err := service.NewGitService(repo.Path)
 			require.NoError(t, err)
 
-			articleSvc := service.NewArticleService(fileSvc, gitSvc)
+			articleSvc := service.NewArticleService(gitSvc)
 
 			commits, err := articleSvc.GetTimeline(context.Background(), tt.path)
 
@@ -302,13 +316,10 @@ func TestArticleService_ListDirectory_AfterDeleteAndInvalidate(t *testing.T) {
 	now := time.Now()
 	require.NoError(t, repo.CreateMarkdownFileWithTime("hardware_security/FragAttack.md", "# FragAttack", "Add FragAttack", "author", now.Add(-2*time.Hour)))
 
-	fileSvc, err := service.NewFileService(repo.Path)
-	require.NoError(t, err)
-
 	gitSvc, err := service.NewGitService(repo.Path)
 	require.NoError(t, err)
 
-	articleSvc := service.NewArticleService(fileSvc, gitSvc)
+	articleSvc := service.NewArticleService(gitSvc)
 	ctx := context.Background()
 
 	articles, err := articleSvc.ListDirectory(ctx, "hardware_security", model.SortName, model.OrderAsc)
@@ -338,9 +349,25 @@ func TestArticleService_ListDirectory_AfterDeleteAndInvalidate(t *testing.T) {
 
 	articleSvc.InvalidateCache()
 
-	updatedArticles, err := articleSvc.ListDirectory(ctx, "hardware_security", model.SortName, model.OrderAsc)
+	_, err = articleSvc.ListDirectory(ctx, "hardware_security", model.SortName, model.OrderAsc)
+	assert.ErrorIs(t, err, model.ErrNotFound)
+}
+
+func TestArticleService_ListDirectory_HidesUncommittedOnlyDirectory(t *testing.T) {
+	repo, err := testutil.NewTestRepo()
 	require.NoError(t, err)
-	assert.Empty(t, updatedArticles)
+	defer repo.Cleanup()
+	require.NoError(t, repo.CreateMarkdownFile("published.md", "# Published", "Add", "author"))
+	require.NoError(t, repo.CreateUncommittedFile("drafts/hidden.md", "# Hidden"))
+
+	gitSvc, err := service.NewGitService(repo.Path)
+	require.NoError(t, err)
+	articleSvc := service.NewArticleService(gitSvc)
+
+	articles, err := articleSvc.ListDirectory(context.Background(), "", model.SortName, model.OrderAsc)
+	require.NoError(t, err)
+	assert.Len(t, articles, 1)
+	assert.Equal(t, "published.md", articles[0].Path)
 }
 
 func TestArticleService_Search(t *testing.T) {
@@ -404,6 +431,31 @@ func TestArticleService_Search(t *testing.T) {
 			dir:     "",
 			wantLen: 0,
 		},
+		{
+			name: "search committed directory",
+			setup: func(repo *testutil.TestRepo) error {
+				return repo.CreateMarkdownFile("architecture/guide.md", "# Guide", "Add", "author")
+			},
+			query:   "architecture",
+			dir:     "",
+			wantLen: 1,
+			checkRes: func(t *testing.T, results []model.SearchResult) {
+				assert.Equal(t, model.NodeTypeDir, results[0].Type)
+				assert.Equal(t, "architecture", results[0].Path)
+			},
+		},
+		{
+			name: "ignore directory containing only uncommitted files",
+			setup: func(repo *testutil.TestRepo) error {
+				if err := repo.CreateMarkdownFile("published.md", "# Published", "Add", "author"); err != nil {
+					return err
+				}
+				return repo.CreateUncommittedFile("drafts/hidden.md", "# Hidden")
+			},
+			query:   "drafts",
+			dir:     "",
+			wantLen: 0,
+		},
 	}
 
 	for _, tt := range tests {
@@ -416,13 +468,10 @@ func TestArticleService_Search(t *testing.T) {
 				require.NoError(t, tt.setup(repo))
 			}
 
-			fileSvc, err := service.NewFileService(repo.Path)
-			require.NoError(t, err)
-
 			gitSvc, err := service.NewGitService(repo.Path)
 			require.NoError(t, err)
 
-			articleSvc := service.NewArticleService(fileSvc, gitSvc)
+			articleSvc := service.NewArticleService(gitSvc)
 
 			results, err := articleSvc.Search(context.Background(), tt.query, tt.dir)
 			require.NoError(t, err)

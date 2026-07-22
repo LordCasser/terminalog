@@ -104,12 +104,6 @@ func main() {
 	}
 
 	// Initialize services
-	fileSvc, err := service.NewFileService(contentDir)
-	if err != nil {
-		logger.Error("Failed to initialize file service", "error", err)
-		os.Exit(1)
-	}
-
 	gitSvc, err := service.NewGitService(contentDir)
 	if err != nil {
 		logger.Error("Failed to initialize git service", "error", err)
@@ -118,11 +112,12 @@ func main() {
 
 	logger.Info("Git service initialized", "repoPath", contentDir)
 
-	articleSvc := service.NewArticleService(fileSvc, gitSvc)
+	articleSvc := service.NewArticleService(gitSvc)
 	authSvc := service.NewAuthService(cfg)
-	assetSvc := service.NewAssetService(fileSvc)
-	versionSvc := service.NewVersionService(articleSvc, gitSvc, fileSvc)       // v1.2
-	completionSvc := service.NewCompletionService(articleSvc, fileSvc, gitSvc) // v1.4 - for WebSocket path completion
+	assetSvc := service.NewAssetService(gitSvc)
+	aboutMeSvc := service.NewAboutMeService(gitSvc)
+	versionSvc := service.NewVersionService(gitSvc)
+	completionSvc := service.NewCompletionService(articleSvc)
 
 	// Handle default user generation if no users configured
 	if !cfg.HasUsers() {
@@ -150,13 +145,13 @@ func main() {
 
 	// Create handlers
 	handlers := &server.Handlers{
-		Article:   handler.NewArticleHandler(articleSvc, versionSvc, fileSvc),
-		Asset:     handler.NewAssetHandler(assetSvc),
-		Git:       handler.NewGitHandler(gitSvc, authSvc, articleSvc.InvalidateCache),
-		Search:    handler.NewSearchHandler(articleSvc),
-		Tree:      handler.NewTreeHandler(articleSvc),
-		Health:    healthHandler,
-		AboutMe:   handler.NewAboutMeHandler(fileSvc),                                  // v1.2
+		Article: handler.NewArticleHandler(articleSvc, versionSvc),
+		Asset:   handler.NewAssetHandler(assetSvc),
+		Git:     handler.NewGitHandler(gitSvc, authSvc, articleSvc.InvalidateCache),
+		Search:  handler.NewSearchHandler(articleSvc),
+		Tree:    handler.NewTreeHandler(articleSvc),
+		Health:  healthHandler,
+		AboutMe: handler.NewAboutMeHandler(aboutMeSvc),
 		Config: handler.NewConfigHandler(cfg.GetOwner(), handler.FilingInfo{
 			ICPFiling:       cfg.Site.ICPFiling,
 			ICPFilingURL:    cfg.Site.ICPFilingURL,
@@ -268,9 +263,9 @@ func main() {
 	}
 
 	logger.Info("Server started", "addr", cfg.GetAddr(), "tls", tlsConfig.Enabled)
-	logger.Info("Access the blog at "+protocol+"://"+cfg.GetAddr())
-	logger.Info("Git clone URL: "+protocol+"://"+cfg.GetAddr()+"/api/v1/git/")
-	logger.Info("Health check: "+protocol+"://"+cfg.GetAddr()+"/api/v1/healthz")
+	logger.Info("Access the blog at " + protocol + "://" + cfg.GetAddr())
+	logger.Info("Git clone URL: " + protocol + "://" + cfg.GetAddr() + "/api/v1/git/")
+	logger.Info("Health check: " + protocol + "://" + cfg.GetAddr() + "/api/v1/healthz")
 
 	// Console reminder for TLS certificate
 	if tlsConfig.Enabled {

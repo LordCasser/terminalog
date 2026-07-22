@@ -2,9 +2,20 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useCommandHistory } from './useCommandHistory';
 
+const storedValues = new Map<string, string>();
+const localStorageMock: Storage = {
+  get length() { return storedValues.size; },
+  clear: () => storedValues.clear(),
+  getItem: (key) => storedValues.get(key) ?? null,
+  key: (index) => Array.from(storedValues.keys())[index] ?? null,
+  removeItem: (key) => { storedValues.delete(key); },
+  setItem: (key, value) => { storedValues.set(key, value); },
+};
+
 describe('useCommandHistory', () => {
   beforeEach(() => {
-    localStorage.clear();
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: localStorageMock });
+    window.localStorage.clear();
   });
 
   it('starts with empty history', () => {

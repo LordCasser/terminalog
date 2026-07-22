@@ -41,15 +41,16 @@ class ApiClient {
     options: RequestOptions = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`;
+    const headers = { ...options.headers };
+    if (options.body !== undefined && headers['Content-Type'] === undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
     
     const response = await fetch(url, {
       method: options.method || 'GET',
       cache: options.cache ?? 'no-store',
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
 
     if (!response.ok) {

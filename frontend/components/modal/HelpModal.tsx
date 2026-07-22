@@ -13,7 +13,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 // Custom event for showing help modal
 export const SHOW_HELP_MODAL = "showHelpModal";
@@ -31,33 +31,35 @@ const COMMANDS_INFO = [
 
 export function HelpModal() {
   const [isVisible, setIsVisible] = useState(false);
-  const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Manual close handler (clear timer)
   const handleClose = useCallback(() => {
-    if (timer) {
-      clearTimeout(timer);
-      setTimer(null);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
     setIsVisible(false);
-  }, [timer]);
+  }, []);
 
   // Listen for custom event to show modal
   useEffect(() => {
     const handleShowModal = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
       setIsVisible(true);
       
       // Start 10-second auto-close timer
-      const autoCloseTimer = setTimeout(() => {
+      timerRef.current = setTimeout(() => {
         setIsVisible(false);
-        setTimer(null);
+        timerRef.current = null;
       }, 10000);
-      
-      setTimer(autoCloseTimer);
     };
 
     window.addEventListener(SHOW_HELP_MODAL, handleShowModal);
-    return () => window.removeEventListener(SHOW_HELP_MODAL, handleShowModal);
+    return () => {
+      window.removeEventListener(SHOW_HELP_MODAL, handleShowModal);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, []);
 
   // Enter key to close modal

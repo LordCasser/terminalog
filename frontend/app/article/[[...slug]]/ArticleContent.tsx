@@ -46,13 +46,19 @@ export function ArticleContent() {
   const [showHistory, setShowHistory] = useState(false);
   
   useEffect(() => {
+    let cancelled = false;
     // Extract article path from browser URL (only in client)
     const articlePath = extractArticlePathFromURL();
     
     const fetchData = async () => {
       try {
-        // Fetch article content
-        const articleResponse = await getArticleContent(articlePath);
+        const [articleResponse, timelineResponse, versionResponse] = await Promise.all([
+          getArticleContent(articlePath),
+          getArticleTimeline(articlePath),
+          getArticleVersion(articlePath),
+        ]);
+        if (cancelled) return;
+
         setArticle({
           path: articleResponse.path,
           name: articlePath.split("/").pop() || articleResponse.title,
@@ -66,23 +72,22 @@ export function ArticleContent() {
           latestCommit: "",
         });
         setContent(articleResponse.content || "");
-        
-        // Fetch timeline
-        const timelineResponse = await getArticleTimeline(articlePath);
         setCommits(timelineResponse.commits);
-        
-        // Fetch version info
-        const versionResponse = await getArticleVersion(articlePath);
         setVersionInfo(versionResponse);
       } catch (error) {
-        console.error("Failed to fetch article:", error);
-        setError("Failed to load article.");
+        if (!cancelled) {
+          console.error("Failed to fetch article:", error);
+          setError("Failed to load article.");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     
     fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
   
   // Extract base path for image transformation (client-side only)

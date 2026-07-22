@@ -13,7 +13,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { SEARCH_MODAL_VISIBLE, FOCUS_COMMAND_INPUT } from "@/components/command/CommandPrompt";
 
 // Custom event for showing search results modal
@@ -39,13 +39,13 @@ export function SearchResultsModal() {
   const [isVisible, setIsVisible] = useState(false);
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Manual close handler (clear timer)
   const handleClose = useCallback(() => {
-    if (timer) {
-      clearTimeout(timer);
-      setTimer(null);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
     setIsVisible(false);
     setResults([]);
@@ -53,15 +53,11 @@ export function SearchResultsModal() {
     // Notify CommandPrompt that modal is hidden, and refocus input
     window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: false }));
     window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
-  }, [timer]);
+  }, []);
 
   // Handle result selection (Enter key or click) - smart navigation
   const handleSelect = useCallback((result: SearchResultItem) => {
-    if (result.type === "dir") {
-      window.dispatchEvent(new CustomEvent(SEARCH_RESULT_SELECTED, { detail: result.path }));
-    } else {
-      window.dispatchEvent(new CustomEvent(SEARCH_RESULT_SELECTED, { detail: result.path }));
-    }
+    window.dispatchEvent(new CustomEvent(SEARCH_RESULT_SELECTED, { detail: result.path }));
     handleClose();
   }, [handleClose]);
 
@@ -70,6 +66,7 @@ export function SearchResultsModal() {
     const handleShowModal = (e: CustomEvent<SearchResultsEventDetail>) => {
       const detail = e.detail;
       if (detail.results && detail.results.length > 0) {
+        if (timerRef.current) clearTimeout(timerRef.current);
         setResults(detail.results);
         setSelectedIndex(0);
         setIsVisible(true);
@@ -78,21 +75,23 @@ export function SearchResultsModal() {
         window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: true }));
         
         // Start 10-second auto-close timer
-        const autoCloseTimer = setTimeout(() => {
+        timerRef.current = setTimeout(() => {
           setIsVisible(false);
           setResults([]);
           setSelectedIndex(0);
-          setTimer(null);
+          timerRef.current = null;
           window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: false }));
           window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
         }, 10000);
         
-        setTimer(autoCloseTimer);
       }
     };
 
     window.addEventListener(SHOW_SEARCH_RESULTS_MODAL, handleShowModal as EventListener);
-    return () => window.removeEventListener(SHOW_SEARCH_RESULTS_MODAL, handleShowModal as EventListener);
+    return () => {
+      window.removeEventListener(SHOW_SEARCH_RESULTS_MODAL, handleShowModal as EventListener);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, []);
 
   // Keyboard navigation - window listener in capture phase

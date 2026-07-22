@@ -18,20 +18,28 @@ export default function AboutMePage() {
   const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
+    let cancelled = false;
+
     const fetchData = async () => {
       try {
         const response = await getAboutMe();
+        if (cancelled) return;
         setContent(response.content);
         setExists(response.exists);
       } catch (error) {
-        console.error("Failed to fetch aboutme:", error);
-        setError("Failed to load About Me.");
+        if (!cancelled) {
+          console.error("Failed to fetch aboutme:", error);
+          setError("Failed to load About Me.");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     
     fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
   
   if (loading) {

@@ -13,7 +13,7 @@
 
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { apiClient } from "@/lib/api/client";
 
@@ -30,7 +30,6 @@ interface FrontendConfig {
 interface TerminalConfigValue {
   owner: string;
   currentDir: string;
-  setCurrentDir: (dir: string) => void;
   isLoading: boolean;
   icpFiling: string;
   icpFilingURL: string;
@@ -62,17 +61,7 @@ function extractDirFromPathname(pathname: string): string {
   return ""; // Root or other pages
 }
 
-// Create context with default values
-const TerminalConfigContext = createContext<TerminalConfigValue>({
-  owner: DEFAULT_OWNER,
-  currentDir: "",
-  setCurrentDir: () => {},
-  isLoading: true,
-  icpFiling: "",
-  icpFilingURL: "",
-  policeFiling: "",
-  policeFilingURL: "",
-});
+const TerminalConfigContext = createContext<TerminalConfigValue | undefined>(undefined);
 
 // Provider component
 export function TerminalConfigProvider({ children }: { children: ReactNode }) {
@@ -106,17 +95,11 @@ export function TerminalConfigProvider({ children }: { children: ReactNode }) {
     fetchConfig();
   }, []);
 
-  // Kept for API compatibility with existing consumers. Navigation drives currentDir.
-  const handleSetCurrentDir = useCallback((dir: string) => {
-    void dir;
-  }, []);
-
   return (
     <TerminalConfigContext.Provider
       value={{
         owner,
         currentDir,
-        setCurrentDir: handleSetCurrentDir,
         isLoading,
         icpFiling,
         icpFilingURL,

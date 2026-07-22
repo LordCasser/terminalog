@@ -12,7 +12,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 // Custom event for showing path completion modal
 export const SHOW_PATH_COMPLETION_MODAL = "showPathCompletionModal";
@@ -37,19 +37,19 @@ export function PathCompletionModal() {
   const [paths, setPaths] = useState<PathCompletionItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [command, setCommand] = useState("");
-  const [timer, setTimer] = useState<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Manual close handler (clear timer)
   const handleClose = useCallback(() => {
-    if (timer) {
-      clearTimeout(timer);
-      setTimer(null);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
     setIsVisible(false);
     setPaths([]);
     setSelectedIndex(0);
     setCommand("");
-  }, [timer]);
+  }, []);
 
   // Handle path selection (Enter key or click)
   const handleSelect = useCallback((item: PathCompletionItem) => {
@@ -64,26 +64,29 @@ export function PathCompletionModal() {
     const handleShowModal = (e: CustomEvent<PathCompletionEventDetail>) => {
       const detail = e.detail;
       if (detail.paths && detail.paths.length > 0) {
+        if (timerRef.current) clearTimeout(timerRef.current);
         setPaths(detail.paths);
         setSelectedIndex(0);
         setCommand(detail.command || "");
         setIsVisible(true);
         
         // Start 10-second auto-close timer
-        const autoCloseTimer = setTimeout(() => {
+        timerRef.current = setTimeout(() => {
           setIsVisible(false);
           setPaths([]);
           setSelectedIndex(0);
-          setTimer(null);
+          timerRef.current = null;
           setCommand("");
         }, 10000);
         
-        setTimer(autoCloseTimer);
       }
     };
 
     window.addEventListener(SHOW_PATH_COMPLETION_MODAL, handleShowModal as EventListener);
-    return () => window.removeEventListener(SHOW_PATH_COMPLETION_MODAL, handleShowModal as EventListener);
+    return () => {
+      window.removeEventListener(SHOW_PATH_COMPLETION_MODAL, handleShowModal as EventListener);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, []);
 
   // Keyboard navigation - window listener in capture phase

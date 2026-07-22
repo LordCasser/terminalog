@@ -43,21 +43,26 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
   useEffect(() => {
+    let cancelled = false;
+
     // Use provided currentDir or extract from URL (client-side only)
     const effectiveDir = currentDir ?? extractDirPathFromURL();
 
     const fetchArticles = async () => {
       try {
         const response = await getArticles(effectiveDir, sortField, sortOrder);
-        setArticles(response.articles);
+        if (!cancelled) setArticles(response.articles);
       } catch (error) {
-        console.error("Failed to fetch articles:", error);
+        if (!cancelled) console.error("Failed to fetch articles:", error);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchArticles();
+    return () => {
+      cancelled = true;
+    };
   }, [currentDir, sortField, sortOrder]);
 
   /** Handle column header click for sorting */

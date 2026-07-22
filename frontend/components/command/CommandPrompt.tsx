@@ -104,13 +104,16 @@ export function CommandPrompt() {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    // In debug mode, use API_BASE from env, otherwise use window.location.host
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE || '';
-    const wsHost = apiBase ? apiBase.replace(/^https?:\/\//, '').replace(/^http:\/\//, '') : (window.location.host || "localhost:18085");
-    const wsUrl = `${wsProtocol}//${wsHost}/ws/terminal`;
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE;
+    const endpoint = new URL(apiBase || window.location.origin, window.location.href);
+    const wsProtocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${wsProtocol}//${endpoint.host}/ws/terminal`;
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
     const connectWebSocket = () => {
+      if (disposed) return;
+
       try {
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
@@ -125,7 +128,9 @@ export function CommandPrompt() {
 
       ws.onclose = () => {
         // WebSocket disconnected, attempt reconnect after 3 seconds
-        setTimeout(connectWebSocket, 3000);
+        if (!disposed) {
+          reconnectTimer = setTimeout(connectWebSocket, 3000);
+        }
       };
       } catch (e) {
         console.error("Failed to create WebSocket:", e);
@@ -136,7 +141,10 @@ export function CommandPrompt() {
 
     // Cleanup on unmount
     return () => {
+      disposed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (wsRef.current) {
+        wsRef.current.onclose = null;
         wsRef.current.close();
         wsRef.current = null;
       }
@@ -229,6 +237,7 @@ export function CommandPrompt() {
         }
 
         const handleMessage = (event: MessageEvent) => {
+          clearTimeout(timeout);
           try {
             const data = JSON.parse(event.data) as T;
             wsRef.current?.removeEventListener("message", handleMessage);
@@ -242,7 +251,7 @@ export function CommandPrompt() {
         wsRef.current.send(JSON.stringify(message));
 
         // Timeout after 5 seconds
-        setTimeout(() => {
+        const timeout = setTimeout(() => {
           wsRef.current?.removeEventListener("message", handleMessage);
           reject(new Error("WebSocket timeout"));
         }, 5000);

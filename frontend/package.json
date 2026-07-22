@@ -7,7 +7,6 @@
     "build": "next build --webpack && node scripts/compress-assets.mjs",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
     "test": "vitest run"
   },
   "dependencies": {

@@ -274,7 +274,7 @@ curl "http://localhost:8080/api/v1/articles/guides%2Fimage-test.md"
 | 状态码 | 错误 | 说明 |
 |--------|------|------|
 | 404 | `"Article not found"` | 文件不存在 |
-| 400 | `"File not committed"` | 文件未提交到Git |
+| 404 | `"Not found"` | 文件不存在或尚未提交到当前 HEAD |
 
 ---
 
@@ -384,9 +384,15 @@ curl "http://localhost:8080/api/v1/assets/guides/images/salvation.jpg"
 ```
 Content-Type: image/jpeg
 Content-Length: 15399857
+Cache-Control: public, no-cache
+ETag: "<content-sha256>"
 
 <图片二进制数据>
 ```
+
+资源路径可以在 Git push 后指向新内容，因此浏览器每次使用 ETag 重验证；匹配
+
+`If-None-Match` 时返回 `304 Not Modified`，不对该可变 URL 设置长期 immutable 缓存。
 
 **Content-Type 映射**：
 

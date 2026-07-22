@@ -74,63 +74,37 @@ Terminalog 后端是一个 **Go HTTP + WebSocket 服务**，提供以下核心�
 
 ### 2.1 后端模块总览
 
-| 模块 | 负责人 | 职责边界 | 依赖关系 |
-|------|--------|---------|---------|
-| **HTTP Server** | 后端 | HTTP 路由分发，静态资源服务 | Go net/http 或 chi |
-| **WebSocket Server (v1.4新增)** | 后端 | WebSocket连接管理，路径补全实时通信 | Go gorilla/websocket |
-| **Article Service** | 后端 | 文章列表、内容读取、元数据获取（**过滤 `_` 开头文件**） | Git Service, File Service |
-| **About Me Service** | 后端 | 读取并返回 `_ABOUTME.md` 内容（v1.2 新增） | File Service, Git Service |
-| **Version Service** | 后端 | 基于行数变化计算语义版本号（v1.2 新增） | Git Service |
-| **WebSocket Service (v1.4新增)** | 后端 | 路径补全请求处理，实时响应补全结果 | File Service |
-| **Git Service** | 后端 | Git 历史查询，Smart HTTP 协议实现 | go-git/v5 |
-| **File Service** | 后端 | 文件系统操作，目录扫描，特殊文件过滤 | Go os/fs 包 |
-| **Auth Service** | 后端 | 用户认证校验，密码验证 | Config Manager |
-| **Asset Service** | 后端 | 图片等静态资源读取与响应 | File Service |
-| **Config Manager** | 后端 | TOML 配置文件解析与管理 | pelletier/go-toml/v2 |
+| 模块 | 职责边界 | 依赖 |
+|------|---------|------|
+| HTTP / WebSocket Server | 路由、连接、静态前端 | chi, gorilla/websocket |
+| Article Service | 当前 HEAD 文章索引及其派生视图 | Git Service |
+| About Me / Asset Service | 当前 HEAD 特殊文件和二进制资源 | Git Service |
+| Version / Completion Service | 版本计算、路径补全 | Git / Article Service |
+| Git Service | HEAD tree/blob、历史、差异、Smart HTTP、发布事务 | go-git + 系统 Git |
+| Auth Service | Push 认证 | Config Manager |
+| Config Manager | TOML 配置 | go-toml |
 
-### 2.2 模块依赖关系图
+### 2.2 模块依赖关系
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        HTTP Server                           │
-│                     (路由分发 + 静态资源)                       │
-└─────────────────────────────────────────────────────────────┘
-           │              │              │              │
-           │              │              │              │
-           ▼              ▼              ▼              ▼
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  Article    │  │   Asset     │  │    Git      │  │  Static     │
-│  Service    │  │  Service    │  │  Service    │  │  Handler    │
-│             │  │             │  │             │  │  (embed)    │
-└─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘
-       │                │                │
-       │                │                │
-       ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      File Service                            │
-│                    (文件系统操作)                              │
-└─────────────────────────────────────────────────────────────┘
-       │                                              │
-       │                                              │
-       ▼                                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Git Service                             │
-│              (Git 历史查询 + Smart HTTP)                      │
-└─────────────────────────────────────────────────────────────┘
-       │
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Git Repository                            │
-│                  (用户指定的内容目录)                          │
-└─────────────────────────────────────────────────────────────┘
-
-
-认证流程依赖：
-┌─────────────┐
-│ HTTP Server │───▶ Git Handler ───▶ Auth Service.Validate()
-└─────────────┘
+HTTP / WebSocket Handlers
+          │
+          ├── Article / Version / Completion
+          ├── About Me / Asset
+          └── Git Smart HTTP
+                       │
+                       ▼
+                  Git Service
+          ┌────────────┴────────────┐
+          ▼                         ▼
+     go-git 只读模型             系统 Git 子进程
+    HEAD/历史/差异              clone/fetch/push
+          └────────────┬────────────┘
+                       ▼
+                 Git Repository
 ```
+
+公开内容不经过服务器工作区读取；工作区只服务于 `updateInstead` 的非 bare 发布流程。
 
 ---
 
@@ -170,285 +144,77 @@ func (s *Server) Stop(ctx context.Context) error
 func (s *Server) setupRoutes()
 ```
 
-### 3.1.1 WebSocket Server (v1.4新增)
+### 3.1.1 WebSocket Server
 
-**职责**：
-- 监听 WebSocket 连接请求（端点：`/ws/completion`）
-- 管理 WebSocket 连接生命周期（连接建立、消息处理、连接关闭）
-- 处理路径补全请求，实时响应补全结果
-- WebSocket消息解析和序列化（JSON格式）
-
-**边界**：
-- 不处理HTTP请求（由HTTP Server负责）
-- 不负责文件系统操作（由File Service负责）
-- 不持久化WebSocket连接状态
-
-**接口契约**：
-```go
-// internal/server/websocket.go
-
-type WebSocketHandler struct {
-    service    *CompletionService
-    logger     *slog.Logger
-    upgrader   websocket.Upgrader
-    connections map[string]*websocket.Conn
-}
-
-func NewWebSocketHandler(service *CompletionService) *WebSocketHandler
-
-func (h *WebSocketHandler) HandleTerminal(ws *websocket.Conn)
-
-// WebSocket消息格式
-type CompletionRequest struct {
-    Type   string `json:"type"`   // "completion_request"
-    Dir    string `json:"dir"`    // 当前目录路径
-    Prefix string `json:"prefix"` // 路径前缀
-}
-
-type CompletionResponse struct {
-    Type  string   `json:"type"`  // "completion_response"
-    Items []string `json:"items"` // 补全结果列表
-}
-
-```
-
-**技术选型**：
-- WebSocket库：`gorilla/websocket`（成熟稳定的Go WebSocket库）
-- 消息格式：JSON（易于前端解析）
-- 连接管理：map存储活跃连接（支持多客户端）
-
-**WebSocket端点**：
-- `/ws/terminal`：终端路径补全通信端点
+WebSocket Server 只管理 `/ws/terminal` 连接、JSON 消息和生命周期。补全结果由 Completion Service 从 Article Service 的当前 HEAD 文章索引派生，不直接访问仓库或工作区。
 
 ### 3.2 Article Service
 
 **职责**：
-- 扫描 Git 仓库目录，获取文章列表
-- 过滤未提交的文件（仅返回已提交的 Markdown）
-- 从 Git 历史获取文章元数据（创建时间、编辑时间、贡献者）
-- 读取 Markdown 文件内容
-- 搜索文章标题
-- 获取目录树结构
+- 从 Git Service 枚举当前 HEAD 下的 Markdown 文件
+- 一次 commit walk 批量生成文章元数据
+- 从同一文章集合派生直接目录、目录树、搜索和补全输入
+- 从 HEAD blob 读取正文；不读取服务器工作区
+- 维护带独立 TTL 和 generation 的内容缓存
 
 **边界**：
-- 不负责 Markdown 渲染（前端负责）
-- 不负责 Git push 接收（Git Service 负责）
-- 不负责图片资源读取（Asset Service 负责）
+- 不处理 Markdown 渲染、Git push、图片或认证
+- 未提交路径与不存在路径统一视为不可见
 
-**接口契约**：
+**关键接口**：
 ```go
-// internal/service/article.go
-
-type ArticleService interface {
-    // 获取文章列表（已提交的 Markdown 文件）
-    ListArticles(ctx context.Context, opts ListOptions) ([]Article, error)
-    
-    // 获取单篇文章内容
-    GetArticle(ctx context.Context, path string) (*ArticleDetail, error)
-    
-    // 获取文章 Git 时间线
-    GetTimeline(ctx context.Context, path string) ([]CommitInfo, error)
-    
-    // 获取目录树结构
-    GetTree(ctx context.Context, dir string) (*TreeNode, error)
-    
-    // 搜索文章标题
-    Search(ctx context.Context, query string, dir string) ([]SearchResult, error)
-}
-
-type ListOptions struct {
-    Dir   string      // 目录路径
-    Sort  SortField   // 排序字段：created, edited
-    Order SortOrder   // 排序方向：asc, desc
-}
-
-type Article struct {
-    Path         string    // 文件路径（相对于仓库根目录）
-    Title        string    // 文件名（去除 .md 扩展名）
-    CreatedAt    time.Time // 创建时间（首个 commit）
-    CreatedBy    string    // 创建人（首个 commit 作者）
-    EditedAt     time.Time // 最后编辑时间
-    EditedBy     string    // 最后编辑人
-    Contributors []string  // 所有贡献者
-}
-
-type ArticleDetail struct {
-    Article
-    Content    string    // Markdown 内容
-}
-
-type CommitInfo struct {
-    Hash      string    // 短格式 commit hash（7 位）
-    Author    string    // 作者名
-    Timestamp time.Time // commit 时间
-}
-
-type TreeNode struct {
-    Name     string     // 目录/文件名
-    Path     string     // 完整路径
-    Type     NodeType   // "dir" 或 "file"
-    Children []*TreeNode // 子节点（仅目录有）
-}
-
-type SearchResult struct {
-    Path         string
-    Title        string
-    MatchedTitle string
-}
+func (s *ArticleService) ListArticles(ctx context.Context, opts ListOptions) ([]model.Article, error)
+func (s *ArticleService) ListDirectory(ctx context.Context, dir string, sort, order string) ([]model.Article, error)
+func (s *ArticleService) GetArticle(ctx context.Context, path string) (*model.ArticleDetail, error)
+func (s *ArticleService) GetTimeline(ctx context.Context, path string) ([]model.CommitInfo, error)
+func (s *ArticleService) GetTree(ctx context.Context, dir string) (*model.TreeNode, error)
+func (s *ArticleService) Search(ctx context.Context, query, dir string) ([]model.SearchResult, error)
 ```
 
 ### 3.3 Git Service
 
 **职责**：
-- 查询文件 Git 历史（创建时间、编辑时间、贡献者）
-- 检查文件是否已提交到 Git
+- 查询当前 HEAD 中的文件可见性、文件 Git 历史和版本差异
 - 实现 Git Smart HTTP 协议（**使用系统 git 子进程**）：
   - `git-upload-pack --stateless-rpc`（Clone/Fetch）
   - `git-receive-pack --stateless-rpc`（Push）
   - `git {service} --stateless-rpc --advertise-refs`（refs advertisement）
-- Push 后 checkout 工作目录同步
-- Push 后重新加载 go-git 仓库缓存
+- 将 receive-pack、工作区更新、go-git 重载和业务缓存失效组织为一次发布事务
 
 **架构说明**：
-- Smart HTTP 协议的写路径（push）和读路径（clone/fetch）使用系统 git 子进程处理
-- 这遵循 Gitea/Giteria 的架构设计，利用 git 原生的 packfile 处理能力
-- 系统 git 子进程正确处理：delta objects 解析、gzip 编码、大文件传输、并发安全
-- go-git/v5 仅用于读操作（文件历史查询、commit 遍历等）
+- Smart HTTP 的写路径和 clone/fetch 使用系统 Git；go-git/v5 仅用于提交遍历、历史和差异等只读业务查询
+- 非 bare 内容仓库固定使用 `receive.denyCurrentBranch=updateInstead`；禁止用 push 后 `reset --hard` 修补工作区
+- receive-pack 响应先缓冲，完成仓库重载和缓存失效后再返回客户端
+- receive-pack 串行执行，避免多个 push 的发布阶段交错
+- 当前 HEAD tree 是公开内容的可见性边界；历史上出现过但当前已删除的路径不可见
+- Git RPC 单独延长读写 deadline；不使用未被处理器协作遵循的全局 context timeout
 
 **边界**：
-- 不负责文件内容读取（File Service 负责）
+- 负责提供 HEAD tree/blob 这一基础读能力，但不负责文章业务组合
 - 不负责文章业务逻辑（Article Service 负责）
 - 不负责用户管理（Auth Service 负责）
 
-**接口契约**：
+**关键接口**：
 ```go
-// internal/service/git.go
-
-type GitService struct {
-    repoPath string    // Git 仓库绝对路径
-    repo     *git.Repository  // go-git 仓库实例（仅用于读操作）
-}
-
-// Smart HTTP 协议（git 子进程）
 func (s *GitService) GetInfoRefs(service string) ([]byte, error)
-    // 运行: git {upload-pack|receive-pack} --stateless-rpc --advertise-refs .
-    // 返回 refs advertisement 数据
-
 func (s *GitService) ServiceRPC(service string, reqBody io.Reader, respWriter io.Writer) error
-    // 运行: git {upload-pack|receive-pack} --stateless-rpc .
-    // 直接 pipe HTTP body 到子进程 stdin，子进程 stdout 到 HTTP response
-
-// Push 后辅助操作
-func (s *GitService) CheckoutWorkingTree() error
-    // 运行: git checkout --force（同步工作目录到 HEAD）
-    // git receive-pack 只更新 refs/objects，不更新工作目录
-
+func (s *GitService) ReceivePack(reqBody io.Reader, onRepoUpdate func()) ([]byte, error)
 func (s *GitService) ReloadRepo() error
-    // 重新打开 go-git 仓库（刷新缓存状态）
-
-// 读操作（go-git）
-func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*FileHistory, error)
-func (s *GitService) IsFileCommitted(ctx context.Context, filePath string) (bool, error)
+func (s *GitService) CurrentHead() (string, error)
+func (s *GitService) GetFileHistory(ctx context.Context, path string) (*model.FileHistory, error)
+func (s *GitService) GetFileHistories(ctx context.Context, paths []string) (map[string]*model.FileHistory, error)
+func (s *GitService) NodeTypeAtHead(path string) (model.NodeType, error)
+func (s *GitService) ReadFileAtHead(path string) ([]byte, error)
+func (s *GitService) ListMarkdownFilesAtHead(dir string) ([]string, error)
 ```
 
-### 3.3.1 WebSocket Service (v1.4新增)
+### 3.3.1 Completion Service
 
-**职责**：
-- 处理路径补全请求，实时响应补全结果
-- 处理搜索请求，返回匹配的文章路径列表
-- 根据目录路径和前缀匹配文章列表和子目录列表
-- **过滤约束**：不返回以 `_` 开头的隐藏文件（如 `_ABOUTME.md`）
-- 返回补全结果（文件不带斜杠，文件夹带斜杠）
-- 支持实时补全和搜索（WebSocket低延迟通信）
+Completion Service 不持有文件系统或 Git 依赖，只从 Article Service 的发布文章集合计算候选项。文件补全不带斜杠，目录补全带斜杠；特殊文件与资源目录在 Git Service 枚举 HEAD 时已被过滤。
 
-**边界**：
-- 不负责WebSocket连接管理（由WebSocket Handler负责）
-- 不负责文件系统操作（调用File Service）
-- 不持久化补全历史和搜索历史
 
-**接口契约**：
-```go
-// internal/service/completion.go
 
-type CompletionService interface {
-    // 处理路径补全请求
-    HandleCompletion(ctx context.Context, req CompletionRequest) (*CompletionResponse, error)
-    
-    // 获取目录下的匹配项（文件和文件夹）
-    GetMatchingItems(ctx context.Context, dir, prefix string) ([]CompletionItem, error)
-}
-
-type CompletionRequest struct {
-    Dir    string // 当前目录路径（如 "/" 或 "/tech"）
-    Prefix string // 路径前缀（如 "RE" 或 "tec"）
-}
-
-type CompletionResponse struct {
-    Items []CompletionItem // 补全结果列表
-}
-
-type CompletionItem struct {
-    Name string // 名称（如 "README.md" 或 "tech/"）
-    Type string // 类型（"file" 或 "dir"）
-}
-```
-
-**补全规则**：
-- 文件补全不带斜杠（如 `README.md` 或完整路径 `tech/golang/go-guide.md`）
-- 文件夹补全带斜杠（如 `tech/` 或完整路径 `tech/golang/`）
-- 仅返回已提交的Markdown文件（过滤未提交文件）
-- **过滤以 `_` 开头的特殊文件**（如 `_ABOUTME.md`）
-- **根目录补全模式**（dir为空）：匹配所有级别的路径名和目录名，返回完整路径
-  - 例如：`prefix="go"` 返回 `tech/golang/` 和 `tech/golang/go-guide.md`
-- **当前目录模式**（dir指定）：只匹配当前目录下的直接子项，返回basename
-  - 例如：dir="/tech"，prefix="go" 返回 `golang/` 和 `golang/go-guide.md`（相对于tech）
-
-**搜索规则**：
-- 搜索文章标题（去除.md扩展名后的文件名）
-- **过滤以 `_` 开头的特殊文件**（如 `_ABOUTME.md`）
-- 返回最匹配的文章路径列表（最多10条结果）
-- 支持模糊匹配（keyword包含在标题中即可匹配）
-
-### 3.4 File Service
-
-**职责**：
-- 扫描目录结构
-- 读取文件内容
-- 检查文件是否存在
-- 获取文件 MIME 类型
-- 安全路径校验（防止目录遍历攻击）
-
-**边界**：
-- 不负责 Git 历史查询
-- 不负责认证
-- 不负责业务逻辑
-
-**接口契约**：
-```go
-// internal/service/file.go
-
-type FileService interface {
-    // 扫描目录，返回所有 .md 文件路径
-    ScanMarkdownFiles(ctx context.Context, dir string) ([]string, error)
-    
-    // 读取文件内容
-    ReadFile(ctx context.Context, path string) ([]byte, error)
-    
-    // 获取目录树结构（所有文件和子目录）
-    GetDirectoryTree(ctx context.Context, dir string) (*TreeNode, error)
-    
-    // 检查文件是否存在
-    FileExists(ctx context.Context, path string) (bool, error)
-    
-    // 安全路径校验（返回合法的完整路径）
-    ValidatePath(requestedPath string) (string, error)
-    
-    // 获取文件 MIME 类型
-    GetMimeType(path string) string
-}
-```
-
-### 3.5 Auth Service
+### 3.4 Auth Service
 
 **职责**：
 - 解析 TOML 配置中的用户认证信息
@@ -493,11 +259,11 @@ type AuthInfo struct {
 }
 ```
 
-### 3.6 Asset Service
+### 3.5 Asset Service
 
 **职责**：
 - 处理图片等静态资源请求
-- 从 Git 仓库读取图片文件
+- 从当前 HEAD blob 读取图片文件
 - 设置正确的 Content-Type
 - 安全路径校验
 
@@ -519,10 +285,11 @@ type Asset struct {
     Data        []byte
     ContentType string // MIME 类型
     Size        int64
+	ETag        string
 }
 ```
 
-### 3.7 Config Manager
+### 3.6 Config Manager
 
 **职责**：
 - 解析 TOML 配置文件
@@ -608,7 +375,6 @@ terminalog/
 │   ├── service/
 │   │   ├── article.go           # Article Service 实现
 │   │   ├── git.go               # Git Service 实现
-│   │   ├── file.go              # File Service 实现
 │   │   ├── asset.go             # Asset Service 实现
 │   │   └── auth.go              # Auth Service 实现
 │   │
@@ -670,527 +436,90 @@ terminalog/
 
 ### 6.1 启动流程
 
-```go
-// cmd/terminalog/main.go
-
-package main
-
-import (
-    "context"
-    "flag"
-    "log/slog"
-    "os"
-    "os/signal"
-    "syscall"
-    
-    "terminalog/internal/config"
-    "terminalog/internal/server"
-    "terminalog/internal/service"
-)
-
-func main() {
-    // 1. 解析命令行参数
-    flags := parseFlags()
-    
-    // 2. 设置日志
-    logger := setupLogger(flags.logLevel)
-    slog.SetDefault(logger)
-    
-    // 3. 加载配置文件
-    cfg, err := config.Load(flags.configPath)
-    if err != nil {
-        slog.Info("Config file not found, creating default config")
-        cfg = config.Default()
-        if err := cfg.Save(flags.configPath); err != nil {
-            slog.Error("Failed to save default config", "error", err)
-            os.Exit(1)
-        }
-        slog.Info("Default config saved", "path", flags.configPath)
-    }
-    
-    // 4. 验证配置
-    if err := cfg.Validate(); err != nil {
-        slog.Error("Config validation failed", "error", err)
-        os.Exit(1)
-    }
-    
-    // 5. 确保 Git 仓库目录存在且是 Git 仓库
-    if err := ensureGitRepo(cfg.GetContentDir()); err != nil {
-        slog.Error("Failed to initialize Git repository", "error", err)
-        os.Exit(1)
-    }
-    
-    // 6. 初始化 Auth Service（处理默认用户）
-    authSvc := service.NewAuthService(cfg)
-    if len(cfg.GetUsers()) == 0 {
-        defaultUser, err := authSvc.GenerateDefaultUser()
-        if err != nil {
-            slog.Error("Failed to generate default user", "error", err)
-            os.Exit(1)
-        }
-        cfg.AddUser(*defaultUser)
-        cfg.Save(flags.configPath)
-        slog.Info("Generated default user", 
-            "username", defaultUser.Username,
-            "password", defaultUser.PasswordHash) // 显示临时密码
-    }
-    
-    // 7. 初始化所有 Services
-    fileSvc := service.NewFileService(cfg.GetContentDir())
-    gitSvc := service.NewGitService(cfg.GetContentDir())
-    articleSvc := service.NewArticleService(fileSvc, gitSvc)
-    assetSvc := service.NewAssetService(fileSvc)
-    
-    // 8. 创建 Handlers
-    handlers := &server.Handlers{
-        Article: server.NewArticleHandler(articleSvc),
-        Asset:   server.NewAssetHandler(assetSvc),
-        Git:     server.NewGitHandler(gitSvc, authSvc),
-        Search:  server.NewSearchHandler(articleSvc),
-        Tree:    server.NewTreeHandler(articleSvc),
-        Static:  server.NewStaticHandler(),
-    }
-    
-    // 9. 创建 HTTP Server
-    addr := flags.host + ":" + flags.port
-    srv := server.NewServer(addr, handlers, logger)
-    
-    // 10. 启动服务（优雅关闭）
-    ctx, cancel := context.WithCancel(context.Background())
-    
-    go func() {
-        sigCh := make(chan os.Signal, 1)
-        signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-        <-sigCh
-        slog.Info("Shutting down server...")
-        cancel()
-        srv.Stop(ctx)
-    }()
-    
-    slog.Info("Starting server", "addr", addr)
-    if err := srv.Start(); err != nil {
-        slog.Error("Server error", "error", err)
-        os.Exit(1)
-    }
-}
-
-// 命令行参数
-type Flags struct {
-    host      string
-    port      string
-    configPath string
-    logLevel  string
-}
-
-func parseFlags() *Flags {
-    f := &Flags{}
-    flag.StringVar(&f.host, "host", "0.0.0.0", "Server host")
-    flag.StringVar(&f.port, "port", "8080", "Server port")
-    flag.StringVar(&f.configPath, "config", "config.toml", "Config file path")
-    flag.StringVar(&f.logLevel, "log", "info", "Log level (debug, info, warn, error)")
-    flag.Parse()
-    return f
-}
 ```
+解析参数与配置
+    → 确保内容目录为 Git 仓库
+    → NewGitService：打开 go-git 读视图并配置 updateInstead
+    → 构造 Article/Auth/Asset/AboutMe/Version/Completion Service
+    → 构造 Handler 与 HTTP Server
+    → readiness 检查 Git HEAD 读能力
+    → 启动并监听优雅关闭信号
+```
+
+Git 配置失败属于启动失败，避免服务以“能访问但不能正确发布”的降级状态运行。
 
 ### 6.2 文章列表获取流程
 
 ```
-HTTP Request: GET /api/v1/articles/tech?sort=edited&order=desc
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│                Article Handler                       │
-│  1. 解析 query params                               │
-│  2. 验证参数                                         │
-│  3. 调用 ArticleService.ListArticles()              │
-└─────────────────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│                Article Service                       │
-│  1. 调用 FileService.ScanMarkdownFiles(dir)         │
-│  2. 对每个文件：                                     │
-│     a. GitService.IsFileCommitted(path)             │
-│     b. GitService.GetFileHistory(path)              │
-│  3. 过滤未提交文件                                   │
-│  4. 构建 Article 结构                               │
-│  5. 根据参数排序                                     │
-└─────────────────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│                  Git Service                         │
-│  使用 go-git 打开仓库，查询文件历史                    │
-│  - 遍历 commits                                     │
-│  - 提取作者、时间、hash                              │
-└─────────────────────────────────────────────────────┘
-                    │
-                    ▼
-JSON Response: { articles: [...], currentDir: "tech", total: 5 }
+GET /api/v1/articles/{dir}
+    → Article Handler 解析排序
+    → Article Service 查询缓存
+    → Git Service 从当前 HEAD tree 枚举 Markdown
+    → 单次 commit walk 批量构建历史
+    → 派生直接文件与子目录并排序
+    → 按 generation 写缓存
+    → JSON Response
 ```
+
+正文、目录、搜索、树和补全共享同一个发布文章集合，不再分别扫描工作区。
 
 ### 6.3 Git Smart HTTP 流程
 
 #### 6.3.1 Git Clone (upload-pack)
 
 ```
-HTTP Request: GET /info/refs?service=git-upload-pack
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│                 Git Handler                          │
-│  1. 验证 service 参数                                │
-│  2. 无需认证（公开）                                  │
-│  3. 设置 Content-Type                                │
-│  4. 调用 GitService.GetUploadPackRefs()              │
-└─────────────────────────────────────────────────────┘
-                    │
-                    ▼
-Response Header:
-  Content-Type: application/x-git-upload-pack-advertisement
+GET /info/refs?service=git-upload-pack
+    → Git Handler 校验 service
+    → GitService.GetInfoRefs(upload-pack)
+    → 返回 refs advertisement
 
-
-HTTP Request: POST /git-upload-pack
-  Content-Type: application/x-git-upload-pack-request
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│                 Git Handler                          │
-│  1. 调用 GitService.HandleUploadPack()               │
-│  2. 返回 packfile                                    │
-└─────────────────────────────────────────────────────┘
-                    │
-                    ▼
-Response:
-  Content-Type: application/x-git-upload-pack-result
-  Body: Git packfile
+POST /git-upload-pack
+    → Git Handler 校验 Content-Type
+    → GitService.ServiceRPC(upload-pack) 流式传输 packfile
 ```
+
+Clone/Fetch 是公开读操作，由系统 Git 完整处理 wire protocol。
 
 #### 6.3.2 Git Push (receive-pack)
 
 ```
-HTTP Request: GET /info/refs?service=git-receive-pack
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│                 Git Handler                          │
-│  1. 提取 Authorization header                        │
-│  2. 解码 Basic Auth (username:password)             │
-│  3. 调用 AuthService.Validate()                      │
-│  4. 认证失败 → 401 Unauthorized                      │
-│  5. 认证成功 → GitService.GetReceivePackRefs()       │
-└─────────────────────────────────────────────────────┘
-                    │
-                    ▼
-认证失败:
-  HTTP 401
-  WWW-Authenticate: Basic realm="Git"
+GET /info/refs?service=git-receive-pack
+    → Basic Auth
+    → GitService.GetInfoRefs(receive-pack)
 
-
-认证成功:
-  Content-Type: application/x-git-receive-pack-advertisement
-
-
-HTTP Request: POST /git-receive-pack
-  Authorization: Basic {credentials}
-  Content-Type: application/x-git-receive-pack-request
-                    │
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│                 Git Handler                          │
-│  1. 再次验证认证                                     │
-│  2. 调用 GitService.HandleReceivePack()              │
-│  3. 更新仓库 refs                                    │
-└─────────────────────────────────────────────────────┘
-                    │
-                    ▼
-Response:
-  Content-Type: application/x-git-receive-pack-result
-  Body: Git receive result
+POST /git-receive-pack
+    → Basic Auth 与 Content-Type 校验
+    → 串行执行 GitService.ReceivePack
+    → 系统 Git 原子更新 ref 与工作区
+    → 重新打开并验证 go-git 读视图
+    → 推进 Article Cache generation 并清空缓存
+    → 最后写出缓冲的 receive-pack 响应
 ```
 
----
+因此客户端看到 `git push` 成功时，新提交已经能被文章、目录、搜索、补全、About Me 与资源接口读取。
 
 ## 七、Handler 实现
 
 ### 7.1 Article Handler
 
-```go
-// internal/handler/article.go
+Article Handler 解码通配路径并处理三类资源：
 
-package handler
+- 目录：调用 `ResolveNodeType` 与 `ListDirectory`。
+- Markdown：调用 `GetArticle`。
+- `/timeline`、`/version` 后缀：分别调用 Article / Version Service。
 
-import (
-    "encoding/json"
-    "net/http"
-    
-    "terminalog/internal/model"
-    "terminalog/internal/service"
-)
-
-type ArticleHandler struct {
-    svc service.ArticleService
-}
-
-func NewArticleHandler(svc service.ArticleService) *ArticleHandler {
-    return &ArticleHandler{svc: svc}
-}
-
-// GET /api/v1/articles
-func (h *ArticleHandler) List(w http.ResponseWriter, r *http.Request) {
-    ctx := r.Context()
-    
-    // 解析参数
-    dir := r.URL.Query().Get("dir")
-    sort := r.URL.Query().Get("sort")
-    order := r.URL.Query().Get("order")
-    
-    // 默认值
-    if sort == "" { sort = "edited" }
-    if order == "" { order = "desc" }
-    
-    // 调用 Service
-    opts := service.ListOptions{
-        Dir:   dir,
-        Sort:  model.ParseSortField(sort),
-        Order: model.ParseSortOrder(order),
-    }
-    
-    articles, err := h.svc.ListArticles(ctx, opts)
-    if err != nil {
-        respondError(w, http.StatusInternalServerError, err.Error())
-        return
-    }
-    
-    respondJSON(w, http.StatusOK, model.ArticleListResponse{
-        Articles:   articles,
-        CurrentDir: dir,
-        Total:      len(articles),
-    })
-}
-
-// GET /api/v1/articles/{path}
-func (h *ArticleHandler) Get(w http.ResponseWriter, r *http.Request) {
-    ctx := r.Context()
-    
-    path := chi.URLParam(r, "path")
-    
-    article, err := h.svc.GetArticle(ctx, path)
-    if err != nil {
-        if errors.Is(err, model.ErrNotFound) {
-            respondError(w, http.StatusNotFound, "Article not found")
-        } else if errors.Is(err, model.ErrNotCommitted) {
-            respondError(w, http.StatusBadRequest, "File not committed")
-        } else {
-            respondError(w, http.StatusInternalServerError, err.Error())
-        }
-        return
-    }
-    
-    respondJSON(w, http.StatusOK, model.ArticleResponse{
-        Path:         article.Path,
-        Title:        article.Title,
-        Content:      article.Content,
-        CreatedAt:    article.CreatedAt,
-        CreatedBy:    article.CreatedBy,
-        EditedAt:     article.EditedAt,
-        EditedBy:     article.EditedBy,
-        Contributors: article.Contributors,
-    })
-}
-
-// GET /api/v1/articles/{path}/timeline
-func (h *ArticleHandler) Timeline(w http.ResponseWriter, r *http.Request) {
-    ctx := r.Context()
-    
-    path := chi.URLParam(r, "path")
-    
-    commits, err := h.svc.GetTimeline(ctx, path)
-    if err != nil {
-        respondError(w, http.StatusInternalServerError, err.Error())
-        return
-    }
-    
-    respondJSON(w, http.StatusOK, model.TimelineResponse{
-        Commits: commits,
-    })
-}
-```
+路径不存在、未提交或不属于公开 Markdown 时统一返回 404；非法路径返回 400。Handler 不执行文件系统探测，所有可见性都由当前 HEAD 读模型决定。
 
 ### 7.2 Git Handler
 
-```go
-// internal/handler/git.go
+Git Handler 只负责 HTTP 协议边界，不自行解析 packfile：
 
-package handler
+- `InfoRefs` 校验 `service`，receive-pack 额外执行 Basic Auth，然后调用 `GitService.GetInfoRefs`。
+- `UploadPack` 将请求体和响应流交给 `GitService.ServiceRPC`，clone/fetch 可以流式传输。
+- `ReceivePack` 校验认证与 Content-Type 后调用 `GitService.ReceivePack`。该调用返回前必须完成工作区更新、go-git 重载和 Article Cache 失效；Handler 此后才写出缓冲的协议响应。
+- 失败响应不伪装成 Git 成功包；服务端日志保留系统 Git 的 stderr 以便定位拒绝 push 的原因。
 
-import (
-    "bufio"
-    "encoding/base64"
-    "io"
-    "net/http"
-    "strings"
-    
-    "terminalog/internal/service"
-)
-
-type GitHandler struct {
-    gitSvc service.GitService
-    authSvc service.AuthService
-}
-
-func NewGitHandler(gitSvc service.GitService, authSvc service.AuthService) *GitHandler {
-    return &GitHandler{gitSvc: gitSvc, authSvc: authSvc}
-}
-
-// GET /info/refs?service=git-upload-pack
-func (h *GitHandler) UploadPackRefs(w http.ResponseWriter, r *http.Request) {
-    service := r.URL.Query().Get("service")
-    if service != "git-upload-pack" {
-        respondError(w, http.StatusBadRequest, "Invalid service")
-        return
-    }
-    
-    ctx := r.Context()
-    
-    refs, err := h.gitSvc.GetUploadPackRefs(ctx)
-    if err != nil {
-        respondError(w, http.StatusInternalServerError, err.Error())
-        return
-    }
-    
-    // 设置 Git Smart HTTP 响应头
-    w.Header().Set("Content-Type", "application/x-git-upload-pack-advertisement")
-    w.Header().Set("Cache-Control", "no-cache")
-    
-    // 写入 pkt-line 格式
-    pktLine(w, "# service=git-upload-pack\n")
-    pktFlush(w)
-    w.Write(refs)
-}
-
-// POST /git-upload-pack
-func (h *GitHandler) UploadPack(w http.ResponseWriter, r *http.Request) {
-    ctx := r.Context()
-    
-    w.Header().Set("Content-Type", "application/x-git-upload-pack-result")
-    
-    result, err := h.gitSvc.HandleUploadPack(ctx, r.Body)
-    if err != nil {
-        respondError(w, http.StatusInternalServerError, err.Error())
-        return
-    }
-    
-    w.Write(result)
-}
-
-// GET /info/refs?service=git-receive-pack
-func (h *GitHandler) ReceivePackRefs(w http.ResponseWriter, r *http.Request) {
-    service := r.URL.Query().Get("service")
-    if service != "git-receive-pack" {
-        respondError(w, http.StatusBadRequest, "Invalid service")
-        return
-    }
-    
-    // 认证
-    auth := h.extractAuth(r)
-    if auth == nil {
-        w.Header().Set("WWW-Authenticate", "Basic realm=\"Git\"")
-        respondError(w, http.StatusUnauthorized, "Unauthorized")
-        return
-    }
-    
-    valid, err := h.authSvc.Validate(auth.Username, auth.Password)
-    if err != nil || !valid {
-        w.Header().Set("WWW-Authenticate", "Basic realm=\"Git\"")
-        respondError(w, http.StatusUnauthorized, "Unauthorized")
-        return
-    }
-    
-    ctx := r.Context()
-    
-    refs, err := h.gitSvc.GetReceivePackRefs(ctx)
-    if err != nil {
-        respondError(w, http.StatusInternalServerError, err.Error())
-        return
-    }
-    
-    w.Header().Set("Content-Type", "application/x-git-receive-pack-advertisement")
-    w.Header().Set("Cache-Control", "no-cache")
-    
-    pktLine(w, "# service=git-receive-pack\n")
-    pktFlush(w)
-    w.Write(refs)
-}
-
-// POST /git-receive-pack
-func (h *GitHandler) ReceivePack(w http.ResponseWriter, r *http.Request) {
-    // 再次认证
-    auth := h.extractAuth(r)
-    if auth == nil {
-        w.Header().Set("WWW-Authenticate", "Basic realm=\"Git\"")
-        respondError(w, http.StatusUnauthorized, "Unauthorized")
-        return
-    }
-    
-    valid, err := h.authSvc.Validate(auth.Username, auth.Password)
-    if err != nil || !valid {
-        w.Header().Set("WWW-Authenticate", "Basic realm=\"Git\"")
-        respondError(w, http.StatusUnauthorized, "Unauthorized")
-        return
-    }
-    
-    ctx := r.Context()
-    
-    w.Header().Set("Content-Type", "application/x-git-receive-pack-result")
-    
-    result, err := h.gitSvc.HandleReceivePack(ctx, r.Body, auth)
-    if err != nil {
-        respondError(w, http.StatusInternalServerError, err.Error())
-        return
-    }
-    
-    w.Write(result)
-}
-
-// 提取 Basic Auth
-func (h *GitHandler) extractAuth(r *http.Request) *service.AuthInfo {
-    authHeader := r.Header.Get("Authorization")
-    if authHeader == "" {
-        return nil
-    }
-    
-    if !strings.HasPrefix(authHeader, "Basic ") {
-        return nil
-    }
-    
-    decoded, err := base64.StdEncoding.DecodeString(authHeader[6:])
-    if err != nil {
-        return nil
-    }
-    
-    parts := strings.SplitN(string(decoded), ":", 2)
-    if len(parts) != 2 {
-        return nil
-    }
-    
-    return &service.AuthInfo{
-        Username: parts[0],
-        Password: parts[1],
-    }
-}
-
-// pkt-line 格式辅助函数
-func pktLine(w io.Writer, data string) {
-    size := len(data) + 4
-    w.Write([]byte(fmt.Sprintf("%04x%s", size, data)))
-}
-
-func pktFlush(w io.Writer) {
-    w.Write([]byte("0000"))
-}
-```
+这种边界把“push 返回成功”的语义固定为“新的内容读视图已经发布”。
 
 ### 7.3 静态资源 Handler（embed）
 
@@ -1274,361 +603,22 @@ func (h *StaticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 ### 8.1 Article Service 实现
 
-```go
-// internal/service/article.go
+Article Service 只依赖 Git Service。列表先调用 `ListMarkdownFilesAtHead` 与 `GetFileHistories`，目录、树、搜索和补全再从这批已发布文章派生；正文调用 `ReadFileAtHead`。因此没有“文件系统存在但 HEAD 不可见”的第二套判定。
 
-package service
-
-import (
-    "context"
-    "sort"
-    "strings"
-    "time"
-    
-    "terminalog/internal/model"
-)
-
-type ArticleService struct {
-    fileSvc FileService
-    gitSvc  GitService
-}
-
-func NewArticleService(fileSvc FileService, gitSvc GitService) *ArticleService {
-    return &ArticleService{
-        fileSvc: fileSvc,
-        gitSvc:  gitSvc,
-    }
-}
-
-func (s *ArticleService) ListArticles(ctx context.Context, opts ListOptions) ([]model.Article, error) {
-    // 1. 扫描 Markdown 文件
-    files, err := s.fileSvc.ScanMarkdownFiles(ctx, opts.Dir)
-    if err != nil {
-        return nil, err
-    }
-    
-    // 2. 过滤并获取历史
-    articles := make([]model.Article, 0, len(files))
-    
-    for _, file := range files {
-        // 检查是否已提交
-        committed, err := s.gitSvc.IsFileCommitted(ctx, file)
-        if err != nil || !committed {
-            continue // 忽略未提交的文件
-        }
-        
-        // 获取历史
-        history, err := s.gitSvc.GetFileHistory(ctx, file)
-        if err != nil {
-            continue
-        }
-        
-        // 构建 Article
-        article := model.Article{
-            Path:         file,
-            Title:        extractTitle(file),
-            CreatedAt:    history.FirstCommit.Timestamp,
-            CreatedBy:    history.FirstCommit.Author,
-            EditedAt:     history.LastCommit.Timestamp,
-            EditedBy:     history.LastCommit.Author,
-            Contributors: history.Contributors,
-        }
-        
-        articles = append(articles, article)
-    }
-    
-    // 3. 排序
-    sortArticles(articles, opts.Sort, opts.Order)
-    
-    return articles, nil
-}
-
-func (s *ArticleService) GetArticle(ctx context.Context, path string) (*model.ArticleDetail, error) {
-    // 验证路径
-    fullPath, err := s.fileSvc.ValidatePath(path)
-    if err != nil {
-        return nil, model.ErrInvalidPath
-    }
-    
-    // 检查是否已提交
-    committed, err := s.gitSvc.IsFileCommitted(ctx, path)
-    if err != nil {
-        return nil, err
-    }
-    if !committed {
-        return nil, model.ErrNotCommitted
-    }
-    
-    // 读取内容
-    content, err := s.fileSvc.ReadFile(ctx, path)
-    if err != nil {
-        return nil, model.ErrNotFound
-    }
-    
-    // 获取历史
-    history, err := s.gitSvc.GetFileHistory(ctx, path)
-    if err != nil {
-        return nil, err
-    }
-    
-    return &model.ArticleDetail{
-        Article: model.Article{
-            Path:         path,
-            Title:        extractTitle(path),
-            CreatedAt:    history.FirstCommit.Timestamp,
-            CreatedBy:    history.FirstCommit.Author,
-            EditedAt:     history.LastCommit.Timestamp,
-            EditedBy:     history.LastCommit.Author,
-            Contributors: history.Contributors,
-        },
-        Content: string(content),
-    }, nil
-}
-
-func (s *ArticleService) GetTimeline(ctx context.Context, path string) ([]model.CommitInfo, error) {
-    history, err := s.gitSvc.GetFileHistory(ctx, path)
-    if err != nil {
-        return nil, err
-    }
-    
-    return history.AllCommits, nil
-}
-
-func (s *ArticleService) GetTree(ctx context.Context, dir string) (*model.TreeNode, error) {
-    return s.fileSvc.GetDirectoryTree(ctx, dir)
-}
-
-func (s *ArticleService) Search(ctx context.Context, query string, dir string) ([]model.SearchResult, error) {
-    // 获取文章列表
-    articles, err := s.ListArticles(ctx, ListOptions{Dir: dir})
-    if err != nil {
-        return nil, err
-    }
-    
-    // 搜索标题
-    results := make([]model.SearchResult, 0)
-    lowerQuery := strings.ToLower(query)
-    
-    for _, article := range articles {
-        if strings.Contains(strings.ToLower(article.Title), lowerQuery) {
-            results = append(results, model.SearchResult{
-                Path:         article.Path,
-                Title:        article.Title,
-                MatchedTitle: article.Title,
-            })
-        }
-    }
-    
-    return results, nil
-}
-
-// 辅助函数
-func extractTitle(path string) string {
-    // 从路径提取文件名，去除 .md 扩展名
-    parts := strings.Split(path, "/")
-    name := parts[len(parts)-1]
-    return strings.TrimSuffix(name, ".md")
-}
-
-func sortArticles(articles []model.Article, sort model.SortField, order model.SortOrder) {
-    sort.Slice(articles, func(i, j int) bool {
-        var less bool
-        
-        switch sort {
-        case model.SortCreated:
-            less = articles[i].CreatedAt.Before(articles[j].CreatedAt)
-        case model.SortEdited:
-            less = articles[i].EditedAt.Before(articles[j].EditedAt)
-        default:
-            less = articles[i].EditedAt.Before(articles[j].EditedAt)
-        }
-        
-        if order == model.OrderDesc {
-            return !less
-        }
-        return less
-    })
-}
-```
+目录列表不会再次遍历 Git 历史：它按请求目录截取文章相对路径，将直接文件原样返回，并用最近编辑的子文章元数据代表直接子目录。
 
 ### 8.2 Git Service 实现
 
-```go
-// internal/service/git.go
+Git Service 使用两套能力但只保留一个仓库真相源：
 
-package service
+- 系统 Git 负责 Smart HTTP、packfile、ref 与非 bare 工作区更新。
+- go-git 负责 HEAD tree/blob、提交遍历、文件历史、版本差异等只读业务查询。
+- 构造时强制设置 `receive.denyCurrentBranch=updateInstead`；配置失败即启动失败。
+- `ReceivePack` 使用互斥锁串行化完整发布事务，先缓冲系统 Git 响应，再重新打开并验证 go-git 视图，最后触发业务缓存失效。
+- `ReloadRepo` 先成功打开新视图再加锁替换，避免失败时破坏仍可用的读视图。
+- 文章、About Me 与资源内容直接读取 HEAD blob；工作区修改不会进入公开页面。
 
-import (
-    "context"
-    "fmt"
-    "io"
-    "sort"
-    "strings"
-    "time"
-    
-    "github.com/go-git/go-git/v5"
-    "github.com/go-git/go-git/v5/plumbing"
-    "github.com/go-git/go-git/v5/plumbing/object"
-    
-    "terminalog/internal/model"
-)
-
-type GitService struct {
-    repoPath string
-    repo     *git.Repository
-}
-
-func NewGitService(repoPath string) *GitService {
-    repo, err := git.PlainOpen(repoPath)
-    if err != nil {
-        return nil // 后续处理
-    }
-    
-    return &GitService{
-        repoPath: repoPath,
-        repo:     repo,
-    }
-}
-
-func (s *GitService) GetFileHistory(ctx context.Context, filePath string) (*FileHistory, error) {
-    if s.repo == nil {
-        return nil, fmt.Errorf("repository not initialized")
-    }
-    
-    // 获取所有 commits
-    commits, err := s.repo.Log(&git.LogOptions{})
-    if err != nil {
-        return nil, err
-    }
-    
-    // 过滤涉及该文件的 commits
-    fileCommits := make([]model.CommitInfo, 0)
-    contributors := make(map[string]bool)
-    
-    err = commits.ForEach(func(c *object.Commit) error {
-        // 检查文件是否在该 commit 中存在或被修改
-        file, err := c.File(filePath)
-        if err != nil {
-            // 文件在该 commit 中不存在，跳过
-            return nil
-        }
-        
-        // 记录 commit 信息
-        commitInfo := model.CommitInfo{
-            Hash:      shortHash(c.Hash.String()),
-            Author:    c.Author.Name,
-            Timestamp: c.Author.When,
-        }
-        
-        fileCommits = append(fileCommits, commitInfo)
-        contributors[c.Author.Name] = true
-        
-        return nil
-    })
-    
-    if err != nil {
-        return nil, err
-    }
-    
-    // 检查是否有历史
-    if len(fileCommits) == 0 {
-        return nil, model.ErrNotCommitted
-    }
-    
-    // 按时间排序（倒序）
-    sort.Slice(fileCommits, func(i, j int) bool {
-        return fileCommits[i].Timestamp.After(fileCommits[j].Timestamp)
-    })
-    
-    // 构建返回结构
-    history := &FileHistory{
-        FirstCommit:  fileCommits[len(fileCommits)-1], // 最早的
-        LastCommit:   fileCommits[0],                   // 最新的
-        AllCommits:   fileCommits,
-        Contributors: mapKeys(contributors),
-    }
-    
-    return history, nil
-}
-
-func (s *GitService) IsFileCommitted(ctx context.Context, filePath string) (bool, error) {
-    history, err := s.GetFileHistory(ctx, filePath)
-    if err != nil {
-        if errors.Is(err, model.ErrNotCommitted) {
-            return false, nil
-        }
-        return false, err
-    }
-    return len(history.AllCommits) > 0, nil
-}
-
-func (s *GitService) GetUploadPackRefs(ctx context.Context) ([]byte, error) {
-    // 获取 refs
-    refs, err := s.repo.References()
-    if err != nil {
-        return nil, err
-    }
-    
-    var buf bytes.Buffer
-    
-    err = refs.ForEach(func(ref *plumbing.Reference) error {
-        // 写入 HEAD
-        if ref.Name() == plumbing.HEAD {
-            pktLine(&buf, fmt.Sprintf("%s HEAD\n", ref.Hash().String()))
-        }
-        // 写入其他 refs
-        if ref.Name().IsBranch() {
-            pktLine(&buf, fmt.Sprintf("%s %s\n", ref.Hash().String(), ref.Name().String()))
-        }
-        return nil
-    })
-    
-    pktFlush(&buf)
-    
-    return buf.Bytes(), nil
-}
-
-func (s *GitService) HandleUploadPack(ctx context.Context, body io.Reader) ([]byte, error) {
-    // 读取请求
-    // 解析 wants 和 have
-    // 返回 packfile
-    // ...（详细实现需要处理 Git 协议细节）
-    return nil, nil
-}
-
-func (s *GitService) GetReceivePackRefs(ctx context.Context) ([]byte, error) {
-    // 类似 GetUploadPackRefs
-    return s.GetUploadPackRefs(ctx)
-}
-
-func (s *GitService) HandleReceivePack(ctx context.Context, body io.Reader, auth *AuthInfo) ([]byte, error) {
-    // 读取请求
-    // 解析 refs 更新请求
-    // 验证 auth
-    // 更新 refs
-    // 返回结果
-    // ...（详细实现需要处理 Git 协议细节）
-    return nil, nil
-}
-
-// 辅助函数
-func shortHash(hash string) string {
-    if len(hash) >= 7 {
-        return hash[:7]
-    }
-    return hash
-}
-
-func mapKeys(m map[string]bool) []string {
-    keys := make([]string, 0, len(m))
-    for k := range m {
-        keys = append(keys, k)
-    }
-    return keys
-}
-```
-
----
+不在应用层重新实现 Git wire protocol，也不在 push 后执行 `reset --hard` 或全量 `git gc`。前者容易产生协议兼容问题，后两者会扩大成功响应与实际可见内容之间的竞态窗口。
 
 ## 九、路由设计
 
@@ -1778,126 +768,19 @@ func GetMimeType(path string) string {
 
 ### 11.1 缓存设计
 
-```go
-// internal/service/cache.go
+Article Cache 同时使用两种边界：
 
-package service
+- 每个条目保存独立过期时间，写入其他 key 不会延长旧条目的 TTL。
+- 全局 `generation` 表示内容仓库快照。读取流程开始时记录 generation，写缓存时必须仍与当前 generation 相同。
+- Git push 发布完成时清空所有条目并推进 generation。
 
-import (
-    "sync"
-    "time"
-    
-    "terminalog/internal/model"
-)
+这保证 push 前已开始的慢请求即使在失效后才结束，也不能把旧文章列表、目录树、文章元数据或时间线重新写回缓存。
 
-type ArticleCache struct {
-    articles  map[string]*model.Article
-    timelines map[string][]model.CommitInfo
-    mutex     sync.RWMutex
-    ttl       time.Duration
-    lastUpdate time.Time
-}
+### 11.2 单次历史扫描
 
-func NewArticleCache(ttl time.Duration) *ArticleCache {
-    return &ArticleCache{
-        articles:  make(map[string]*model.Article),
-        timelines: make(map[string][]model.CommitInfo),
-        ttl:       ttl,
-    }
-}
+文章列表、目录、搜索和路径补全共享 Article Service 构建的“当前 HEAD 可见文章集合”。一次列表构建先扫描 Markdown 路径，再调用 `GetFileHistories` 进行一次 commit walk，并从同一批历史结果派生所有文章元数据。
 
-func (c *ArticleCache) Get(path string) (*model.Article, bool) {
-    c.mutex.RLock()
-    defer c.mutex.RUnlock()
-    
-    // 检查 TTL
-    if time.Since(c.lastUpdate) > c.ttl {
-        return nil, false
-    }
-    
-    article, ok := c.articles[path]
-    return article, ok
-}
-
-func (c *ArticleCache) Set(path string, article *model.Article) {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-    
-    c.articles[path] = article
-    c.lastUpdate = time.Now()
-}
-
-func (c *ArticleCache) Clear() {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-    
-    c.articles = make(map[string]*model.Article)
-    c.timelines = make(map[string][]model.CommitInfo)
-}
-```
-
-### 11.2 并行查询
-
-```go
-// internal/service/article.go (优化版本)
-
-func (s *ArticleService) ListArticles(ctx context.Context, opts ListOptions) ([]model.Article, error) {
-    files, err := s.fileSvc.ScanMarkdownFiles(ctx, opts.Dir)
-    if err != nil {
-        return nil, err
-    }
-    
-    // 并行获取历史
-    type result struct {
-        article model.Article
-        err     error
-    }
-    
-    results := make(chan result, len(files))
-    
-    for _, file := range files {
-        go func(f string) {
-            committed, err := s.gitSvc.IsFileCommitted(ctx, f)
-            if err != nil || !committed {
-                results <- result{err: err}
-                return
-            }
-            
-            history, err := s.gitSvc.GetFileHistory(ctx, f)
-            if err != nil {
-                results <- result{err: err}
-                return
-            }
-            
-            results <- result{
-                article: model.Article{
-                    Path:         f,
-                    Title:        extractTitle(f),
-                    CreatedAt:    history.FirstCommit.Timestamp,
-                    CreatedBy:    history.FirstCommit.Author,
-                    EditedAt:     history.LastCommit.Timestamp,
-                    EditedBy:     history.LastCommit.Author,
-                    Contributors: history.Contributors,
-                },
-            }
-        }(file)
-    }
-    
-    // 收集结果
-    articles := make([]model.Article, 0, len(files))
-    for i := 0; i < len(files); i++ {
-        r := <-results
-        if r.err == nil {
-            articles = append(articles, r.article)
-        }
-    }
-    
-    sortArticles(articles, opts.Sort, opts.Order)
-    return articles, nil
-}
-```
-
----
+这比“每个文件启动一个 goroutine 并分别遍历完整提交历史”更稳定：后者只是并行放大重复 I/O 和对象解析，仓库越大越容易产生 CPU、内存尖峰。缓存命中后则直接复用按目录和排序参数保存的结果。
 
 ## 十二、构建流程
 
@@ -2010,7 +893,7 @@ func respondError(w http.ResponseWriter, status int, message string) {
 | 风险 | 影响 | 缓解措施 |
 |------|------|---------|
 | go-git Smart HTTP 实现复杂 | Git 协议兼容性问题 | 先实现基础功能；可 fallback 到调用系统 git 命令 |
-| Git 历史查询性能 | 大仓库查询慢 | 实现缓存；并行查询 |
+| Git 历史查询性能 | 大仓库查询慢 | 单次 commit walk + 按快照缓存 |
 | 跨平台路径处理 | Windows 路径分隔符问题 | 统一使用 filepath 包 |
 
 ### 14.2 架构风险

@@ -100,61 +100,50 @@ Terminalog 采用**前后端分离 + 单文件部署**的架构模式：
 
 | 模块 | 职责 |
 |------|------|
-| HTTP Server | HTTP 路由分发，静态资源服务 |
-| Article Service | 文章列表、内容读取、元数据获取（**过滤 `_` 开头文件**） |
-| About Me Service | 读取并返回 `_ABOUTME.md` 内容 |
-| Version Service | 基于行数变化计算语义版本号 |
-| Git Service | Git 历史查询，Smart HTTP 协议实现 |
-| File Service | 文件系统操作，目录扫描，特殊文件过滤 |
-| Auth Service | 用户认证校验，密码验证 |
-| Asset Service | 图片等静态资源读取与响应 |
-| Config Manager | TOML 配置文件解析与管理 |
-
----
+| HTTP / WebSocket Server | 路由、连接与嵌入式前端静态资源 |
+| Article Service | 从当前 HEAD 文章索引派生列表、目录、搜索、正文和时间线 |
+| About Me / Asset Service | 从当前 HEAD blob 读取特殊页与图片 |
+| Version Service | 基于 Git diff 计算文章语义版本 |
+| Git Service | HEAD tree 读模型、Git 历史、Smart HTTP 与发布事务 |
+| Auth Service | Push 用户认证 |
+| Config Manager | TOML 配置解析与管理 |
 
 ## 三、模块依赖关系
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        HTTP Server                           │
-│                     (路由分发 + 静态资源)                       │
-└─────────────────────────────────────────────────────────────┘
-           │              │              │              │
-           │              │              │              │
-           ▼              ▼              ▼              ▼
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│  Article    │  │   Asset     │  │    Git      │  │  Static     │
-│  Service    │  │  Service    │  │  Service    │  │  Handler    │
-│             │  │             │  │             │  │  (embed)    │
-└─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘
-       │                │                │
-       │                │                │
-       ▼                ▼                ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      File Service                            │
-│                    (文件系统操作)                              │
-└─────────────────────────────────────────────────────────────┘
-       │                                              │
-       │                                              │
-       ▼                                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Git Service                             │
-│              (Git 历史查询 + Smart HTTP)                      │
-└─────────────────────────────────────────────────────────────┘
+HTTP / WebSocket
        │
-       │
-       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Git Repository                            │
-│                  (用户指定的内容目录)                          │
-└─────────────────────────────────────────────────────────────┘
-
-
-认证流程依赖：
-┌─────────────┐
-│ HTTP Server │───▶ Git Handler ───▶ Auth Service.Validate()
-└─────────────┘
+       ├── Article / Version / Completion
+       ├── About Me / Asset
+       └── Git Smart HTTP Handler
+                    │
+                    ▼
+              Git Service
+       ┌────────────┴────────────┐
+       ▼                         ▼
+  go-git HEAD 读模型          系统 Git 子进程
+  内容/历史/差异             clone/fetch/push
+       └────────────┬────────────┘
+                    ▼
+              Git Repository
 ```
+
+工作区不是公开内容读源；它只由系统 Git 的 `updateInstead` 维护，以满足非 bare 仓库的发布操作。
+
+### 3.1 内容发布一致性边界
+
+当前 Git HEAD 是运行时唯一公开真相源。一次 push 只有在以下步骤全部完成后才算发布成功：
+
+1. 系统 Git 以 `receive.denyCurrentBranch=updateInstead` 接收对象、更新 ref 和工作区；工作区存在未提交修改时直接拒绝 push。
+2. Git Service 重新打开并验证 go-git 只读视图，清空 Git 历史缓存。
+3. Article Service 推进缓存代际并清空内容缓存。
+4. 服务端最后才写出 `git-receive-pack` 成功响应。
+
+并发约束：receive-pack 串行执行；内容缓存写入必须携带读取开始时的代际，失效前启动的请求不能把旧快照写回新代际。
+
+传输约束：普通 HTTP 请求保持短超时，Git upload/receive-pack 单独使用 15 分钟读写期限，避免大 push 在发布完成前被通用 30 秒期限截断。
+
+读取边界：文章枚举、正文、About Me 与图片都直接读取当前 HEAD tree/blob，不读取可变工作区。前端 HTML 与内容 API 使用重验证/`no-store`；`_next/static` 是内容寻址的不可变资源；Git 中的图片路径可变，使用内容 ETag 每次重验证。
 
 ---
 
@@ -263,7 +252,8 @@ terminalog/
 |------|---------|
 | 语言 | Go 1.21+ |
 | HTTP 路由 | chi v5 |
-| Git 操作 | go-git/v5 |
+| Git 写入/传输 | 系统 Git（Smart HTTP 子进程） |
+| Git 历史读取 | go-git/v5 |
 | TOML 解析 | pelletier/go-toml/v2 |
 | 日志 | slog（标准库） |
 | 密码哈希 | bcrypt |
@@ -338,8 +328,8 @@ make release     # 跨平台构建
 
 | 风险 | 影响 | 缓解措施 |
 |------|------|---------|
-| go-git Smart HTTP 实现复杂 | Git 协议兼容性问题 | 先实现基础功能；可 fallback 到系统 git 命令 |
-| Git 历史查询性能 | 大仓库查询慢 | 内存缓存 + 并行查询 |
+| 内容发布跨越 ref、工作区与缓存 | push 成功但页面仍读取旧快照 | Git `updateInstead` + 缓冲响应 + 缓存代际 |
+| Git 历史查询性能 | 大仓库查询慢 | 单次 commit walk + 按快照缓存 |
 | 跨平台路径处理 | Windows 路径分隔符问题 | 统一使用 filepath 包 |
 
 ### 9.2 架构风险

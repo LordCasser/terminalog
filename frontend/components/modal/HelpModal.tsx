@@ -4,7 +4,7 @@
  * Modal dialog showing available commands when user types 'help' or '?'.
  * Features:
  * - Displays all available commands with descriptions
- * - 10-second auto-close timer
+ * - Auto-close timer (resets on hover/mousemove; closes after 10s idle)
  * - Manual close via right-top 'x' button
  * - Enter key to close
  * - Dracula Spectrum styling with Glass effect
@@ -23,8 +23,11 @@ const COMMANDS_INFO = [
   { cmd: "cd <path>", desc: "Change directory to specified path" },
   { cmd: "cd ..", desc: "Go back to parent directory" },
   { cmd: "cd .", desc: "Refresh current directory" },
+  { cmd: "ls [path]", desc: "List directory contents" },
+  { cmd: "pwd", desc: "Print working directory" },
   { cmd: "open <filename>", desc: "Open article for viewing" },
   { cmd: "search <keyword>", desc: "Search articles by title keyword" },
+  { cmd: "clear", desc: "Clear input and scroll to top" },
   { cmd: "help / ?", desc: "Show this help dialog" },
   { cmd: "top", desc: "Scroll back to top of the page" },
 ];
@@ -42,17 +45,23 @@ export function HelpModal() {
     setIsVisible(false);
   }, []);
 
+  // Start (or reset) the 10s idle auto-close timer.
+  // Any pointer interaction with the modal resets it so the dialog does not
+  // disappear while the user is still reading.
+  const startAutoClose = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setIsVisible(false);
+      timerRef.current = null;
+    }, 10000);
+  }, []);
+
   // Listen for custom event to show modal
   useEffect(() => {
     const handleShowModal = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       setIsVisible(true);
-      
-      // Start 10-second auto-close timer
-      timerRef.current = setTimeout(() => {
-        setIsVisible(false);
-        timerRef.current = null;
-      }, 10000);
+      startAutoClose();
     };
 
     window.addEventListener(SHOW_HELP_MODAL, handleShowModal);
@@ -60,7 +69,7 @@ export function HelpModal() {
       window.removeEventListener(SHOW_HELP_MODAL, handleShowModal);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [startAutoClose]);
 
   // Enter key to close modal
   useEffect(() => {
@@ -85,7 +94,10 @@ export function HelpModal() {
       />
       
       {/* Modal Content - Glass Effect */}
-      <div className="relative max-w-xl w-full mx-4 bg-surface-container-high/42 backdrop-blur-lg border border-primary/25 shadow-2xl">
+      <div
+        className="relative max-w-xl w-full mx-4 bg-surface-container-high/42 backdrop-blur-lg border border-primary/25 shadow-2xl"
+        onMouseMove={startAutoClose}
+      >
         {/* Header with close button */}
         <div className="flex items-center justify-between p-4 border-b border-surface-container-highest">
           <h2 className="font-mono text-sm uppercase tracking-tighter text-secondary">
@@ -128,7 +140,7 @@ export function HelpModal() {
         {/* Footer hint */}
         <div className="p-4 border-t border-surface-container-highest text-center">
           <span className="font-mono text-xs text-on-surface-variant">
-            Auto-closes in 10 seconds, press Enter or click × to close
+            Auto-closes after 10s idle · Enter or × to close
           </span>
         </div>
       </div>

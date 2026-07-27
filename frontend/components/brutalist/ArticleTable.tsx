@@ -5,7 +5,7 @@
  * - Created | Updated | Editors | Filename | Latest Commit
  * 
  * Features:
- * - File type icons (folder for dirs, description for files)
+ * - File type icons (folder for dirs, file for articles)
  * - RESTful routing: /dir/{path} for directories, /article/{path} for files
  * - Clickable column headers for sorting (Created, Updated, Filename)
  */
@@ -15,6 +15,7 @@
 import type { Article } from "@/types";
 import type { SortField, SortOrder } from "@/lib/api/articles";
 import { encodePathForUrl } from "@/lib/utils/path";
+import { Icon, type IconName } from "@/components/ui/Icon";
 import Link from "next/link";
 
 interface ArticleTableProps {
@@ -27,11 +28,11 @@ interface ArticleTableProps {
 /**
  * Get file icon based on type/extension
  */
-function getFileIcon(article: Article): string {
+function getFileIcon(article: Article): IconName {
   if (article.type === "dir") {
     return "folder";
   }
-  return "description";
+  return "file";
 }
 
 /**
@@ -80,20 +81,22 @@ function SortableHeader({
   field, 
   currentSort, 
   currentOrder, 
-  onSort 
+  onSort,
+  thClassName = ""
 }: { 
   label: string; 
   field: SortField; 
   currentSort?: SortField; 
   currentOrder?: SortOrder; 
   onSort?: (field: SortField) => void;
+  thClassName?: string;
 }) {
   const isActive = currentSort === field;
   const arrow = isActive ? (currentOrder === "desc" ? "↓" : "↑") : "";
   
   return (
     <th 
-      className={`px-6 py-3 font-medium cursor-pointer select-none hover:text-secondary transition-colors ${isActive ? "text-secondary" : ""}`}
+      className={`px-6 py-3 font-medium cursor-pointer select-none hover:text-secondary transition-colors ${isActive ? "text-secondary" : ""} ${thClassName}`}
       onClick={() => onSort?.(field)}
     >
       {label} {arrow}
@@ -104,35 +107,35 @@ function SortableHeader({
 export function ArticleTable({ articles, sortField, sortOrder, onSort }: ArticleTableProps) {
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full text-left border-collapse min-w-[1000px]">
+      <table className="w-full text-left border-collapse min-w-[480px] md:min-w-[1000px]">
         <thead>
           <tr className="bg-surface-container border-none text-outline uppercase text-[10px] tracking-[0.2em] font-bold">
-            <SortableHeader label="Created" field="created" currentSort={sortField} currentOrder={sortOrder} onSort={onSort} />
+            <SortableHeader label="Created" field="created" currentSort={sortField} currentOrder={sortOrder} onSort={onSort} thClassName="hidden md:table-cell" />
             <SortableHeader label="Updated" field="edited" currentSort={sortField} currentOrder={sortOrder} onSort={onSort} />
-            <th className="px-6 py-3 font-medium">
+            <th className="px-6 py-3 font-medium hidden md:table-cell">
               Editors
             </th>
             <SortableHeader label="Filename" field="name" currentSort={sortField} currentOrder={sortOrder} onSort={onSort} />
-            <th className="px-6 py-3 font-medium">
+            <th className="px-6 py-3 font-medium hidden md:table-cell">
               Latest Commit
             </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-transparent">
           {articles.map((article, index) => (
-            <tr key={index} className="hover:bg-surface-container-high transition-colors group cursor-pointer">
+            <tr key={index} className="hover:bg-surface-container-high transition-colors group cursor-pointer relative">
               {/* Created */}
-              <td className="px-6 py-5 text-on-surface-variant text-sm whitespace-nowrap">
-                {article.createdAt ? formatDate(article.createdAt) : "—"}
+              <td className="px-6 py-5 text-on-surface-variant text-sm whitespace-nowrap hidden md:table-cell">
+                {article.createdAt ? formatDate(article.createdAt) : "-"}
               </td>
               
               {/* Updated */}
               <td className="px-6 py-5 text-on-surface-variant text-sm whitespace-nowrap">
-                {article.editedAt ? formatRelativeTime(article.editedAt) : "—"}
+                {article.editedAt ? formatRelativeTime(article.editedAt) : "-"}
               </td>
               
               {/* Editors */}
-              <td className="px-6 py-5 whitespace-nowrap">
+              <td className="px-6 py-5 whitespace-nowrap hidden md:table-cell">
                 {article.contributors?.map((contributor, i) => (
                   <span 
                     key={i} 
@@ -140,18 +143,16 @@ export function ArticleTable({ articles, sortField, sortOrder, onSort }: Article
                   >
                     {contributor}
                   </span>
-                )) || "—"}
+                )) || "-"}
               </td>
               
               {/* Filename */}
               <td className="px-6 py-5 whitespace-nowrap">
                 <Link 
                   href={article.type === "dir" ? `/dir/${encodePathForUrl(article.path)}` : `/article/${encodePathForUrl(article.path)}`}
-                  className="flex items-center gap-3 font-bold transition-colors"
+                  className="flex items-center gap-3 font-bold transition-colors after:absolute after:inset-0 after:z-10"
                 >
-                  <span className={`material-symbols-outlined text-[18px] ${getIconColor(article)}`}>
-                    {getFileIcon(article)}
-                  </span>
+                  <Icon name={getFileIcon(article)} className={`text-[18px] ${getIconColor(article)}`} />
                   <span className={`${getIconColor(article)} group-hover:text-secondary transition-colors`}>
                     {article.name}
                   </span>
@@ -159,8 +160,8 @@ export function ArticleTable({ articles, sortField, sortOrder, onSort }: Article
               </td>
               
               {/* Latest Commit */}
-              <td className="px-6 py-5 text-outline text-sm italic whitespace-nowrap">
-                {article.latestCommit || "—"}
+              <td className="px-6 py-5 text-outline text-sm italic whitespace-nowrap hidden md:table-cell">
+                {article.latestCommit || "-"}
               </td>
             </tr>
           ))}

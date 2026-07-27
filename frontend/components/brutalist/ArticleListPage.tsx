@@ -13,7 +13,11 @@
 
 import { useState, useEffect } from "react";
 import { ArticleTable } from "@/components/brutalist/ArticleTable";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { Icon } from "@/components/ui/Icon";
 import { getArticles, SortField, SortOrder } from "@/lib/api/articles";
+import { ApiError } from "@/lib/api/client";
 import type { Article } from "@/types";
 
 interface ArticleListPageProps {
@@ -39,6 +43,9 @@ function extractDirPathFromURL(): string {
 export function ArticleListPage({ currentDir }: ArticleListPageProps) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const [sortField, setSortField] = useState<SortField | undefined>(undefined);
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
@@ -50,10 +57,21 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
 
     const fetchArticles = async () => {
       try {
+        setLoading(true);
+        setError(null);
+        setNotFound(false);
         const response = await getArticles(effectiveDir, sortField, sortOrder);
         if (!cancelled) setArticles(response.articles);
-      } catch (error) {
-        if (!cancelled) console.error("Failed to fetch articles:", error);
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to fetch articles:", err);
+          if (err instanceof ApiError && err.status === 404) {
+            setNotFound(true);
+            setError("The requested directory does not exist.");
+          } else {
+            setError("Failed to load directory listing.");
+          }
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -63,7 +81,7 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [currentDir, sortField, sortOrder]);
+  }, [currentDir, sortField, sortOrder, retryKey]);
 
   /** Handle column header click for sorting */
   const handleSort = (field: SortField) => {
@@ -76,22 +94,38 @@ export function ArticleListPage({ currentDir }: ArticleListPageProps) {
     }
   };
 
+  /** Retry fetch after error */
+  const handleRetry = () => setRetryKey((k) => k + 1);
+
+  if (loading) {
+    return <SkeletonTable />;
+  }
+
+  if (error) {
+    return (
+      <ErrorState
+        title={notFound ? "Not Found" : "Directory Unavailable"}
+        message={error}
+        onRetry={notFound ? undefined : handleRetry}
+      />
+    );
+  }
+
+  if (articles.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32">
+        <Icon name="folder" className="text-4xl text-outline mb-4" />
+        <p className="font-mono text-sm text-outline">no entries</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen">
-      <main className="flex-grow w-full bg-surface-lowest px-0 overflow-x-auto">
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <span className="text-outline font-mono">Loading...</span>
-          </div>
-        ) : (
-          <ArticleTable 
-            articles={articles} 
-            sortField={sortField}
-            sortOrder={sortOrder}
-            onSort={handleSort}
-          />
-        )}
-      </main>
-    </div>
+    <ArticleTable
+      articles={articles}
+      sortField={sortField}
+      sortOrder={sortOrder}
+      onSort={handleSort}
+    />
   );
 }

@@ -71,6 +71,8 @@ export function CommandPrompt() {
   const [searchModalVisible, setSearchModalVisible] = useState(false);
   const [showNoMatchHint, setShowNoMatchHint] = useState(false);
   const [noMatchHintType, setNoMatchHintType] = useState<"completion" | "search" | "command" | "searchTab">("completion");
+  const [showInfoHint, setShowInfoHint] = useState(false);
+  const [infoHintText, setInfoHintText] = useState("");
   const history = useCommandHistory();
   const [cursorPosition, setCursorPosition] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -97,6 +99,12 @@ export function CommandPrompt() {
     setNoMatchHintType(type);
     setShowNoMatchHint(true);
     setTimeout(() => setShowNoMatchHint(false), 1000);
+  }, []);
+
+  const showTransientInfo = useCallback((text: string) => {
+    setInfoHintText(text);
+    setShowInfoHint(true);
+    setTimeout(() => setShowInfoHint(false), 2000);
   }, []);
 
   // Save input before starting history navigation for ArrowDown restore
@@ -198,29 +206,19 @@ export function CommandPrompt() {
     return () => window.removeEventListener(PATH_SELECTED, handlePathSelected as EventListener);
   }, []);
 
-  // Global keyboard listener - focus input on any key press
+  // Global keyboard listener - focus input only on terminal trigger keys: / : Tab
+  // Avoids hijacking browser shortcuts (e.g. / for find-in-page, j/k for scroll)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if already focused, or if modifier keys pressed
       if (isFocused || e.metaKey || e.ctrlKey || e.altKey) return;
-      
-      // Ignore navigation keys, function keys, etc.
-      const ignoreKeys = [
-        "Escape", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-        "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
-        "PageUp", "PageDown", "Home", "End",
-      ];
-      if (ignoreKeys.includes(e.key)) return;
-      
-      // Focus input (including Tab key)
-      if (e.key === "Tab") {
-        e.preventDefault(); // Disable browser default Tab behavior
+
+      // Only focus on terminal trigger keys
+      if (e.key === "/" || e.key === ":" || e.key === "Tab") {
+        e.preventDefault();
         inputRef.current?.focus();
         return;
       }
-      
-      // Focus input on other keys
-      inputRef.current?.focus();
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -390,6 +388,12 @@ export function CommandPrompt() {
       handleTabCompletion(e);
     } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
       handleHistoryNavigation(e);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      inputRef.current?.blur();
+    } else if (e.ctrlKey && e.key === "c") {
+      e.preventDefault();
+      setInput("");
     }
   }, [handleTabCompletion, handleHistoryNavigation]);
 
@@ -481,13 +485,38 @@ export function CommandPrompt() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    
+
+    // ls command - list directory contents (navigate to directory listing)
+    if (trimmedCmd === "ls" || trimmedCmd.startsWith("ls ")) {
+      const target = trimmedCmd === "ls" ? "" : cmd.trim().slice(3);
+      const resolvedPath = target ? resolveCdPath(currentDir, target) : currentDir;
+      if (resolvedPath) {
+        router.push(`/dir/${encodePathForUrl(resolvedPath)}`);
+      } else {
+        router.push("/");
+      }
+      return;
+    }
+
+    // pwd command - print working directory (show as transient info hint)
+    if (trimmedCmd === "pwd") {
+      showTransientInfo(`~/${owner}${currentDir ? `/${currentDir}` : ""}`);
+      return;
+    }
+
+    // clear command - clear input and scroll to top
+    if (trimmedCmd === "clear") {
+      setInput("");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     // Unknown command
     if (trimmedCmd !== "") {
       console.log(`Unknown command: ${cmd}`);
       showTransientNoMatchHint("command");
     }
-  }, [router, currentDir, showTransientNoMatchHint]);
+  }, [router, currentDir, owner, showTransientNoMatchHint, showTransientInfo]);
 
   // Handle form submit
   const handleSubmit = (e: React.FormEvent) => {
@@ -509,10 +538,10 @@ export function CommandPrompt() {
 
   return (
     <footer className="fixed bottom-0 left-0 w-full z-50 bg-surface shadow-[0_-4px_20px_rgba(0,0,0,0.4)] border-t border-surface-container-highest">
-      <form onSubmit={handleSubmit} className="flex items-center gap-3 px-6 h-16 font-terminal text-sm">
+      <form onSubmit={handleSubmit} className="flex items-center gap-2 sm:gap-3 px-4 sm:px-6 h-16 font-terminal text-sm">
         {/* Path Display */}
-        <span className="text-tertiary font-bold">guest@blog:</span>
-        <span className="text-secondary font-bold ml-1">~/{owner}{currentDir ? `/${currentDir}` : ""}</span>
+        <span className="text-tertiary font-bold hidden sm:inline">guest@blog:</span>
+        <span className="text-secondary font-bold sm:ml-1">~/{owner}{currentDir ? `/${currentDir}` : ""}</span>
         <span className="text-on-surface-variant mx-1">$</span>
         
         {/* Command Input */}
@@ -525,7 +554,7 @@ export function CommandPrompt() {
             onKeyDown={handleKeyDown}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            className="w-full bg-transparent text-on-surface outline-none border-none placeholder:text-on-surface-variant/15"
+            className="w-full bg-transparent text-on-surface outline-none border-none placeholder:text-on-surface-variant/40"
             placeholder="type a command..."
             aria-label="Command input"
           />
@@ -546,12 +575,22 @@ export function CommandPrompt() {
               style={{ left: `${cursorPosition}px` }}
             >
               {noMatchHintType === "searchTab"
-                ? "search 不可补全"
+                ? "no completion for search"
                 : noMatchHintType === "search"
-                  ? "没有搜索结果"
+                  ? "no search results"
                   : noMatchHintType === "command"
-                    ? "命令不存在"
-                    : "没有匹配内容"}
+                    ? "command not found"
+                    : "no match"}
+            </span>
+          )}
+
+          {/* Info Hint (above input, shows for 2 seconds - used by pwd) */}
+          {showInfoHint && (
+            <span
+              className="absolute bottom-full mb-2 px-2 py-1 bg-surface-container-high text-tertiary font-terminal text-xs rounded"
+              style={{ left: `${cursorPosition}px` }}
+            >
+              {infoHintText}
             </span>
           )}
         </div>

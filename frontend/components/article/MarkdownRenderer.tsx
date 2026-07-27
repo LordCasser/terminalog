@@ -31,14 +31,12 @@
 
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
+// Heavy plugins (rehype-highlight ~100KB+, remark-math+rehype-katex+katex CSS ~30KB+)
+// are lazy-loaded below based on content detection, not statically imported.
 import { remarkAlert } from 'remark-github-blockquote-alert';
 import rehypeSlug from 'rehype-slug';
 import Link from 'next/link';
-import 'katex/dist/katex.min.css';
-import { isValidElement, useMemo, lazy, Suspense } from 'react';
+import { isValidElement, useMemo, lazy, Suspense, useState, useEffect } from 'react';
 import { encodePathForUrl } from '@/lib/utils/path';
 import { generateSlug, childrenToText, extractHeadings } from './toc';
 import type { TocEntry } from './toc';
@@ -175,12 +173,13 @@ function handleAnchorClick(e: React.MouseEvent, href: string) {
 function markdownComponents(basePath?: string): Components {
   return {
     // ----- Headings with anchor links -----
+    // Visual styling (size/color/font) is owned by .markdown-body h1..h6 in
+    // globals.css via the --md-* theme vars. Here we only attach the id, a
+    // `group` hook for anchor hover, and the anchor link itself.
     h1: ({ children, id }: { children?: ReactNode; id?: string }) => {
       const slug = id || generateSlug(childrenToText(children));
       return (
-        <h1 id={slug}
-            className="group font-headline text-4xl md:text-5xl font-bold leading-none
-                       text-on-surface tracking-tighter mb-8 mt-12 first:mt-0">
+        <h1 id={slug} className="group">
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
              className="anchor-link focus-visible:opacity-100
@@ -195,8 +194,7 @@ function markdownComponents(basePath?: string): Components {
     h2: ({ children, id }: { children?: ReactNode; id?: string }) => {
       const slug = id || generateSlug(childrenToText(children));
       return (
-        <h2 id={slug}
-            className="group font-headline text-3xl font-bold text-secondary-fixed-dim">
+        <h2 id={slug} className="group">
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
              className="anchor-link focus-visible:opacity-100
@@ -211,8 +209,7 @@ function markdownComponents(basePath?: string): Components {
     h3: ({ children, id }: { children?: ReactNode; id?: string }) => {
       const slug = id || generateSlug(childrenToText(children));
       return (
-        <h3 id={slug}
-            className="group font-headline text-2xl font-bold text-secondary-fixed mb-4">
+        <h3 id={slug} className="group">
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
              className="anchor-link focus-visible:opacity-100
@@ -227,8 +224,7 @@ function markdownComponents(basePath?: string): Components {
     h4: ({ children, id }: { children?: ReactNode; id?: string }) => {
       const slug = id || generateSlug(childrenToText(children));
       return (
-        <h4 id={slug}
-            className="group font-headline text-xl font-bold text-on-surface mb-4">
+        <h4 id={slug} className="group">
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
              className="anchor-link focus-visible:opacity-100
@@ -243,8 +239,7 @@ function markdownComponents(basePath?: string): Components {
     h5: ({ children, id }: { children?: ReactNode; id?: string }) => {
       const slug = id || generateSlug(childrenToText(children));
       return (
-        <h5 id={slug}
-            className="group font-headline text-lg font-bold text-on-surface mb-3">
+        <h5 id={slug} className="group">
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
              className="anchor-link focus-visible:opacity-100
@@ -259,8 +254,7 @@ function markdownComponents(basePath?: string): Components {
     h6: ({ children, id }: { children?: ReactNode; id?: string }) => {
       const slug = id || generateSlug(childrenToText(children));
       return (
-        <h6 id={slug}
-            className="group font-headline text-base font-bold text-on-surface mb-2">
+        <h6 id={slug} className="group">
           <a href={`#${slug}`}
              onClick={(e) => handleAnchorClick(e, `#${slug}`)}
              className="anchor-link focus-visible:opacity-100
@@ -336,7 +330,7 @@ function markdownComponents(basePath?: string): Components {
 
       if (!className && !isMultilineCodeBlock) {
         return (
-          <code className="markdown-inline-code">{children}</code>
+          <code>{children}</code>
         );
       }
 
@@ -475,18 +469,70 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
   const tocMinLevel = tocHeadings ? Math.min(...tocHeadings.map(h => h.level)) : 0;
   const components = markdownComponents(basePath);
 
+  // --- Lazy-load heavy markdown plugins based on content detection ---
+  // Avoids loading highlight.js (~100KB+) and KaTeX (~30KB+) when the article
+  // contains no code blocks or math. Plugins load asynchronously; until ready,
+  // content renders in a degraded-but-readable form (plain code, raw $...$).
+  const hasMath = useMemo(() => /\$/.test(content), [content]);
+  const hasCode = useMemo(() => /```/.test(content), [content]);
+
+  const [mathPlugins, setMathPlugins] = useState<{ remark: unknown; rehype: unknown } | null>(null);
+  const [highlightPlugin, setHighlightPlugin] = useState<unknown>(null);
+
+  useEffect(() => {
+    if (!hasMath) {
+      setMathPlugins(null);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      import('remark-math'),
+      import('rehype-katex'),
+      import('katex/dist/katex.min.css'),
+    ]).then(([rm, rk]) => {
+      if (!cancelled) setMathPlugins({ remark: rm.default, rehype: rk.default });
+    });
+    return () => { cancelled = true; };
+  }, [hasMath]);
+
+  useEffect(() => {
+    if (!hasCode) {
+      setHighlightPlugin(null);
+      return;
+    }
+    let cancelled = false;
+    import('rehype-highlight').then(({ default: rh }) => {
+      // Wrap in arrow so React doesn't treat the plugin function as a state updater.
+      if (!cancelled) setHighlightPlugin(() => rh);
+    });
+    return () => { cancelled = true; };
+  }, [hasCode]);
+
+  const remarkPlugins = useMemo(() => {
+    const arr: unknown[] = [remarkGfm, remarkAlert];
+    if (mathPlugins) arr.push(mathPlugins.remark);
+    return arr;
+  }, [mathPlugins]);
+
+  const rehypePlugins = useMemo(() => {
+    const arr: unknown[] = [rehypeSlug];
+    if (highlightPlugin) arr.push(highlightPlugin);
+    if (mathPlugins) arr.push(mathPlugins.rehype);
+    return arr;
+  }, [highlightPlugin, mathPlugins]);
+
   return (
     <div className="markdown-body">
       {/* Content before [TOC] marker */}
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath, remarkAlert]}
-        rehypePlugins={[rehypeSlug, rehypeHighlight, rehypeKatex]}
+        remarkPlugins={remarkPlugins as never}
+        rehypePlugins={rehypePlugins as never}
         components={components}
       >
         {beforeContent}
       </ReactMarkdown>
 
-      {/* Inline Table of Contents — rendered at exact [TOC] marker position */}
+      {/* Inline Table of Contents - rendered at exact [TOC] marker position */}
       {tocHeadings && tocHeadings.length > 0 && (
         <ul className="markdown-toc">
           {tocHeadings.map((h) => (
@@ -503,8 +549,8 @@ export function MarkdownRenderer({ content, basePath }: MarkdownRendererProps) {
 
       {/* Content after [TOC] marker */}
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath, remarkAlert]}
-        rehypePlugins={[rehypeSlug, rehypeHighlight, rehypeKatex]}
+        remarkPlugins={remarkPlugins as never}
+        rehypePlugins={rehypePlugins as never}
         components={components}
       >
         {afterContent}

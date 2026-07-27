@@ -6,7 +6,7 @@
  * - Displays search results with title (left-aligned) and date (right-aligned)
  * - ArrowUp/ArrowDown key navigation for result selection
  * - Enter key to confirm selection and navigate to article
- * - 10-second auto-close timer
+ * - Auto-close timer (resets on any interaction: hover, mousemove, keyboard nav)
  * - Manual close via right-top 'x' button
  * - Uses React onKeyDown with autoFocus to avoid closure issues
  */
@@ -15,6 +15,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { SEARCH_MODAL_VISIBLE, FOCUS_COMMAND_INPUT } from "@/components/command/CommandPrompt";
+import { Icon } from "@/components/ui/Icon";
 
 // Custom event for showing search results modal
 export const SHOW_SEARCH_RESULTS_MODAL = "showSearchResultsModal";
@@ -55,6 +56,21 @@ export function SearchResultsModal() {
     window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
   }, []);
 
+  // Start (or reset) the 10s idle auto-close timer.
+  // Any interaction (hover, mousemove, keyboard nav) calls this to give the
+  // user a fresh 10s window, so the modal never yanks away mid-use.
+  const startAutoClose = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setIsVisible(false);
+      setResults([]);
+      setSelectedIndex(0);
+      timerRef.current = null;
+      window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: false }));
+      window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
+    }, 10000);
+  }, []);
+
   // Handle result selection (Enter key or click) - smart navigation
   const handleSelect = useCallback((result: SearchResultItem) => {
     window.dispatchEvent(new CustomEvent(SEARCH_RESULT_SELECTED, { detail: result.path }));
@@ -74,16 +90,8 @@ export function SearchResultsModal() {
         // Notify CommandPrompt that modal is visible
         window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: true }));
         
-        // Start 10-second auto-close timer
-        timerRef.current = setTimeout(() => {
-          setIsVisible(false);
-          setResults([]);
-          setSelectedIndex(0);
-          timerRef.current = null;
-          window.dispatchEvent(new CustomEvent(SEARCH_MODAL_VISIBLE, { detail: false }));
-          window.dispatchEvent(new Event(FOCUS_COMMAND_INPUT));
-        }, 10000);
-        
+        // Start idle auto-close timer (resets on later interaction)
+        startAutoClose();
       }
     };
 
@@ -92,7 +100,7 @@ export function SearchResultsModal() {
       window.removeEventListener(SHOW_SEARCH_RESULTS_MODAL, handleShowModal as EventListener);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [startAutoClose]);
 
   // Keyboard navigation - window listener in capture phase
   // Uses DOM attribute (data-search-modal) as synchronous visibility flag
@@ -107,10 +115,12 @@ export function SearchResultsModal() {
         e.preventDefault();
         e.stopImmediatePropagation(); // Prevent CommandPrompt from handling
         setSelectedIndex(prev => prev < results.length - 1 ? prev + 1 : prev);
+        startAutoClose(); // refresh idle window on nav
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         e.stopImmediatePropagation();
         setSelectedIndex(prev => prev > 0 ? prev - 1 : prev);
+        startAutoClose();
       } else if (e.key === "Enter") {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -126,7 +136,7 @@ export function SearchResultsModal() {
 
     window.addEventListener("keydown", handleKeyDown, true); // capture phase
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [results, selectedIndex, handleSelect, handleClose]);
+  }, [results, selectedIndex, handleSelect, handleClose, startAutoClose]);
 
   if (!isVisible || results.length === 0) return null;
 
@@ -142,7 +152,10 @@ export function SearchResultsModal() {
       />
       
       {/* Modal Content - Glass Effect */}
-      <div className="relative max-w-xl w-full mx-4 bg-surface-container-high/42 backdrop-blur-lg border border-primary/25 shadow-2xl">
+      <div
+        className="relative max-w-xl w-full mx-4 bg-surface-container-high/42 backdrop-blur-lg border border-primary/25 shadow-2xl"
+        onMouseMove={startAutoClose}
+      >
         {/* Header with close button */}
         <div className="flex items-center justify-between p-4 border-b border-surface-container-highest">
           <h2 className="font-mono text-sm uppercase tracking-tighter text-secondary">
@@ -184,10 +197,8 @@ export function SearchResultsModal() {
               `}
             >
               <span className="text-left truncate max-w-[70%] flex items-center gap-2">
-                {/* Type icon: folder for dir, description for file */}
-                <span className="material-symbols-outlined text-xs">
-                  {result.type === "dir" ? "folder" : "description"}
-                </span>
+                {/* Type icon: folder for dir, file for article */}
+                <Icon name={result.type === "dir" ? "folder" : "file"} className="text-xs" />
                 {/* Display: title with hierarchical path */}
                 <span className="truncate">
                   {result.title}
@@ -208,7 +219,7 @@ export function SearchResultsModal() {
         {/* Footer hint */}
         <div className="p-3 border-t border-surface-container-highest text-center">
           <span className="font-mono text-xs text-on-surface-variant">
-            ↑↓ Navigate · Enter Select · Auto-closes in 10s
+            ↑↓ Navigate · Enter Select · Esc Close · Auto-closes after 10s idle
           </span>
         </div>
       </div>

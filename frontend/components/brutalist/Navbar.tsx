@@ -16,6 +16,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FOCUS_COMMAND_INPUT } from "@/components/command";
 import { useTerminalConfig } from "@/lib/hooks/useTerminalConfig";
+import { Icon } from "@/components/ui/Icon";
 
 // Navigation link component with selected state
 // Uses after pseudo-element for underline so it doesn't affect text baseline alignment
@@ -71,7 +72,7 @@ export function Navbar() {
       {/* Right: Navigation Links + Search Button */}
       <div className="flex items-center gap-6">
         {/* Navigation Links - All uppercase, right-aligned */}
-        <nav className="hidden md:flex gap-6">
+        <nav className="flex gap-3 md:gap-6">
           <NavLink href="/" label="POSTS" isSelected={isPostsSelected} />
           <NavLink href="/aboutme" label="ABOUTME" isSelected={isAboutMeSelected} />
         </nav>
@@ -82,7 +83,7 @@ export function Navbar() {
           className="hover:bg-surface-container-highest hover:text-primary p-1 transition-colors duration-150"
           aria-label="Search"
         >
-          <span className="material-symbols-outlined">search</span>
+          <Icon name="search" />
         </button>
       </div>
     </header>

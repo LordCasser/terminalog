@@ -14,6 +14,10 @@
 import { useState, useEffect } from "react";
 import { getArticleContent, getArticleTimeline, getArticleVersion } from "@/lib/api/articles";
 import { MarkdownRenderer } from "@/components/article/MarkdownRenderer";
+import { Icon } from "@/components/ui/Icon";
+import { SkeletonArticle } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { ApiError } from "@/lib/api/client";
 import type { Article, CommitInfo, VersionInfo } from "@/types";
 
 /**
@@ -43,15 +47,20 @@ export function ArticleContent() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  
+  const [retryKey, setRetryKey] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     // Extract article path from browser URL (only in client)
     const articlePath = extractArticlePathFromURL();
-    
+
     const fetchData = async () => {
       try {
+        setLoading(true);
+        setError(null);
+        setNotFound(false);
         const [articleResponse, timelineResponse, versionResponse] = await Promise.all([
           getArticleContent(articlePath),
           getArticleTimeline(articlePath),
@@ -74,28 +83,43 @@ export function ArticleContent() {
         setContent(articleResponse.content || "");
         setCommits(timelineResponse.commits);
         setVersionInfo(versionResponse);
-      } catch (error) {
+      } catch (err) {
         if (!cancelled) {
-          console.error("Failed to fetch article:", error);
-          setError("Failed to load article.");
+          console.error("Failed to fetch article:", err);
+          if (err instanceof ApiError && err.status === 404) {
+            setNotFound(true);
+            setError("The requested article does not exist.");
+          } else {
+            setError("Failed to load article.");
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
-    
+
     fetchData();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [retryKey]);
   
   // Extract base path for image transformation (client-side only)
   const basePath = (article?.path || "").replace(/\/[^\/]+\.md$/, '');
   const leadingMarkdownTitle = extractLeadingMarkdownTitle(content);
   const articleHeading = leadingMarkdownTitle || article?.title || "UNTITLED";
   const renderedContent = leadingMarkdownTitle ? stripLeadingMarkdownTitle(content) : content;
-  
+
+  // Update document title to reflect the current article (restores global title on unmount)
+  useEffect(() => {
+    if (article && !loading && !error) {
+      document.title = `${articleHeading} | Terminalog`;
+      return () => {
+        document.title = "Terminalog | Terminal Editorial Blog";
+      };
+    }
+  }, [articleHeading, article, loading, error]);
+
   // Format date
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -103,30 +127,21 @@ export function ArticleContent() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <span className="text-outline font-mono">Loading...</span>
-      </div>
-    );
+    return <SkeletonArticle />;
   }
 
   if (error || !article) {
     return (
-      <div className="min-h-screen">
-        <main className="pt-24 pb-32 px-6 max-w-4xl mx-auto">
-          <div className="text-center">
-            <h1 className="font-headline text-4xl text-outline mb-4">Article Unavailable</h1>
-            <p className="text-on-surface-variant">{error || "The requested article could not be loaded."}</p>
-          </div>
-        </main>
-      </div>
+      <ErrorState
+        title={notFound ? "Article Not Found" : "Article Unavailable"}
+        message={error || "The requested article could not be loaded."}
+        onRetry={notFound ? undefined : () => setRetryKey((k) => k + 1)}
+      />
     );
   }
   
   return (
-    <div className="min-h-screen">
-      {/* Main Content - Navbar is in layout.tsx */}
-      <main className="pt-24 pb-32 px-6 max-w-4xl mx-auto">
+    <div className="px-6 max-w-4xl mx-auto">
         {/* Post Header */}
         <section className="mb-16">
           {/* Tags + Version + Date */}
@@ -181,14 +196,13 @@ export function ArticleContent() {
                   className="text-xs text-primary hover:underline flex items-center gap-1 mt-2"
                   onClick={() => setShowHistory(!showHistory)}
                 >
-                  <span className="material-symbols-outlined text-sm">expand_more</span>
+                  <Icon name="chevron-down" className="text-sm" />
                   View full history
                 </button>
               )}
             </div>
           </section>
         </article>
-      </main>
     </div>
   );
 }
